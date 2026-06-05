@@ -2689,6 +2689,34 @@ function renderPersonas(){
   el.innerHTML = html;
 }
 
+// ── Zonas horarias por persona (Bogotá por defecto; solo se listan las excepciones)
+const ZONA_DEFECTO = 'America/Bogota';
+const ZONAS_PERSONA = [
+  { match:'sofia', tz:'Atlantic/Canary', etiqueta:'🇮🇨 Canarias' }
+];
+function zonaDePersona(persona){
+  const p = (persona||'').toLowerCase();
+  return ZONAS_PERSONA.find(z=> p.includes(z.match)) || { tz: ZONA_DEFECTO, etiqueta:'' };
+}
+// Hora decimal (0–24) de un timestamp en una zona dada
+function horaEnZona(ts, tz){
+  try{
+    const parts = new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(ts));
+    let h=0,m=0;
+    parts.forEach(p=>{ if(p.type==='hour') h=parseInt(p.value)%24; if(p.type==='minute') m=parseInt(p.value); });
+    return h + m/60;
+  }catch(e){ const d=new Date(ts); return d.getHours()+d.getMinutes()/60; }
+}
+// Cuántas horas va ADELANTE una zona respecto a Bogotá en una fecha (maneja horario de verano)
+function offsetHorasVsBogota(tz, fechaYMD){
+  if(tz === ZONA_DEFECTO) return 0;
+  try{
+    const base = new Date(fechaYMD + 'T12:00:00Z');
+    const wall = t => new Date(base.toLocaleString('en-US',{timeZone:t}));
+    return Math.round((wall(tz) - wall('America/Bogota'))/3600000);
+  }catch(e){ return 0; }
+}
+
 function renderHorariosView(){
   // Verificar PIN primero
   if(!sessionStorage.getItem(PIN_KEY)){
@@ -2822,15 +2850,9 @@ function renderHorariosDiaView(fecha){
     return;
   }
 
-  // CALCULAR RANGO HORARIO: desde PRIMER timer hasta aprox 16:00
-  const horasInicio = sesDia.map(s=> {
-    const d = new Date(s.inicio);
-    return d.getHours() + (d.getMinutes()/60);
-  });
-  const horasFin = sesDia.map(s=> {
-    const d = new Date(s.fin);
-    return d.getHours() + (d.getMinutes()/60);
-  });
+  // CALCULAR RANGO HORARIO (anclado a hora de Colombia, estable para todos)
+  const horasInicio = sesDia.map(s=> horaEnZona(s.inicio, 'America/Bogota'));
+  const horasFin = sesDia.map(s=> horaEnZona(s.fin, 'America/Bogota'));
 
   const minHora = Math.floor(Math.min(...horasInicio));
   const maxHora = Math.ceil(Math.max(...horasFin));
@@ -2857,7 +2879,7 @@ function renderHorariosDiaView(fecha){
       <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
         <div>
           <div style="font-size:14px;font-weight:600;text-transform:capitalize">${fechaLabel}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:3px">${totalPersonasActivas} persona${totalPersonasActivas!==1?'s':''} • ${promedioHorasPorPersona}h en promedio</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">${totalPersonasActivas} persona${totalPersonasActivas!==1?'s':''} • ${promedioHorasPorPersona}h en promedio • ⏱ hora de Colombia</div>
         </div>
         <div style="text-align:right">
           <div style="font-size:28px;font-weight:700;color:var(--warn)">${promedioHorasPorPersona}h</div>
@@ -2886,23 +2908,48 @@ function renderHorariosDiaView(fecha){
     const sesPersona = sesDia.filter(s=>s.persona===persona);
     const rol = sesPersona[0]?.rol || 'calidad';
     const rolCfg = ROL_CFG[rol] || {color:'#666',label:rol};
-    
+    const zona = zonaDePersona(persona);
+    const off = offsetHorasVsBogota(zona.tz, fecha);
+    // Jornada 6:00–15:00 local, mapeada al eje (hora Colombia)
+    const jIni = 6 - off, jFin = 15 - off;
+    const clamp = h => Math.max(horaInicio, Math.min(horaFin, h));
+    const pos = h => (clamp(h)-horaInicio)*pxPorHora;
+    const fueraIzqW = (clamp(jIni)-horaInicio)*pxPorHora;
+    const fueraDerW = (horaFin-clamp(jFin))*pxPorHora;
+
+    // Intervalos del día (hora Colombia) fusionados → para detectar huecos
+    const ivs = sesPersona.map(s=>[horaEnZona(s.inicio,'America/Bogota'), horaEnZona(s.fin,'America/Bogota')])
+      .filter(([a,b])=>b>a).sort((a,b)=>a[0]-b[0]);
+    const merged=[];
+    ivs.forEach(iv=>{ const last=merged[merged.length-1]; if(last && iv[0]<=last[1]){ if(iv[1]>last[1]) last[1]=iv[1]; } else merged.push([iv[0],iv[1]]); });
+    const huecos=[];
+    for(let i=1;i<merged.length;i++){ const g=merged[i][0]-merged[i-1][1]; if(g>=0.5) huecos.push([merged[i-1][1], merged[i][0]]); }
+    const fmtDur = hrs => { const m=Math.round(hrs*60); return m>=60?`${Math.floor(m/60)}h${m%60?' '+(m%60)+'m':''}`:`${m}m`; };
+
     html += `<div style="display:flex;align-items:center;margin-bottom:16px">
       <div style="width:150px;flex-shrink:0">
         <div style="font-weight:600;font-size:13px">${persona}</div>
         <div style="font-size:10px;color:${rolCfg.color}">${rolCfg.label}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">${Math.round(sesPersona.reduce((s,x)=>s+x.mins,0)/60*10)/10}h</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${Math.round(sesPersona.reduce((s,x)=>s+x.mins,0)/60*10)/10}h${zona.etiqueta?` · ${zona.etiqueta}`:''}</div>
       </div>
-      <div style="flex:1;position:relative;height:40px;background:var(--bg);border-radius:4px;margin-left:12px">
+      <div style="flex:1;position:relative;height:40px;background:var(--bg);border-radius:4px;margin-left:12px;overflow:hidden">
+        ${fueraIzqW>0?`<div style="position:absolute;left:0;width:${fueraIzqW}px;height:100%;background:repeating-linear-gradient(45deg,transparent,transparent 5px,rgba(100,116,139,.07) 5px,rgba(100,116,139,.07) 10px)" title="Fuera de jornada (6:00–15:00 ${zona.etiqueta||'Colombia'})"></div>`:''}
+        ${fueraDerW>0?`<div style="position:absolute;right:0;width:${fueraDerW}px;height:100%;background:repeating-linear-gradient(45deg,transparent,transparent 5px,rgba(100,116,139,.07) 5px,rgba(100,116,139,.07) 10px)" title="Fuera de jornada (6:00–15:00 ${zona.etiqueta||'Colombia'})"></div>`:''}
+        ${huecos.map(([a,b])=>{
+          const left=pos(a); const w=(clamp(b)-clamp(a))*pxPorHora;
+          if(w<=0) return '';
+          return `<div style="position:absolute;left:${left}px;width:${w}px;height:100%;background:rgba(245,158,11,.10);border-left:1px dashed var(--warn);border-right:1px dashed var(--warn);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--warn);font-weight:700;overflow:hidden" title="Hueco sin registro: ${fmtDur(b-a)}">⏸ ${fmtDur(b-a)}</div>`;
+        }).join('')}
         ${sesPersona.map(s=>{
           const inicioD = new Date(s.inicio);
           const finD = new Date(s.fin);
-          const inicioHora = inicioD.getHours() + (inicioD.getMinutes()/60);
-          const finHora = finD.getHours() + (finD.getMinutes()/60);
+          const inicioHora = horaEnZona(s.inicio,'America/Bogota');
+          const finHora = horaEnZona(s.fin,'America/Bogota');
           const left = (inicioHora - horaInicio) * pxPorHora;
           const width = (finHora - inicioHora) * pxPorHora;
           const tarea = s.tarea ? s.tarea.substring(0,20) : 'Sin tarea';
-          return `<div style="position:absolute;left:${left}px;width:${width}px;height:100%;background:${rolCfg.color};border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:white;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;cursor:pointer" title="${s.tarea || 'Sin tarea'}">
+          const hhmm = ts => { const h=Math.floor(horaEnZona(ts,'America/Bogota')); const m=Math.round((horaEnZona(ts,'America/Bogota')-h)*60); return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); };
+          return `<div style="position:absolute;left:${left}px;width:${width}px;height:100%;background:${rolCfg.color};border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:white;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;cursor:pointer" title="${s.tarea || 'Sin tarea'} · ${hhmm(s.inicio)}–${hhmm(s.fin)} (hora Colombia) · ${s.mins}m">
             ${tarea}
           </div>`;
         }).join('')}
