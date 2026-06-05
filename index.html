@@ -1126,49 +1126,47 @@ function diasHabilesEntre(fechaInicio, fechaFin){
 }
 
 function diasAsig(a){
-  // Días reales trabajados: contar días ÚNICOS con sesiones (funciona en cualquier estado)
-  // Obtener todas las sesiones de esta asignatura
-  const sesiones = STATE.sesiones.filter(s=>s.asigId===a.id || s.asigNombre===a.nombre);
-  
-  if(sesiones.length === 0) return 0;
-  
-  // Extraer días únicos de las sesiones
-  const diasUnicos = new Set();
-  sesiones.forEach(s=>{
-    if(s.inicio){
-      let fecha = '';
-      // Si es string con T, extraer fecha
-      if(typeof s.inicio === 'string' && s.inicio.includes('T')){
-        fecha = s.inicio.split('T')[0];
-      }
-      // Si es string sin T, asumir que ya es fecha
-      else if(typeof s.inicio === 'string'){
-        fecha = s.inicio;
-      }
-      // Si es número (timestamp), convertir
-      else if(typeof s.inicio === 'number'){
-        fecha = new Date(s.inicio).toISOString().split('T')[0];
-      }
-      
-      if(fecha) diasUnicos.add(fecha);
+  // DÍAS DE PRODUCCIÓN (cálculo unificado para Dashboard, Asignaturas e Indicadores).
+  // Mide el tiempo REAL trabajado en la asignatura fusionando los ratos que se solapan:
+  // si dos personas trabajan a la misma hora, ese tiempo cuenta UNA sola vez (paralelo).
+  // El total se convierte a jornadas de 8 horas (480 min).
+  if(!a) return 0;
+  const MIN_JORNADA = 480; // 8h * 60
+  const intervalos = [];
+  // 1) Sesiones cerradas con inicio/fin válidos (timestamps numéricos en ms)
+  STATE.sesiones.forEach(s=>{
+    if(s.asigId===a.id || s.asigNombre===a.nombre){
+      const ini=Number(s.inicio), fin=Number(s.fin);
+      if(ini>0 && fin>ini) intervalos.push([ini,fin]);
     }
   });
-  
-  // Contar días hábiles de esos días únicos
-  let diasHabiles = 0;
-  const festivos2026 = festivosColombia(2026);
-  const festivos2025 = festivosColombia(2025);
-  
-  diasUnicos.forEach(fecha => {
-    const d = new Date(fecha + 'T00:00:00');
-    const dia = d.getDay();
-    const year = d.getFullYear();
-    const festivos = year === 2026 ? festivos2026 : year === 2025 ? festivos2025 : festivosColombia(year);
-    const esFestivo = festivos.has(fecha);
-    if(dia !== 0 && dia !== 6 && !esFestivo) diasHabiles++;
+  // 2) Timers corriendo ahora en este equipo (trabajo en curso)
+  Object.values(STATE.timers||{}).forEach(t=>{
+    if((t.asigId===a.id || t.asigNombre===a.nombre) && t.running){
+      const ini=Number(t.inicio);
+      if(ini>0) intervalos.push([ini, Date.now()]);
+    }
   });
-  
-  return diasHabiles;
+  // 3) Timers corriendo en otros equipos (que no estén ya locales)
+  const localIds=Object.keys(STATE.timers||{});
+  (STATE.timersSheets||[]).forEach(t=>{
+    if(!localIds.includes(t.id) && (t.asigId===a.id || t.asigNombre===a.nombre)){
+      const ini=Number(t.inicio);
+      if(ini>0) intervalos.push([ini, Date.now()]);
+    }
+  });
+  if(!intervalos.length) return 0;
+  // Fusionar solapes y sumar el tiempo realmente cubierto
+  intervalos.sort((x,y)=>x[0]-y[0]);
+  let totalMs=0;
+  let ci=intervalos[0][0], cf=intervalos[0][1];
+  for(let i=1;i<intervalos.length;i++){
+    const ini=intervalos[i][0], fin=intervalos[i][1];
+    if(ini<=cf){ if(fin>cf) cf=fin; }   // se solapa o es contiguo → extender
+    else { totalMs += cf-ci; ci=ini; cf=fin; }  // hueco → cerrar bloque y abrir otro
+  }
+  totalMs += cf-ci;
+  return (totalMs/60000)/MIN_JORNADA; // días de 8h
 }
 
 function diasDesde(fecha){
@@ -1685,7 +1683,7 @@ async function notificarTeams(asig){
               "type": "FactSet",
               "facts": [
                 {"title": "Programa", "value": asig.prog||'—'},
-                {"title": "Días de producción", "value": diasAsig(asig)+'d hábiles'},
+                {"title": "Días de producción", "value": diasAsig(asig).toFixed(1)+'d'},
                 {"title": "DF estimado", "value": (asig.df||4)+'d'},
                 {"title": "Completada el", "value": new Date().toLocaleString('es-CO')}
               ]
@@ -2156,7 +2154,7 @@ function renderDashboard(){
   const dfProm=total>0?STATE.asignaturas.reduce((s,a)=>s+(a.df||4),0)/total:null;
 
   // Asignaturas en riesgo: en producción y llevan más días hábiles que su DF
-  const enRiesgo=STATE.asignaturas.filter(a=>a.status==='En producción'&&diasDesde(a.inicio)>=(a.df||4)).length;
+  const enRiesgo=STATE.asignaturas.filter(a=>a.status==='En producción'&&diasAsig(a)>=(a.df||4)).length;
 
   document.getElementById('kpi-strip').innerHTML=`
     <div class="kpi" style="--kpi-c:#818cf8"><div class="kpi-lbl">Total asignaturas</div><div class="kpi-val">${total}</div><div class="kpi-sub">en la fábrica</div></div>
@@ -2169,9 +2167,9 @@ function renderDashboard(){
       <div class="kpi-sub">${enRiesgo>0?'superaron el DF estimado':'dentro del plazo'}</div>
     </div>
     ${(()=>{
-      const compConFecha = completadas.filter(a=>a.fechaInicioProduccion&&a.fechaCompletado);
+      const compConFecha = completadas.map(a=>diasAsig(a)).filter(d=>d>0);
       if(!compConFecha.length) return '';
-      const promDias = compConFecha.reduce((sum,a)=>sum+diasHabilesEntre(a.fechaInicioProduccion, new Date(a.fechaCompletado)),0)/compConFecha.length;
+      const promDias = compConFecha.reduce((sum,d)=>sum+d,0)/compConFecha.length;
       const color = promDias<=(dfProm||4)?'var(--ok)':'var(--danger)';
       return `<div class="kpi" style="--kpi-c:${color}">
         <div class="kpi-lbl">Días prom. producción</div>
@@ -2194,7 +2192,7 @@ function renderDashboard(){
     const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
     const statusDisplay = (sesA.length===0 && a.status==='En producción') ? 'En espera' : a.status;
     const stBadge=statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='En espera'?'badge-info':'badge-muted';
-    const diasEl=diasDesde(a.inicio);
+    const diasEl=diasAsig(a);
     return `<div class="stat-row">
       <div class="sbar" style="width:42px;height:42px;border-radius:8px;background:transparent;border:1px solid var(--border);position:relative;flex-shrink:0">
         <svg viewBox="0 0 42 42" style="transform:rotate(-90deg)">
@@ -2204,7 +2202,7 @@ function renderDashboard(){
         </svg>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--muted)">${pct}%</div>
       </div>
-      <div class="sinfo"><div class="sname">${a.nombre}</div><div class="smeta">${a.prog} · ${diasEl}d ${statusDisplay==='Completada'?'de producción':'en producción'}</div></div>
+      <div class="sinfo"><div class="sname">${a.nombre}</div><div class="smeta">${a.prog} · ${diasEl.toFixed(1)}d ${statusDisplay==='Completada'?'de producción':'en producción'}</div></div>
       <span class="badge ${stBadge}">${statusDisplay}</span>
     </div>`;
   }).join('');
@@ -2268,7 +2266,7 @@ function renderAsignaturas(filtro='all'){
     let alertaHTML='';
     if(a.status==='En producción'){
       const diff=diasEl2-(a.df||4);
-      if(diff>0) alertaHTML=`<span class="badge badge-danger">🔴 +${diff}d de retraso</span>`;
+      if(diff>0) alertaHTML=`<span class="badge badge-danger">🔴 +${diff.toFixed(1)}d de retraso</span>`;
       else if(diff>=-1) alertaHTML=`<span class="badge badge-warn">🟡 Vence hoy/mañana</span>`;
       else alertaHTML=`<span class="badge badge-ok">🟢 En plazo</span>`;
     }
@@ -2318,7 +2316,7 @@ function renderAsignaturas(filtro='all'){
           <div class="asig-meta">
             <span>${a.prog}</span>
             <span>Inicio: ${fmtFecha(a.inicio)}</span>
-            <span>${a.status==='En espera'?'En espera':dias+'d '+(a.status==='Completada'?'de producción':'en producción')}</span>
+            <span>${a.status==='En espera'?'En espera':dias.toFixed(1)+'d '+(a.status==='Completada'?'de producción':'en producción')}</span>
             <span>DF est: ${a.df}d</span>
             ${sesA.length>0?`<span style="color:var(--video);font-weight:500">📌 Esfuerzo: ${Math.round(sesA.reduce((acc,s)=>acc+s.mins,0)/60)}h en ${sesA.length} sesión${sesA.length>1?'es':''}</span>`:''}
             ${timersA>0?`<span style="color:var(--warn)">▶ ${timersA} timer${timersA>1?'s':''} activo${timersA>1?'s':''}</span>`:''}
@@ -3334,11 +3332,10 @@ function renderIndicadores(){
   const completadas = asigFiltradas.filter(a=>a.status==='Completada');
   const enProd = asigFiltradas.filter(a=>a.status==='En producción');
   const diasRealesArr = completadas
-    .filter(a=>a.fechaInicioProduccion&&a.fechaCompletado)
-    .map(a=>diasHabilesEntre(a.fechaInicioProduccion, new Date(a.fechaCompletado)));
+    .map(a=>diasAsig(a)).filter(d=>d>0);
   const diasRealesProm = diasRealesArr.length ? diasRealesArr.reduce((s,d)=>s+d,0)/diasRealesArr.length : null;
   const dfProm = asigFiltradas.length ? asigFiltradas.reduce((s,a)=>s+(a.df||4),0)/asigFiltradas.length : null;
-  const enRiesgo = enProd.filter(a=>diasDesde(a.inicio)>=(a.df||4));
+  const enRiesgo = enProd.filter(a=>diasAsig(a)>=(a.df||4));
 
   // ── Carga por persona esta semana
   const ahora = Date.now();
@@ -3376,7 +3373,7 @@ function renderIndicadores(){
       <div class="kpi" style="--kpi-c:${diasRealesProm!==null&&diasRealesProm<=(dfProm||4)?'var(--ok)':'var(--danger)'}">
         <div class="kpi-lbl">Días reales promedio</div>
         <div class="kpi-val">${diasRealesProm!==null?diasRealesProm.toFixed(1)+'d':'—'}</div>
-        <div class="kpi-sub">${completadas.length} completadas · días hábiles</div>
+        <div class="kpi-sub">${completadas.length} completadas · días de producción</div>
       </div>
       <div class="kpi" style="--kpi-c:${enRiesgo.length>0?'var(--danger)':'var(--ok)'}">
         <div class="kpi-lbl">Asignaturas en riesgo</div>
@@ -3411,7 +3408,7 @@ function renderIndicadores(){
                   <div style="flex:1;height:7px;background:var(--border2);border-radius:4px;overflow:hidden">
                     <div style="height:100%;width:${Math.min(pct,100)}%;background:${color};border-radius:4px;transition:width .4s"></div>
                   </div>
-                  <span style="font-size:11px;color:var(--muted);white-space:nowrap">${dias}d / ${df}d</span>
+                  <span style="font-size:11px;color:var(--muted);white-space:nowrap">${dias.toFixed(1)}d / ${df}d</span>
                 </div>
               </div>`;
             }).join('')
