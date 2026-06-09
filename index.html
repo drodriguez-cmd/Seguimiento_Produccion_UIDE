@@ -1909,10 +1909,14 @@ function iniciarTimer(){
   // Set fechaInicioProduccion on first timer for this asignatura
   if(asig && !asig.fechaInicioProduccion){
     asig.fechaInicioProduccion = new Date().toISOString().split('T')[0];
+    // Al iniciar el primer timer, pasar a En producción si estaba En espera
+    if(asig.status === 'En espera' || asig.status === 'En producción'){
+      asig.status = 'En producción';
+    }
     guardarEstadoLocal();
     sheetActualizar('Asignaturas',
       ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Prioridad','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion'],
-      [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status,
+      [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En producción',
        asig.obs||'', asig.prioridad||'media', asig.tipo||'estandar', asig.celula||'',
        asig.fechaCompletado||'', asig.fechaInicioProduccion]
     );
@@ -2229,7 +2233,8 @@ function renderDashboard(){
   }).slice(0,5).map(a=>{
     const pct=progAsig(a);
     const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
-    const statusDisplay = (sesA.length===0 && a.status==='En producción') ? 'En espera' : a.status;
+    const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id && t.running);
+    const statusDisplay = (sesA.length===0 && !tieneTimerActivo && a.status==='En producción') ? 'En espera' : a.status;
     const stBadge=statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='En espera'?'badge-info':'badge-muted';
     const diasEl=diasAsig(a);
     return `<div class="stat-row">
@@ -2314,7 +2319,8 @@ function renderAsignaturas(filtro='all'){
     const timersA=Object.values(STATE.timers).filter(t=>t.asigId===a.id).length;
     
     // Si no hay sesiones y está "En producción", mostrar como "En espera"
-    const statusDisplay = (sesA.length===0 && a.status==='En producción') ? 'En espera' : a.status;
+    const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id && t.running);
+    const statusDisplay = (sesA.length===0 && !tieneTimerActivo && a.status==='En producción') ? 'En espera' : a.status;
     const stBadgeDisplay = statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='En espera'?'badge-info':'badge-muted';
 
     // Assets HTML
