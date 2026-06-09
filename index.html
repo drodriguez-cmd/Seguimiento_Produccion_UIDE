@@ -3256,9 +3256,11 @@ function cambiarStatusCelula(asigId, status){
 }
 
 function progCelula(asig){
-  const roles = ['lider','diseno','video']; // All 3 required — video is transversal
+  const roles = ['lider','diseno','video'];
+  // Soporta tanto asig.tareas (panel célula) como asig.tareasCelula (flujo estándar)
+  const fuente = asig.tareasCelula || asig.tareas || {};
   let done=0, total=0;
-  roles.forEach(r=>{ Object.values(asig.tareas[r]||{}).forEach(v=>{ total++; if(v) done++; }); });
+  roles.forEach(r=>{ Object.values(fuente[r]||{}).forEach(v=>{ total++; if(v) done++; }); });
   return total>0?Math.round(done/total*100):0;
 }
 
