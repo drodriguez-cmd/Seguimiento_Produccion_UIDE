@@ -1461,14 +1461,15 @@ function renderCelulaBodyInline(a){
     tareas.forEach(([tarea,done])=>{
       const tareaEsc = tarea.replace(/'/g,"\'");
       tHTML += '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;border-bottom:1px solid var(--border)">';
-      tHTML += '<input type="checkbox" '+(done?'checked':'')+' onchange="toggleTareaAsigCelula(\'' + a.id + '\',\'' + rol + '\',\'' + tareaEsc + '\')" style="accent-color:'+rolColors[rol]+'">';
+      tHTML += '<input type="checkbox" '+(done?'checked':'')+' onchange="toggleTareaAsigCelula(\'' + a.id + '\',\'' + rol + '\',\'' + tareaEsc + '\')" style="accent-color:'+rolColors2[rol]+'">';
       tHTML += '<span style="font-size:12px;color:'+(done?'var(--muted)':'var(--text)')+';text-decoration:'+(done?'line-through':'none')+'">'+tarea+'</span></label>';
     });
     tHTML += '</div>';
   });
   tHTML += '</div>';
 
-  return '<div id="unit-'+a.id+'-celula-flujo" class="form-section">'+hHTML+tHTML+'</div>';
+  // Solo retornar el div de handoffs — entregables se manejan igual que estándar
+  return '<div id="unit-'+a.id+'-celula-handoffs" class="form-section" style="display:none">'+hHTML+'</div>';
 }
 
 // ════════════════════════════════════════════
@@ -2412,17 +2413,13 @@ function renderAsignaturas(filtro='all'){
       </div>
       <div class="asig-body" id="body-${a.id}">
         <div class="unit-tabs">
-          ${a.tipo==='celula' ? `
-            <button class="utab active" onclick="showUnit('${a.id}','celula-flujo',this)">🏭 Flujo célula</button>
-            <button class="utab" onclick="showUnit('${a.id}','sesiones',this)">Sesiones</button>
-          ` : `
-            <button class="utab active" onclick="showUnit('${a.id}','u1',this)">Clase 1</button>
+          <button class="utab active" onclick="showUnit('${a.id}','u1',this)">Clase 1</button>
             <button class="utab" onclick="showUnit('${a.id}','u2',this)">Clase 2</button>
             <button class="utab" onclick="showUnit('${a.id}','u3',this)">Clase 3</button>
             <button class="utab" onclick="showUnit('${a.id}','global',this)">Videos globales</button>
-            <button class="utab" onclick="showUnit('${a.id}','equipo',this)">Equipo</button>
+            <button class="utab" onclick="showUnit('${a.id}','equipo',this)">${a.tipo==='celula'?'👥 Equipo':'Equipo'}</button>
+            ${a.tipo==='celula'?`<button class="utab" onclick="showUnit('${a.id}','celula-handoffs',this)">🔀 Handoffs</button>`:''}
             <button class="utab" onclick="showUnit('${a.id}','sesiones',this)">Sesiones</button>
-          `}
         </div>
         ${a.tipo==='celula' ? renderCelulaBodyInlineSafe(a) : ''}
         <div id="unit-${a.id}-u1"  class="form-section" ${a.tipo==='celula'?'style="display:none"':''}>
@@ -2462,7 +2459,18 @@ function renderAsignaturas(filtro='all'){
         </div>
         <div id="unit-${a.id}-equipo" class="form-section" style="display:none">
           <div style="display:flex;flex-wrap:wrap;gap:10px">
-            ${[['🟢 Calidad','calidad',a.equipo.calidad],['🟠 Diseñador 1','disenador',a.equipo.dis1],['🟠 Diseñador 2','disenador',a.equipo.dis2],['🔵 Editor video','video',a.equipo.video],['🟣 Coordinación','coord',a.equipo.coord]].filter(e=>e[2]).map(([lbl,rol,name])=>`
+            ${a.tipo==='celula' ? (()=>{
+              const cc = CELULA_CFG[a.celula]||{};
+              return [
+                ['👑 Líder','#023373', cc.lider||'—'],
+                ['🎨 Diseñador','#D98E04', cc.disenador||'—'],
+                ['🎬 Video','#3b82f6', a.videoPersona||'—']
+              ].map(([lbl,color,name])=>`
+              <div class="ind-block" style="flex:1;min-width:150px;border-left:3px solid ${color}">
+                <div class="ind-title" style="color:${color}">${lbl}</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text)">${name}</div>
+              </div>`).join('');
+            })() : [['🟢 Calidad','calidad',a.equipo.calidad],['🟠 Diseñador 1','disenador',a.equipo.dis1],['🟠 Diseñador 2','disenador',a.equipo.dis2],['🔵 Editor video','video',a.equipo.video],['🟣 Coordinación','coord',a.equipo.coord]].filter(e=>e[2]).map(([lbl,rol,name])=>`
             <div class="ind-block" style="flex:1;min-width:150px">
               <div class="ind-title">${lbl}</div>
               <div style="font-size:14px;font-weight:600;color:var(--text)">${name}</div>
@@ -2478,6 +2486,7 @@ function renderAsignaturas(filtro='all'){
             <button class="btn btn-sm btn-ok" onclick="cambiarStatus('${a.id}')">Actualizar status</button>
           </div>
         </div>
+        ${a.tipo==='celula' ? renderCelulaBodyInlineSafe(a) : ''}
         <div id="unit-${a.id}-sesiones" class="card-body" style="display:none">
           ${sesA.length?`<table><thead><tr><th>Persona</th><th>Rol</th><th>Tarea</th><th>Clase</th><th>Tiempo</th></tr></thead><tbody>`+
           sesA.map(s=>`<tr><td>${s.persona}</td><td><span class="role-pill ${ROL_CFG[s.rol]?.rp||''}" style="font-size:10px;padding:2px 8px">${rolIcon(s.rol)} ${rolLabel(s.rol)}</span></td><td>${s.tarea}</td><td>${s.unidad||'—'}</td><td style="font-weight:600;color:var(--video)">${minsToHoras(s.mins)}</td></tr>`).join('')+
@@ -2496,7 +2505,7 @@ function toggleAsigBody(id){
 }
 
 function showUnit(asigId, unit, el){
-  ['u1','u2','u3','global','equipo','sesiones','celula-flujo'].forEach(u=>{
+  ['u1','u2','u3','global','equipo','sesiones','celula-flujo','celula-handoffs','celula-lider','celula-diseno','celula-video'].forEach(u=>{
     const d=document.getElementById(`unit-${asigId}-${u}`);
     if(d) d.style.display=u===unit?'block':'none';
   });
