@@ -1306,21 +1306,28 @@ function crearAsignatura(){
              u2:{html:false,genially:false,infografia:false,imagenes:false},
              u3:{html:false,genially:false,infografia:false,imagenes:false} }
   };
+  // Asignar videoPersona ANTES de guardar
+  if(esCelula && celulaId && modoIngreso==='directo'){
+    asig.videoPersona = avanzarTurnoVideo();
+  }
   STATE.asignaturas.unshift(asig);
+  guardarEstadoLocal();
+  // Limpiar formulario
   ['n-nombre','n-df','n-obs','n-link'].forEach(id=>document.getElementById(id).value='');
   const cb = document.getElementById('n-es-celula');
   if(cb){ cb.checked=false; document.getElementById('celula-form-extra').style.display='none'; }
   document.getElementById('n-prog').value='';
   toast('Asignatura creada: '+nombre);
-  guardarEstadoLocal();
+  // Renderizar inmediatamente
+  renderDashboard();
+  renderAsignaturas();
   setSyncStatus('sync');
   sheetGuardar('Asignaturas',
     ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso'],
     [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs, today(), asig.tipo||'estandar', asig.celula||'', '', '', link]
   );
-  // Notificar Teams si es célula asignada directamente (no en cola)
+  // Notificar Teams si es célula asignada directamente
   if(esCelula && celulaId && modoIngreso==='directo'){
-    asig.videoPersona = avanzarTurnoVideo();
     notificarAsignacion(asig, celulaId, false);
   }
   goPage('asignaturas',document.querySelector('[onclick*=asignaturas]'));
