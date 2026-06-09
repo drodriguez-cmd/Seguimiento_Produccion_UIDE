@@ -713,21 +713,7 @@ textarea{resize:vertical;min-height:70px}
   </div>
 </div>
 
-<!-- MODAL handoff -->
-<div id="modal-handoff" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
-  <div style="background:white;border-radius:16px;padding:28px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <h3 style="font-family:var(--fhead);margin-bottom:8px;font-size:17px" id="modal-handoff-titulo">Confirmar Handoff</h3>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:16px" id="modal-handoff-desc"></p>
-    <textarea id="modal-handoff-nota" placeholder="Nota opcional..." style="width:100%;border:1px solid var(--border2);border-radius:8px;padding:10px;font-size:13px;resize:none;height:70px;margin-bottom:16px;box-sizing:border-box"></textarea>
-    <input type="hidden" id="modal-handoff-asigid">
-    <input type="hidden" id="modal-handoff-num">
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn" onclick="document.getElementById('modal-handoff').style.display='none'">Cancelar</button>
-      <button class="btn" onclick="confirmarHandoff()" style="background:#023373;color:white;border:none">✅ Confirmar</button>
-    </div>
-  </div>
-</div>
-
+<!-- MODAL handoff eliminado -->
 <!-- MODAL célula timer -->
 <div id="modal-celula-timer" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:400px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
@@ -1298,7 +1284,7 @@ function crearAsignatura(){
     tipo: esCelula ? 'celula' : 'estandar',
     celula: celulaId,
     fechaCompletado: '',
-    handoffs: esCelula ? {h1:null,h2:null,h3:null} : null,
+    handoffs: null,
     tareasCelula: esCelula ? iniciarTareasCelula(celulaId) : null,
     equipo:{calidad:'Calidad',dis1:'Diseñador gráfico 1',dis2:'Diseñador gráfico 2',video:'Editor de video',coord:'Coordinación'},
     assets:{ global:{video_intro:false,video_profesor:false,geniallys_rda:false,video_c1:false,video_c2:false,video_c3:false},
@@ -1429,19 +1415,8 @@ function renderCelulaBodyInline(a){
   if(!a.handoffs) a.handoffs={h1:null,h2:null,h3:null};
   if(!a.tareasCelula) a.tareasCelula=iniciarTareasCelula(a.celula);
 
-  // Handoffs HTML
-  let hHTML = '<div style="margin-bottom:16px">';
-  hHTML += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Handoffs</div>';
-  hHTML += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-  HANDOFFS.forEach(h=>{
-    const done = a.handoffs['h'+h.num];
-    hHTML += '<div style="flex:1;min-width:130px;background:'+(done?'rgba(16,185,129,.08)':'var(--bg)')+';border:1px solid '+(done?'#10b981':'var(--border2)')+';border-radius:8px;padding:8px 10px">';
-    hHTML += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
-    hHTML += '<span style="font-size:11px;font-weight:700;color:'+(done?'#10b981':'var(--text)')+'">'+h.titulo+' '+(done?'✅':'○')+'</span>';
-    if(!done) hHTML += '<button onclick="marcarHandoffAsig(\'' + a.id + '\',' + h.num + ')" style="font-size:10px;padding:2px 7px;border:1px solid var(--border2);border-radius:4px;background:white;cursor:pointer">Marcar</button>';
-    hHTML += '</div><div style="font-size:10px;color:var(--muted)">'+(done?'Completado: '+done.split(',')[0]:h.plazo)+'</div></div>';
-  });
-  hHTML += '</div></div>';
+  // Handoffs eliminados — progreso automático por timers
+  let hHTML = '';
 
   // Tareas HTML
   let tHTML = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Tareas del equipo</div>';
@@ -1469,7 +1444,7 @@ function renderCelulaBodyInline(a){
   tHTML += '</div>';
 
   // Solo retornar el div de handoffs — entregables se manejan igual que estándar
-  return '<div id="unit-'+a.id+'-celula-handoffs" class="form-section" style="display:none">'+hHTML+'</div>';
+  return ''; // handoffs eliminados
 }
 
 // ════════════════════════════════════════════
@@ -1508,19 +1483,12 @@ const EQUIPO_EMAILS = {
 // ════════════════════════════════════════════
 
 function estadoCelula(celulaId){
-  // Buscar asignatura activa de esta célula
   const activa = STATE.asignaturas.find(a=>
     a.celula===celulaId && a.status==='En producción' && a.tipo==='celula'
   );
-  if(!activa) return { estado:'libre', asig:null, dia:0 };
-
-  // Determinar día por handoffs
-  const h = activa.handoffs||{};
-  let dia = 1;
-  if(h.h1) dia = 2;
-  if(h.h2) dia = 3;
-
-  return { estado:'ocupada', asig:activa, dia };
+  if(!activa) return { estado:'libre', asig:null, pct:0 };
+  const pct = progAsig(activa);
+  return { estado:'ocupada', asig:activa, pct };
 }
 
 function evaluarCargaCelulas(){
@@ -1531,17 +1499,18 @@ function evaluarCargaCelulas(){
   return resultado;
 }
 
+const PRE_ASIGN_PCT = 60; // Pre-asignar cuando la célula alcance este % de progreso
+
 function encontrarCelulaDisponible(){
   const carga = evaluarCargaCelulas();
 
-  // 1. Primero buscar células libres (sin asignatura activa)
+  // 1. Células libres (sin asignatura activa) — excluir célula video
   const libres = Object.entries(carga)
-    .filter(([,c])=>c.estado==='libre')
+    .filter(([id,c])=>c.estado==='libre' && id!=='JuanDiego')
     .map(([id])=>id);
 
   if(libres.length > 0){
-    // Si hay varias libres, elegir la que lleva más tiempo sin trabajar
-    // (la que tiene la asignatura completada más antigua o nunca ha tenido)
+    // Elegir la que lleva más tiempo sin trabajar
     libres.sort((a,b)=>{
       const ultimaA = STATE.asignaturas.filter(x=>x.celula===a&&x.status==='Completada')
         .sort((x,y)=>new Date(y.fechaCompletado||0)-new Date(x.fechaCompletado||0))[0];
@@ -1552,21 +1521,15 @@ function encontrarCelulaDisponible(){
     return { celulaId: libres[0], tipo: 'libre' };
   }
 
-  // 2. Si no hay libres, buscar células en Día 2 (pre-asignar)
-  const enDia2 = Object.entries(carga)
-    .filter(([,c])=>c.estado==='ocupada' && c.dia===2)
+  // 2. Células ocupadas que ya alcanzaron el 60% — pre-asignar
+  const en60 = Object.entries(carga)
+    .filter(([id,c])=>c.estado==='ocupada' && c.pct>=PRE_ASIGN_PCT && id!=='JuanDiego')
+    .sort((a,b)=>b[1].pct - a[1].pct) // la más avanzada primero
     .map(([id])=>id);
 
-  if(enDia2.length > 0) return { celulaId: enDia2[0], tipo: 'preasignacion' };
+  if(en60.length > 0) return { celulaId: en60[0], tipo: 'preasignacion' };
 
-  // 3. Si no hay en Día 2, buscar en Día 3
-  const enDia3 = Object.entries(carga)
-    .filter(([,c])=>c.estado==='ocupada' && c.dia===3)
-    .map(([id])=>id);
-
-  if(enDia3.length > 0) return { celulaId: enDia3[0], tipo: 'preasignacion' };
-
-  return null; // Todas ocupadas en Día 1
+  return null; // Todas ocupadas y bajo el 60%
 }
 
 function obtenerSiguienteEnCola(){
@@ -1598,7 +1561,6 @@ async function intentarAutoAsignar(){
   siguiente.celula = disponible.celulaId;
   siguiente.status = 'En producción';
   if(!siguiente.tareasCelula) siguiente.tareasCelula = iniciarTareasCelula(disponible.celulaId);
-  if(!siguiente.handoffs) siguiente.handoffs = {h1:null,h2:null,h3:null};
   // Asignar persona de video (turno alternado, independiente de la célula de diseño)
   siguiente.videoPersona = avanzarTurnoVideo();
 
@@ -1816,6 +1778,15 @@ function verificarAutoCompletado(asigId){
   const asig = STATE.asignaturas.find(a=>a.id===asigId);
   if(!asig || asig.status==='Completada' || asig.status==='Pausada') return;
 
+  // Verificar si alcanzó el 60% → intentar pre-asignar siguiente en cola
+  if(asig.tipo==='celula'){
+    const pct = progAsig(asig);
+    if(pct >= PRE_ASIGN_PCT && !asig._preAsignado){
+      asig._preAsignado = true;
+      intentarAutoAsignar();
+    }
+  }
+
   let completa = false;
 
   if(asig.tipo==='celula' && asig.tareasCelula){
@@ -1860,21 +1831,7 @@ function verificarAutoCompletado(asigId){
   }
 }
 
-function marcarHandoffAsig(asigId, num){
-  const asig = STATE.asignaturas.find(a=>a.id===asigId);
-  if(!asig) return;
-  if(!asig.handoffs) asig.handoffs={h1:null,h2:null,h3:null};
-  asig.handoffs['h'+num] = new Date().toLocaleString('es-CO');
-  guardarEstadoLocal();
-  sheetActualizar('Asignaturas',
-    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Prioridad','Tipo','Celula','H1','H2','H3'],
-    [asig.id,asig.nombre,asig.prog,asig.inicio,asig.df,asig.status,asig.obs||'',asig.prioridad||'media',asig.tipo||'estandar',asig.celula||'',
-     asig.handoffs.h1||'',asig.handoffs.h2||'',asig.handoffs.h3||'']
-  );
-  renderAsignaturas();
-  toast('✅ Handoff '+num+' registrado');
-  if(num===1) intentarAutoAsignar();
-}
+// marcarHandoffAsig eliminado
 
 function toggleTareaAsigCelula(asigId, rol, tarea){
   const asig = STATE.asignaturas.find(a=>a.id===asigId);
@@ -2418,7 +2375,7 @@ function renderAsignaturas(filtro='all'){
             <button class="utab" onclick="showUnit('${a.id}','u3',this)">Clase 3</button>
             <button class="utab" onclick="showUnit('${a.id}','global',this)">Videos globales</button>
             <button class="utab" onclick="showUnit('${a.id}','equipo',this)">${a.tipo==='celula'?'👥 Equipo':'Equipo'}</button>
-            ${a.tipo==='celula'?`<button class="utab" onclick="showUnit('${a.id}','celula-handoffs',this)">🔀 Handoffs</button>`:''}
+
             <button class="utab" onclick="showUnit('${a.id}','sesiones',this)">Sesiones</button>
         </div>
         ${a.tipo==='celula' ? renderCelulaBodyInlineSafe(a) : ''}
@@ -2505,7 +2462,7 @@ function toggleAsigBody(id){
 }
 
 function showUnit(asigId, unit, el){
-  ['u1','u2','u3','global','equipo','sesiones','celula-flujo','celula-handoffs','celula-lider','celula-diseno','celula-video'].forEach(u=>{
+  ['u1','u2','u3','global','equipo','sesiones','celula-flujo','celula-lider','celula-diseno','celula-video'].forEach(u=>{
     const d=document.getElementById(`unit-${asigId}-${u}`);
     if(d) d.style.display=u===unit?'block':'none';
   });
@@ -3144,45 +3101,7 @@ async function cargarCelulaDesdeSheets(){
   } catch(e){ renderCelula(); }
 }
 
-function mostrarModalHandoff(asigId, num){
-  const h = HANDOFFS[num-1];
-  document.getElementById('modal-handoff-titulo').textContent = h.titulo;
-  document.getElementById('modal-handoff-desc').textContent = h.desc + ' · ' + h.plazo;
-  document.getElementById('modal-handoff-asigid').value = asigId;
-  document.getElementById('modal-handoff-num').value = num;
-  document.getElementById('modal-handoff-nota').value = '';
-  document.getElementById('modal-handoff').style.display = 'flex';
-}
-
-function cerrarModalHandoff(){
-  document.getElementById('modal-handoff').style.display = 'none';
-}
-
-function confirmarHandoff(){
-  const asigId = document.getElementById('modal-handoff-asigid').value;
-  const num = parseInt(document.getElementById('modal-handoff-num').value);
-  const nota = document.getElementById('modal-handoff-nota').value;
-  const asig = STATE_CELULA.asignaturas.find(a=>a.id===asigId);
-  if(!asig) return;
-  const ts = new Date().toLocaleString('es-CO');
-  asig.handoffs['h'+num] = ts;
-  guardarCelulaLocal();
-  sheetActualizar('Asignaturas_Celulas',
-    ['ID','Nombre','Programa','Celula','Inicio','Status','H1','H2','H3'],
-    [asig.id, asig.nombre, asig.prog, asig.celula, asig.inicio, asig.status,
-     asig.handoffs.h1||'', asig.handoffs.h2||'', asig.handoffs.h3||'']
-  );
-  if(nota) sheetGuardar('Handoffs',
-    ['ID Asignatura','Nombre','Handoff','Fecha','Nota'],
-    [asigId, asig.nombre, 'H'+num, ts, nota]
-  );
-  cerrarModalHandoff();
-  renderCelula();
-  renderAsignaturas();
-  toast('✅ Handoff '+num+' registrado');
-  // Si se completó H1 (entrando a Día 2), intentar auto-asignar siguiente
-  if(num===1) intentarAutoAsignar();
-}
+// mostrarModalHandoff / cerrarModalHandoff / confirmarHandoff eliminados
 
 function toggleTareaCelula(asigId, rol, tarea){
   const asig = STATE_CELULA.asignaturas.find(a=>a.id===asigId);
@@ -3320,26 +3239,8 @@ function renderCelula(){
     const colorRiesgo = dias>=3&&a.status==='En producción'?'var(--danger)':dias>=2?'var(--warn)':'var(--ok)';
     const timersAsig = Object.values(STATE_CELULA.timers).filter(t=>t.asigId===a.id);
 
-    // Handoffs
-    const handoffHTML = esVideo ? `
-      <div style="display:flex;gap:8px;align-items:center;padding:12px 0;border-top:1px solid var(--border)">
-        <span style="font-size:12px;color:var(--muted)">Flujo video — 1 día · autónomo</span>
-      </div>` : `
-      <div style="padding:14px 0;border-top:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Handoffs</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${HANDOFFS.map(h=>{
-            const done = a.handoffs?.['h'+h.num];
-            return `<div style="flex:1;min-width:130px;background:${done?'rgba(16,185,129,.08)':'var(--bg)'};border:1px solid ${done?'#10b981':'var(--border2)'};border-radius:8px;padding:8px 10px">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <span style="font-size:11px;font-weight:700;color:${done?'#10b981':'var(--text)'}">${h.titulo} ${done?'✅':'○'}</span>
-                ${!done?`<button onclick="mostrarModalHandoff('${a.id}',${h.num})" style="font-size:10px;padding:2px 7px;border:1px solid var(--border2);border-radius:4px;background:white;cursor:pointer;color:var(--text)">Marcar</button>`:''}
-              </div>
-              <div style="font-size:10px;color:var(--muted)">${done?'Completado: '+done.split(',')[0]:h.plazo}</div>
-            </div>`;
-          }).join('')}
-        </div>
-      </div>`;
+    // Handoffs eliminados — progreso automático
+    const handoffHTML = '';
 
     // Tareas por rol
     const rolesRender = esVideo ? ['video'] : ['lider','diseno'];
@@ -3729,6 +3630,27 @@ async function cargarDesdeSheets(){
         }
       });
       actualizado = true;
+
+      // Patch: asignar videoPersona a asignaturas célula que no la tienen (orden de creación)
+      const sinVideo = STATE.asignaturas
+        .filter(a => a.tipo==='celula' && a.celula !== 'JuanDiego' && !a.videoPersona && a.status !== 'En espera')
+        .sort((a,b) => new Date(a.inicio) - new Date(b.inicio));
+      if(sinVideo.length > 0){
+        // Determinar turno actual basado en las que ya tienen asignado
+        const conVideo = STATE.asignaturas
+          .filter(a => a.tipo==='celula' && a.videoPersona)
+          .sort((a,b) => new Date(a.inicio) - new Date(b.inicio));
+        // El turno empieza donde terminó el último asignado
+        let turnoIdx = conVideo.length % VIDEO_PERSONAS.length;
+        sinVideo.forEach(a => {
+          a.videoPersona = VIDEO_PERSONAS[turnoIdx % VIDEO_PERSONAS.length];
+          turnoIdx++;
+          actualizado = true;
+        });
+        // Actualizar el turno guardado para las próximas
+        localStorage.setItem('turnoVideo', VIDEO_PERSONAS[turnoIdx % VIDEO_PERSONAS.length]);
+        console.log('[PATCH] videoPersona asignada a', sinVideo.length, 'asignaturas');
+      }
     }
 
     if(filaSes.length > 1){
