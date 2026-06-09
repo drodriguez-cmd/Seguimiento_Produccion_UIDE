@@ -268,6 +268,9 @@ textarea{resize:vertical;min-height:70px}
     <button class="nav-item" onclick="goPage('asignaturas',this)">
       <span class="dot" style="background:#818cf8"></span> Asignaturas
     </button>
+    <button class="nav-item" onclick="goPage('celulas-dir',this)">
+      <span class="dot" style="background:#e8336d"></span> 🏭 Células
+    </button>
 
     <div class="nav-section">Registro</div>
     <button class="nav-item" onclick="goPage('nueva',this)">
@@ -661,6 +664,14 @@ textarea{resize:vertical;min-height:70px}
 
 </div><!-- /main -->
 <!-- ── PÁGINA CÉLULA ──-->
+<div class="page" id="page-celulas-dir">
+  <div class="page-header">
+    <h1>🏭 Células</h1>
+    <p>Vista ejecutiva del estado de producción por célula</p>
+  </div>
+  <div id="celulas-dir-content"></div>
+</div>
+
 <div class="page" id="page-celula">
   <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
     <div><h1>Panel de Células</h1><p>Seguimiento en tiempo real · Modo contingencia</p></div>
@@ -823,6 +834,182 @@ function setSyncStatus(estado){
 }
 
 // ── Respaldo en localStorage
+function renderCelulasDir(){
+  const el = document.getElementById('celulas-dir-content');
+  if(!el) return;
+
+  const todas = STATE.asignaturas;
+  const enProd = todas.filter(a=>a.status==='En producción').length;
+  const comp = todas.filter(a=>a.status==='Completada').length;
+  const cola = todas.filter(a=>a.status==='En espera').length;
+  const total = todas.length;
+  const pctComp = total>0?Math.round(comp/total*100):0;
+  const completadas = todas.filter(a=>a.status==='Completada');
+  const promDias = completadas.length>0
+    ? (completadas.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadas.length).toFixed(1)
+    : '—';
+  const dfProm = completadas.length>0
+    ? (completadas.map(a=>a.df||3).reduce((s,d)=>s+d,0)/completadas.length).toFixed(1)
+    : '—';
+
+  // KPIs
+  const kpiHTML = `
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">
+    ${[
+      {lbl:'Total asignaturas', val:total, sub:'en la fábrica', c:'#818cf8'},
+      {lbl:'En producción', val:enProd, sub:'células activas', c:'#d97706'},
+      {lbl:'Completadas', val:comp, sub:pctComp+'% del total', c:'#16a34a'},
+      {lbl:'En cola', val:cola, sub:'esperando célula', c:'#e8336d'},
+      {lbl:'Días prom.', val:promDias+(promDias!=='—'?'d':''), sub:dfProm!=='—'?'DF est: '+dfProm+'d':'sin completadas', c:promDias!=='—'&&parseFloat(promDias)<=parseFloat(dfProm)?'#16a34a':'#d97706'},
+    ].map(k=>`
+      <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);padding:16px;border-top:3px solid ${k.c}">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px;font-weight:600">${k.lbl}</div>
+        <div style="font-family:var(--fhead);font-size:30px;font-weight:700;color:${k.c};line-height:1">${k.val}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px">${k.sub}</div>
+      </div>`).join('')}
+  </div>`;
+
+  // Células — estado y progreso
+  const celulasHTML = Object.entries(CELULA_CFG).map(([id, cfg])=>{
+    if(id==='JuanDiego') return ''; // Video se muestra aparte
+    const asigActiva = todas.find(a=>a.celula===id && a.status==='En producción');
+    const pct = asigActiva ? progAsig(asigActiva) : 0;
+    const dias = asigActiva ? diasAsig(asigActiva).toFixed(1) : '0';
+    const completadasCelula = todas.filter(a=>a.celula===id && a.status==='Completada');
+    const promCelula = completadasCelula.length>0
+      ? (completadasCelula.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasCelula.length).toFixed(1)
+      : null;
+    const dfEst = asigActiva?.df||3;
+    const velColor = !promCelula ? 'var(--muted)' : parseFloat(promCelula)<=dfEst ? '#16a34a' : '#d97706';
+    const velLabel = !promCelula ? 'sin completadas' : parseFloat(promCelula)<=dfEst ? '✅ En plazo' : '⚠️ Sobre DF';
+    const statusLabel = asigActiva ? 'En producción' : 'Libre';
+    const statusColor = asigActiva ? '#d97706' : '#16a34a';
+    const statusBg = asigActiva ? 'rgba(217,119,6,.1)' : 'rgba(22,163,74,.1)';
+    const barColor = pct>=60 ? '#16a34a' : pct>=30 ? '#d97706' : cfg.color;
+
+    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border)">
+      <div style="width:12px;height:12px;border-radius:50%;background:${cfg.color};flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${cfg.label}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${cfg.lider} · ${cfg.disenador}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigActiva?asigActiva.nombre:'Sin asignatura activa'}</div>
+      </div>
+      <div style="width:100px;flex-shrink:0">
+        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px">
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:${barColor};text-align:right">${pct}%</div>
+      </div>
+      <div style="text-align:center;min-width:60px">
+        <div style="font-size:11px;color:var(--muted)">Días</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text)">${dias}d</div>
+      </div>
+      <div style="text-align:center;min-width:70px">
+        <div style="font-size:11px;color:var(--muted)">Velocidad</div>
+        <div style="font-size:12px;font-weight:600;color:${velColor}">${promCelula?promCelula+'d':'-'}</div>
+        <div style="font-size:10px;color:${velColor}">${velLabel}</div>
+      </div>
+      <div style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor};flex-shrink:0">${statusLabel}</div>
+    </div>`;
+  }).join('');
+
+  // Video cell
+  const videoPersonas = ['Juan Diego Cruz','Valentina Rodríguez'];
+  const videoHTML = videoPersonas.map(persona=>{
+    const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción');
+    const completadasV = todas.filter(a=>a.videoPersona===persona && a.status==='Completada');
+    const promV = completadasV.length>0
+      ? (completadasV.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasV.length).toFixed(1)
+      : null;
+    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border)">
+      <div style="width:12px;height:12px;border-radius:50%;background:#2563eb;flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">🎬 ${persona}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${asigs.length} asignatura${asigs.length!==1?'s':''} activa${asigs.length!==1?'s':''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigs.map(a=>a.nombre).join(' · ')||'Sin asignaturas activas'}</div>
+      </div>
+      <div style="text-align:center;min-width:70px">
+        <div style="font-size:11px;color:var(--muted)">Velocidad prom.</div>
+        <div style="font-size:14px;font-weight:700;color:${promV?'#16a34a':'var(--muted)'}">${promV?promV+'d':'—'}</div>
+      </div>
+      <div style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:rgba(37,99,235,.1);color:#2563eb;flex-shrink:0">${asigs.length} activas</div>
+    </div>`;
+  }).join('');
+
+  // Cola
+  const colaAsigs = todas.filter(a=>a.status==='En espera');
+  const colaHTML = colaAsigs.length===0
+    ? `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No hay asignaturas en cola ✅</div>`
+    : colaAsigs.map((a,i)=>`
+      <div style="display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border)">
+        <div style="width:22px;height:22px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted);flex-shrink:0">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.nombre}</div>
+          <div style="font-size:11px;color:var(--muted)">${a.prog} · DF: ${a.df||3}d</div>
+        </div>
+        <div style="font-size:10px;padding:2px 9px;border-radius:99px;background:#eef2ff;color:#6366f1;font-weight:600">${a.prog.split(' ')[0]}</div>
+      </div>`).join('');
+
+  // Entregables globales
+  const entTypes=[
+    {label:'HTML', icon:'🌐', color:'#023373', keys:[{u:'u1',k:'html'},{u:'u2',k:'html'},{u:'u3',k:'html'}]},
+    {label:'Genially', icon:'✨', color:'#8B5CF6', keys:[{u:'u1',k:'genially'},{u:'u2',k:'genially'},{u:'u3',k:'genially'}]},
+    {label:'Infografía', icon:'📊', color:'#D98E04', keys:[{u:'u1',k:'infografia'},{u:'u2',k:'infografia'},{u:'u3',k:'infografia'}]},
+    {label:'Imágenes', icon:'🖼', color:'#059669', keys:[{u:'u1',k:'imagenes'},{u:'u2',k:'imagenes'},{u:'u3',k:'imagenes'}]},
+    {label:'Videos', icon:'🎬', color:'#EF4444', keys:[{u:'global',k:'video_intro'},{u:'global',k:'video_c1'},{u:'global',k:'video_c2'},{u:'global',k:'video_c3'},{u:'global',k:'video_profesor'},{u:'global',k:'geniallys_rda'}]},
+  ];
+  const entHTML = entTypes.map(et=>{
+    let done=0,total=0;
+    todas.forEach(a=>{ et.keys.forEach(({u,k})=>{ total++; if(a.assets?.[u]?.[k]) done++; }); });
+    const pct = total>0?Math.round(done/total*100):0;
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:500">${et.icon} ${et.label}</span>
+        <span style="font-size:12px;font-weight:700;color:${et.color}">${done}/${total} <span style="font-weight:400;color:var(--muted)">(${pct}%)</span></span>
+      </div>
+      <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${et.color};border-radius:3px;transition:width .4s"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    ${kpiHTML}
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px">
+      <div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:16px">
+          <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Células de diseño</span>
+            <span style="font-size:11px;padding:2px 10px;border-radius:99px;background:var(--bg3);color:var(--muted)">${Object.keys(CELULA_CFG).filter(k=>k!=='JuanDiego').length} células</span>
+          </div>
+          ${celulasHTML}
+        </div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
+          <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">🎬 Célula de video</span>
+            <span style="font-size:11px;padding:2px 10px;border-radius:99px;background:rgba(37,99,235,.1);color:#2563eb">Independiente</span>
+          </div>
+          ${videoHTML}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
+          <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Cola de espera</span>
+            <span style="font-size:11px;padding:2px 10px;border-radius:99px;background:#eef2ff;color:#6366f1">${colaAsigs.length} pendientes</span>
+          </div>
+          ${colaHTML}
+        </div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
+          <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Entregables globales</span>
+          </div>
+          <div style="padding:16px 20px">${entHTML}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
 function guardarEstadoLocal(){
   try{
     localStorage.setItem('fabrica_asignaturas', JSON.stringify(STATE.asignaturas));
@@ -1260,6 +1447,7 @@ function renderPage(id){
   else if(id==='indicadores') renderIndicadores();
   else if(id==='horarios-view') renderHorariosView();
   else if(id==='celula') renderCelula();
+  else if(id==='celulas-dir') renderCelulasDir();
 }
 
 // ══ TOAST ══
