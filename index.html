@@ -963,7 +963,7 @@ function renderCelulasDir(){
     : recientes.map(a=>{
       const pct=progAsig(a);
       const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
-      const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id && t.running);
+      const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id);
       const statusDisplay = (sesA.length===0 && !tieneTimerActivo && a.status==='En producción') ? 'En espera' : a.status;
       const stBg = statusDisplay==='Completada'?'rgba(22,163,74,.1)':statusDisplay==='En producción'?'rgba(217,119,6,.1)':'rgba(99,102,241,.12)';
       const stColor = statusDisplay==='Completada'?'#16a34a':statusDisplay==='En producción'?'#d97706':'#6366f1';
@@ -2469,7 +2469,7 @@ function renderDashboard(){
   }).slice(0,5).map(a=>{
     const pct=progAsig(a);
     const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
-    const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id && t.running);
+    const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id);
     const statusDisplay = (sesA.length===0 && !tieneTimerActivo && a.status==='En producción') ? 'En espera' : a.status;
     const stBadge=statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='En espera'?'badge-info':'badge-muted';
     const diasEl=diasAsig(a);
@@ -2555,7 +2555,7 @@ function renderAsignaturas(filtro='all'){
     const timersA=Object.values(STATE.timers).filter(t=>t.asigId===a.id).length;
     
     // Si no hay sesiones y está "En producción", mostrar como "En espera"
-    const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id && t.running);
+    const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id);
     const statusDisplay = (sesA.length===0 && !tieneTimerActivo && a.status==='En producción') ? 'En espera' : a.status;
     const stBadgeDisplay = statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='En espera'?'badge-info':'badge-muted';
 
