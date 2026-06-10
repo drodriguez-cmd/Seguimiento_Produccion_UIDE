@@ -918,16 +918,21 @@ function renderCelulasDir(){
   const videoPersonas = ['Juan Diego Cruz','Valentina Rodríguez'];
   const videoHTML = videoPersonas.map(persona=>{
     const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción');
+    const enCola = todas.filter(a=>a.videoPersona===persona && a.status==='En espera');
     const completadasV = todas.filter(a=>a.videoPersona===persona && a.status==='Completada');
     const promV = completadasV.length>0
       ? (completadasV.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasV.length).toFixed(1)
       : null;
+    const colaTxt = enCola.length>0
+      ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>a.nombre).join(' · ')}</div>`
+      : '';
     return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border)">
       <div style="width:12px;height:12px;border-radius:50%;background:#2563eb;flex-shrink:0"></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">🎬 ${persona}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${asigs.length} asignatura${asigs.length!==1?'s':''} activa${asigs.length!==1?'s':''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${asigs.length} activa${asigs.length!==1?'s':''} · ${enCola.length} en cola</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigs.map(a=>a.nombre).join(' · ')||'Sin asignaturas activas'}</div>
+        ${colaTxt}
       </div>
       <div style="text-align:center;min-width:70px">
         <div style="font-size:11px;color:var(--muted)">Velocidad prom.</div>
@@ -1134,7 +1139,7 @@ const VIDEO_PERSONAS = ['Juan Diego Cruz', 'Valentina Rodríguez'];
 function siguienteVideoPersona(){
   const conVideo = (STATE.asignaturas||[])
     .filter(a => a.tipo==='celula' && a.videoPersona && VIDEO_PERSONAS.includes(a.videoPersona))
-    .sort((a,b)=> new Date(a.inicio) - new Date(b.inicio));
+    .sort((a,b)=> String(a.id).localeCompare(String(b.id))); // id lleva timestamp de creación
   const ultima = conVideo[conVideo.length-1];
   if(!ultima) return VIDEO_PERSONAS[0]; // la primera de todas → Juan Diego
   return VIDEO_PERSONAS.find(p => p !== ultima.videoPersona) || VIDEO_PERSONAS[0];
@@ -1536,8 +1541,9 @@ function crearAsignatura(){
              u2:{html:false,genially:false,infografia:false,imagenes:false},
              u3:{html:false,genially:false,infografia:false,imagenes:false} }
   };
-  // Asignar videoPersona ANTES de guardar
-  if(esCelula && celulaId && modoIngreso==='directo'){
+  // Asignar videoPersona SIEMPRE al crear (directo o en cola).
+  // El video es independiente y va más rápido, así el editor sabe su carga desde el minuto 0.
+  if(esCelula){
     asig.videoPersona = avanzarTurnoVideo();
   }
   STATE.asignaturas.unshift(asig);
@@ -1553,12 +1559,17 @@ function crearAsignatura(){
   renderAsignaturas();
   setSyncStatus('sync');
   sheetGuardar('Asignaturas',
-    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso'],
-    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs, today(), asig.tipo||'estandar', asig.celula||'', '', '', link]
+    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
+    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs, today(), asig.tipo||'estandar', asig.celula||'', '', '', link, asig.videoPersona||'']
   );
   // Notificar Teams si es célula asignada directamente
   if(esCelula && celulaId && modoIngreso==='directo'){
     notificarAsignacion(asig, celulaId, false);
+  }
+  // Notificar al editor de video SIEMPRE que sea célula (aunque esté en cola),
+  // porque el video es independiente y puede arrancar de inmediato.
+  if(esCelula && asig.videoPersona){
+    notificarVideoPersona(asig);
   }
   goPage('asignaturas',document.querySelector('[onclick*=asignaturas]'));
 }
@@ -1772,8 +1783,9 @@ async function intentarAutoAsignar(){
   siguiente.celula = disponible.celulaId;
   siguiente.status = 'En producción';
   if(!siguiente.tareasCelula) siguiente.tareasCelula = iniciarTareasCelula(disponible.celulaId);
-  // Asignar persona de video (turno alternado, independiente de la célula de diseño)
-  siguiente.videoPersona = avanzarTurnoVideo();
+  // El video ya se asignó al crear la asignatura (incluso en cola).
+  // Solo asignar si por alguna razón no lo tuviera.
+  if(!siguiente.videoPersona) siguiente.videoPersona = avanzarTurnoVideo();
 
   guardarEstadoLocal();
 
@@ -1853,6 +1865,59 @@ async function notificarAsignacion(asig, celulaId, esPre){
       body: JSON.stringify(msg)
     });
   } catch(e){ console.log('Teams assignment notification error:', e); }
+}
+
+async function notificarVideoPersona(asig){
+  if(!TEAMS_WEBHOOK) return;
+  const enCola = asig.status === 'En espera';
+  try {
+    const msg = {
+      "type": "message",
+      "attachments": [{
+        "contentType": "application/vnd.microsoft.card.adaptive",
+        "content": {
+          "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+          "type": "AdaptiveCard",
+          "version": "1.4",
+          "body": [
+            {
+              "type": "TextBlock",
+              "text": "🎬 Asignatura de video asignada",
+              "weight": "Bolder",
+              "size": "Large",
+              "color": "Accent"
+            },
+            {
+              "type": "TextBlock",
+              "text": asig.nombre,
+              "weight": "Bolder",
+              "size": "Medium",
+              "wrap": true
+            },
+            {
+              "type": "FactSet",
+              "facts": [
+                {"title": "Editor de video", "value": asig.videoPersona||'—'},
+                {"title": "Programa", "value": asig.prog||'—'},
+                {"title": "Estado", "value": enCola ? '⏳ En cola' : '▶ En producción'}
+              ]
+            },
+            {
+              "type": "TextBlock",
+              "text": `**${asig.videoPersona||'Editor'}** — Esta es tu asignatura de video. Puedes arrancar con los 3 videos + RDA de una vez, sin esperar a diseño. 🎬`,
+              "wrap": true,
+              "color": "Accent"
+            }
+          ]
+        }
+      }]
+    };
+    await fetch(TEAMS_WEBHOOK, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(msg)
+    });
+  } catch(e){ console.log('Teams video notification error:', e); }
 }
 
 async function notificarSinCola(){
