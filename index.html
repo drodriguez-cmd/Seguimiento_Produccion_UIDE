@@ -2136,10 +2136,27 @@ function iniciarTimer(){
 }
 
 function pausarTimer(id){
-  const t=STATE.timers[id]; if(!t)return;
+  let t=STATE.timers[id];
+  // Si no está en local, puede ser un timer que se recuperó desde Sheets tras recargar.
+  // Lo reconstruimos en local para poder controlarlo.
+  if(!t){
+    const r=(STATE.timersSheets||[]).find(x=>x.id===id);
+    if(!r){ toast('No se encontró el timer'); return; }
+    t={
+      id:r.id, persona:r.persona, rol:r.rol, tarea:r.tarea, unidad:r.unidad,
+      asigId: (STATE.asignaturas.find(a=>a.nombre===r.asigNombre)?.id)||'',
+      asigNombre:r.asigNombre,
+      inicio:r.inicio, elapsed: r.running?(Date.now()-r.inicio):0, running:r.running
+    };
+    STATE.timers[id]=t;
+    if(t.running){
+      STATE.intervals[id]=setInterval(()=>{
+        if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; renderTimers(); renderDashboardTimers(); }
+      },1000);
+    }
+  }
   if(t.running){
     t.elapsed=Date.now()-t.inicio; t.running=false; clearInterval(STATE.intervals[id]);
-    // Sincronizar pausa con Sheets
     sheetActualizar('Timers_Activos',
       ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado'],
       [t.id, t.persona, ROL_CFG[t.rol]?.label||t.rol, t.tarea, t.unidad||'', t.asigNombre,
@@ -2151,7 +2168,6 @@ function pausarTimer(id){
     STATE.intervals[id]=setInterval(()=>{
       if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; renderTimers(); renderDashboardTimers(); }
     },1000);
-    // Sincronizar reanudación con Sheets
     sheetActualizar('Timers_Activos',
       ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado'],
       [t.id, t.persona, ROL_CFG[t.rol]?.label||t.rol, t.tarea, t.unidad||'', t.asigNombre,
@@ -2164,7 +2180,16 @@ function pausarTimer(id){
 }
 
 function completarTimer(id,nota=''){
-  const t=STATE.timers[id]; if(!t)return;
+  let t=STATE.timers[id];
+  if(!t){
+    const r=(STATE.timersSheets||[]).find(x=>x.id===id);
+    if(!r){ toast('No se encontró el timer'); return; }
+    t={ id:r.id, persona:r.persona, rol:r.rol, tarea:r.tarea, unidad:r.unidad,
+        asigId:(STATE.asignaturas.find(a=>a.nombre===r.asigNombre)?.id)||'',
+        asigNombre:r.asigNombre, inicio:r.inicio,
+        elapsed:r.running?(Date.now()-r.inicio):0, running:r.running };
+    STATE.timers[id]=t;
+  }
   clearInterval(STATE.intervals[id]);
   const elapsed=t.running?Date.now()-t.inicio:t.elapsed;
   const mins=Math.round(elapsed/60000);
@@ -2183,7 +2208,15 @@ function completarTimer(id,nota=''){
   renderTimers(); renderDashboardTimers(); toast('Sesión guardada · '+minsToStr(mins));
 }
 
-function borrarTimer(id){ clearInterval(STATE.intervals[id]); delete STATE.timers[id]; delete STATE.intervals[id]; renderTimers(); }
+function borrarTimer(id){
+  clearInterval(STATE.intervals[id]);
+  const t=STATE.timers[id]||(STATE.timersSheets||[]).find(x=>x.id===id);
+  delete STATE.timers[id]; delete STATE.intervals[id];
+  if(STATE.timersSheets) STATE.timersSheets=STATE.timersSheets.filter(x=>x.id!==id);
+  if(t){ sheetTimerActivo('completar', t); } // saca el timer de la hoja Timers_Activos
+  guardarEstadoLocal();
+  renderTimers(); renderDashboardTimers();
+}
 
 function setSortRol(rol,key){
   const cur=window['sortDir_'+rol]||'desc';
@@ -3829,7 +3862,12 @@ async function cargarDesdeSheets(){
           local.obs=sa.obs;
           local.df=sa.df;
           local.prioridad=sa.prioridad||local.prioridad||'media';
-          local.tipo=sa.tipo||local.tipo||'estandar';
+          // Proteger tipo: si localmente es célula con célula asignada, no degradar a estándar
+          if(local.tipo==='celula' && local.celula && sa.tipo!=='celula'){
+            // mantener célula local (Sheets quedó desactualizado)
+          } else {
+            local.tipo=sa.tipo||local.tipo||'estandar';
+          }
           local.celula=sa.celula||local.celula||'';
           local.link=sa.link||local.link||'';
           if(sa.fechaCompletado) local.fechaCompletado=sa.fechaCompletado;
