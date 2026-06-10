@@ -262,14 +262,11 @@ textarea{resize:vertical;min-height:70px}
 
   <nav class="nav">
     <div class="nav-section">General</div>
-    <button class="nav-item active" onclick="goPage('dashboard',this)">
-      <span class="dot" style="background:#6b7696"></span> Dashboard
+    <button class="nav-item active" onclick="goPage('celulas-dir',this)">
+      <span class="dot" style="background:#e8336d"></span> Dashboard
     </button>
     <button class="nav-item" onclick="goPage('asignaturas',this)">
       <span class="dot" style="background:#818cf8"></span> Asignaturas
-    </button>
-    <button class="nav-item" onclick="goPage('celulas-dir',this)">
-      <span class="dot" style="background:#e8336d"></span> 🏭 Células
     </button>
 
     <div class="nav-section">Registro</div>
@@ -306,7 +303,7 @@ textarea{resize:vertical;min-height:70px}
 <div class="main">
 
 <!-- ─── DASHBOARD ─── -->
-<div class="page active" id="page-dashboard">
+<div class="page" id="page-dashboard" style="display:none!important">
   <div class="page-header">
     <h1>Dashboard</h1>
     <p>Vista general de producción en tiempo real</p>
@@ -664,10 +661,10 @@ textarea{resize:vertical;min-height:70px}
 
 </div><!-- /main -->
 <!-- ── PÁGINA CÉLULA ──-->
-<div class="page" id="page-celulas-dir">
+<div class="page active" id="page-celulas-dir">
   <div class="page-header">
-    <h1>🏭 Células</h1>
-    <p>Vista ejecutiva del estado de producción por célula</p>
+    <h1>Dashboard</h1>
+    <p>Vista ejecutiva de producción por célula en tiempo real</p>
   </div>
   <div id="celulas-dir-content"></div>
 </div>
@@ -853,13 +850,16 @@ function renderCelulasDir(){
     : '—';
 
   // KPIs
+  const enRiesgo = todas.filter(a=>a.status==='En producción'&&diasAsig(a)>=(a.df||3)).length;
+  const timersN = Object.values(STATE.timers).filter(t=>t.running).length;
   const kpiHTML = `
-  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px">
     ${[
       {lbl:'Total asignaturas', val:total, sub:'en la fábrica', c:'#818cf8'},
       {lbl:'En producción', val:enProd, sub:'células activas', c:'#d97706'},
       {lbl:'Completadas', val:comp, sub:pctComp+'% del total', c:'#16a34a'},
       {lbl:'En cola', val:cola, sub:'esperando célula', c:'#e8336d'},
+      {lbl:'En riesgo', val:enRiesgo, sub:enRiesgo>0?'superaron DF':'dentro del plazo', c:enRiesgo>0?'#dc2626':'#16a34a'},
       {lbl:'Días prom.', val:promDias+(promDias!=='—'?'d':''), sub:dfProm!=='—'?'DF est: '+dfProm+'d':'sin completadas', c:promDias!=='—'&&parseFloat(promDias)<=parseFloat(dfProm)?'#16a34a':'#d97706'},
     ].map(k=>`
       <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);padding:16px;border-top:3px solid ${k.c}">
@@ -950,28 +950,40 @@ function renderCelulasDir(){
         <div style="font-size:10px;padding:2px 9px;border-radius:99px;background:#eef2ff;color:#6366f1;font-weight:600">${a.prog.split(' ')[0]}</div>
       </div>`).join('');
 
-  // Entregables globales
-  const entTypes=[
-    {label:'HTML', icon:'🌐', color:'#023373', keys:[{u:'u1',k:'html'},{u:'u2',k:'html'},{u:'u3',k:'html'}]},
-    {label:'Genially', icon:'✨', color:'#8B5CF6', keys:[{u:'u1',k:'genially'},{u:'u2',k:'genially'},{u:'u3',k:'genially'}]},
-    {label:'Infografía', icon:'📊', color:'#D98E04', keys:[{u:'u1',k:'infografia'},{u:'u2',k:'infografia'},{u:'u3',k:'infografia'}]},
-    {label:'Imágenes', icon:'🖼', color:'#059669', keys:[{u:'u1',k:'imagenes'},{u:'u2',k:'imagenes'},{u:'u3',k:'imagenes'}]},
-    {label:'Videos', icon:'🎬', color:'#EF4444', keys:[{u:'global',k:'video_intro'},{u:'global',k:'video_c1'},{u:'global',k:'video_c2'},{u:'global',k:'video_c3'},{u:'global',k:'video_profesor'},{u:'global',k:'geniallys_rda'}]},
-  ];
-  const entHTML = entTypes.map(et=>{
-    let done=0,total=0;
-    todas.forEach(a=>{ et.keys.forEach(({u,k})=>{ total++; if(a.assets?.[u]?.[k]) done++; }); });
-    const pct = total>0?Math.round(done/total*100):0;
-    return `<div style="margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-size:13px;font-weight:500">${et.icon} ${et.label}</span>
-        <span style="font-size:12px;font-weight:700;color:${et.color}">${done}/${total} <span style="font-weight:400;color:var(--muted)">(${pct}%)</span></span>
-      </div>
-      <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-        <div style="height:100%;width:${pct}%;background:${et.color};border-radius:3px;transition:width .4s"></div>
-      </div>
-    </div>`;
-  }).join('');
+  // Asignaturas recientes (mismo orden que dashboard original)
+  const recientes = [...todas].sort((a,b)=>{
+    const orden = {'En producción':0,'Pausada':1,'En espera':2,'Completada':3};
+    const oa = orden[a.status]??4, ob = orden[b.status]??4;
+    if(oa!==ob) return oa-ob;
+    return new Date(b.inicio)-new Date(a.inicio);
+  }).slice(0,5);
+
+  const recientesHTML = recientes.length===0
+    ? `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No hay asignaturas aún</div>`
+    : recientes.map(a=>{
+      const pct=progAsig(a);
+      const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
+      const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id && t.running);
+      const statusDisplay = (sesA.length===0 && !tieneTimerActivo && a.status==='En producción') ? 'En espera' : a.status;
+      const stBg = statusDisplay==='Completada'?'rgba(22,163,74,.1)':statusDisplay==='En producción'?'rgba(217,119,6,.1)':'rgba(99,102,241,.12)';
+      const stColor = statusDisplay==='Completada'?'#16a34a':statusDisplay==='En producción'?'#d97706':'#6366f1';
+      const diasEl=diasAsig(a);
+      const celCfg = a.tipo==='celula'&&a.celula?CELULA_CFG[a.celula]:null;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border)">
+        <div style="width:38px;height:38px;border-radius:8px;border:1px solid var(--border);position:relative;flex-shrink:0">
+          <svg viewBox="0 0 42 42" style="transform:rotate(-90deg)">
+            <circle cx="21" cy="21" r="16" fill="none" stroke="var(--border)" stroke-width="3"/>
+            <circle cx="21" cy="21" r="16" fill="none" stroke="${pct>=100?'#16a34a':pct>=60?'#d97706':'#ea6c1a'}" stroke-width="3" stroke-dasharray="${(pct/100*100.5).toFixed(1)} 100.5" stroke-linecap="round"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--muted)">${pct}%</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.nombre} ${celCfg?`<span style="font-size:10px;padding:1px 7px;border-radius:99px;background:${celCfg.color}18;color:${celCfg.color};font-weight:600">${celCfg.label}</span>`:''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${a.prog} · ${diasEl.toFixed(1)}d en producción</div>
+        </div>
+        <span style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:${stBg};color:${stColor};flex-shrink:0">${statusDisplay}</span>
+      </div>`;
+    }).join('');
 
   el.innerHTML = `
     ${kpiHTML}
@@ -1001,13 +1013,48 @@ function renderCelulasDir(){
           ${colaHTML}
         </div>
         <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
-          <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
-            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Entregables globales</span>
+          <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Timers activos ahora</span>
+            <div class="live-badge"><div class="live-dot"></div>Live</div>
           </div>
-          <div style="padding:16px 20px">${entHTML}</div>
+          <div id="celdir-timers-list"><div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-txt">Sin timers activos</div></div></div>
         </div>
       </div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-top:16px">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Asignaturas recientes</span>
+        <button class="btn btn-sm" onclick="goPage('asignaturas',document.querySelector('[onclick*=asignaturas]'))">Ver todas</button>
+      </div>
+      ${recientesHTML}
     </div>`;
+  renderCeldirTimers();
+}
+
+function renderCeldirTimers(){
+  const el = document.getElementById('celdir-timers-list');
+  if(!el) return;
+  const activos = Object.values(STATE.timers);
+  if(activos.length===0){
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-txt">Sin timers activos</div></div>';
+    return;
+  }
+  el.innerHTML = activos.map(t=>{
+    const cfg = ROL_CFG[t.rol]||{};
+    const elapsed = t.running ? Date.now()-t.inicio : t.elapsed;
+    const hh=String(Math.floor(elapsed/3600000)).padStart(2,'0');
+    const mm=String(Math.floor(elapsed%3600000/60000)).padStart(2,'0');
+    const ss=String(Math.floor(elapsed%60000/1000)).padStart(2,'0');
+    const ini = (t.persona||'??').split(' ').map(p=>p[0]).join('').substring(0,2).toUpperCase();
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border)">
+      <div style="width:36px;height:36px;border-radius:50%;background:${t.running?'rgba(22,163,74,.1)':'rgba(217,119,6,.1)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${t.running?'#16a34a':'#d97706'};flex-shrink:0">${ini}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${t.persona}</div>
+        <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.tarea}${t.unidad?' · '+t.unidad:''} · ${t.asigNombre}</div>
+      </div>
+      <div style="font-family:var(--fhead);font-size:16px;font-weight:700;color:${t.running?'#16a34a':'#d97706'};flex-shrink:0">${t.running?hh+':'+mm+':'+ss:'⏸ Pausado'}</div>
+    </div>`;
+  }).join('');
 }
 
 function guardarEstadoLocal(){
@@ -2346,6 +2393,7 @@ function renderTimers(){
 }
 
 function renderDashboardTimers(){
+  renderCeldirTimers();
   const local=Object.values(STATE.timers);
   const remote=(STATE.timersSheets||[]).filter(r=>!local.find(l=>l.id===r.id));
   const list=[...local, ...remote];
@@ -3758,6 +3806,7 @@ async function cargarDesdeSheets(){
   // Siempre renderizar al inicio aunque no haya local
   setSyncStatus(tieneLocal ? 'local' : 'sync');
   renderDashboard();
+  renderCelulasDir();
 
   // 2. Intentar sincronizar con Sheets en background
   try{
@@ -4062,6 +4111,7 @@ async function cargarDesdeSheets(){
       else if(ap==='indicadores') renderIndicadores();
       else if(ap==='timers') renderTimers();
       else if(ap==='asignaturas') renderAsignaturas();
+      else if(ap==='celulas-dir') renderCelulasDir();
     }
     setSyncStatus('ok');
   }catch(e){
