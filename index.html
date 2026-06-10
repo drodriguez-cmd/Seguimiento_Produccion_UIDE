@@ -963,8 +963,7 @@ function renderCelulasDir(){
     : recientes.map(a=>{
       const pct=progAsig(a);
       const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
-      const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id);
-      const statusDisplay = (sesA.length===0 && !tieneTimerActivo && a.status==='En producción') ? 'En espera' : a.status;
+      const statusDisplay = a.status;
       const stBg = statusDisplay==='Completada'?'rgba(22,163,74,.1)':statusDisplay==='En producción'?'rgba(217,119,6,.1)':'rgba(99,102,241,.12)';
       const stColor = statusDisplay==='Completada'?'#16a34a':statusDisplay==='En producción'?'#d97706':'#6366f1';
       const diasEl=diasAsig(a);
@@ -1644,42 +1643,9 @@ function renderCelulaBodyInlineSafe(a){
 }
 
 function renderCelulaBodyInline(a){
-  if(!a||!a.celula) return '';
-  const cfg = CELULA_CFG[a.celula]||{color:'#666',label:a.celula};
-  const esVideo = a.celula==='JuanDiego';
-  if(!a.handoffs) a.handoffs={h1:null,h2:null,h3:null};
-  if(!a.tareasCelula) a.tareasCelula=iniciarTareasCelula(a.celula);
-
-  // Handoffs eliminados — progreso automático por timers
-  let hHTML = '';
-
-  // Tareas HTML
-  let tHTML = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Tareas del equipo</div>';
-  tHTML += '<div style="display:flex;gap:16px;flex-wrap:wrap">';
-  const roles = ['lider','diseno','video']; // Always show all 3 — video is transversal
-  const rolLabels = {lider:'👑 Líder',diseno:'🎨 Diseñador',video:'🎬 Video'};
-  const rolColors = {lider:'#023373',diseno:'#D98E04',video:'#3b82f6'};
-  const equipo = { lider: cfg.lider||'', diseno: cfg.disenador||'' };
-  roles.forEach(rol=>{
-    const personaRol = rol==='lider'?equipo.lider:rol==='diseno'?equipo.diseno:rol==='video'?(a.videoPersona||''):''; 
-    const tareas = Object.entries(a.tareasCelula[rol]||{});
-    const doneCount = tareas.filter(([,v])=>v).length;
-    tHTML += '<div style="flex:1;min-width:180px">';
-    tHTML += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-    tHTML += '<span style="font-size:12px;font-weight:700;color:'+rolColors[rol]+'">'+rolLabels[rol]+(personaRol?' · '+personaRol:'')+'</span>';
-    tHTML += '<span style="font-size:11px;color:var(--muted)">'+doneCount+'/'+tareas.length+'</span></div>';
-    tareas.forEach(([tarea,done])=>{
-      const tareaEsc = tarea.replace(/'/g,"\'");
-      tHTML += '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;border-bottom:1px solid var(--border)">';
-      tHTML += '<input type="checkbox" '+(done?'checked':'')+' onchange="toggleTareaAsigCelula(\'' + a.id + '\',\'' + rol + '\',\'' + tareaEsc + '\')" style="accent-color:'+rolColors2[rol]+'">';
-      tHTML += '<span style="font-size:12px;color:'+(done?'var(--muted)':'var(--text)')+';text-decoration:'+(done?'line-through':'none')+'">'+tarea+'</span></label>';
-    });
-    tHTML += '</div>';
-  });
-  tHTML += '</div>';
-
-  // Solo retornar el div de handoffs — entregables se manejan igual que estándar
-  return ''; // handoffs eliminados
+  // Handoffs y tareas inline eliminados — los entregables se gestionan
+  // igual que el modo estándar (tabs Clase 1/2/3, auto-completado por timers)
+  return '';
 }
 
 // ════════════════════════════════════════════
@@ -2469,8 +2435,7 @@ function renderDashboard(){
   }).slice(0,5).map(a=>{
     const pct=progAsig(a);
     const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
-    const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id);
-    const statusDisplay = (sesA.length===0 && !tieneTimerActivo && a.status==='En producción') ? 'En espera' : a.status;
+    const statusDisplay = a.status;
     const stBadge=statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='En espera'?'badge-info':'badge-muted';
     const diasEl=diasAsig(a);
     return `<div class="stat-row">
@@ -2555,8 +2520,7 @@ function renderAsignaturas(filtro='all'){
     const timersA=Object.values(STATE.timers).filter(t=>t.asigId===a.id).length;
     
     // Si no hay sesiones y está "En producción", mostrar como "En espera"
-    const tieneTimerActivo = Object.values(STATE.timers).some(t=>t.asigId===a.id);
-    const statusDisplay = (sesA.length===0 && !tieneTimerActivo && a.status==='En producción') ? 'En espera' : a.status;
+    const statusDisplay = a.status;
     const stBadgeDisplay = statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='En espera'?'badge-info':'badge-muted';
 
     // Assets HTML
