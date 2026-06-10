@@ -1034,14 +1034,24 @@ function renderCelulasDir(){
 function renderCeldirTimers(){
   const el = document.getElementById('celdir-timers-list');
   if(!el) return;
-  const activos = Object.values(STATE.timers);
+  // Locales + remotos del equipo (desde Sheets), sin duplicar
+  const locales = Object.values(STATE.timers).map(t=>({
+    persona:t.persona, tarea:t.tarea, unidad:t.unidad, asigNombre:t.asigNombre,
+    running:t.running, elapsed:t.running?Date.now()-t.inicio:t.elapsed
+  }));
+  const remotos = (STATE.timersSheets||[]).filter(r=>!STATE.timers[r.id]).map(t=>({
+    persona:t.persona, tarea:t.tarea, unidad:t.unidad, asigNombre:t.asigNombre,
+    running:t.estado==='Activo', elapsed:t.estado==='Activo'?Date.now()-t.inicio:0
+  }));
+  const activos = [...locales, ...remotos];
   if(activos.length===0){
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-txt">Sin timers activos</div></div>';
     return;
   }
+  // Activos primero, pausados después
+  activos.sort((a,b)=>(b.running?1:0)-(a.running?1:0));
   el.innerHTML = activos.map(t=>{
-    const cfg = ROL_CFG[t.rol]||{};
-    const elapsed = t.running ? Date.now()-t.inicio : t.elapsed;
+    const elapsed = t.elapsed||0;
     const hh=String(Math.floor(elapsed/3600000)).padStart(2,'0');
     const mm=String(Math.floor(elapsed%3600000/60000)).padStart(2,'0');
     const ss=String(Math.floor(elapsed%60000/1000)).padStart(2,'0');
