@@ -1128,14 +1128,22 @@ const STATE = {
 // TURNO DE VIDEO — alternado Juan Diego / Valentina
 // ════════════════════════════════════════════
 const VIDEO_PERSONAS = ['Juan Diego Cruz', 'Valentina Rodríguez'];
-function getTurnoVideo(){
-  return localStorage.getItem('turnoVideo') || 'Juan Diego Cruz';
+// El turno se calcula desde los DATOS compartidos (no de localStorage), para que la
+// alternancia sea consistente entre todos los equipos: se mira a quién le tocó la
+// ÚLTIMA asignatura de video y se devuelve al otro.
+function siguienteVideoPersona(){
+  const conVideo = (STATE.asignaturas||[])
+    .filter(a => a.tipo==='celula' && a.videoPersona && VIDEO_PERSONAS.includes(a.videoPersona))
+    .sort((a,b)=> new Date(a.inicio) - new Date(b.inicio));
+  const ultima = conVideo[conVideo.length-1];
+  if(!ultima) return VIDEO_PERSONAS[0]; // la primera de todas → Juan Diego
+  return VIDEO_PERSONAS.find(p => p !== ultima.videoPersona) || VIDEO_PERSONAS[0];
 }
+function getTurnoVideo(){ return siguienteVideoPersona(); }
 function avanzarTurnoVideo(){
-  const actual = getTurnoVideo();
-  const siguiente = VIDEO_PERSONAS.find(p => p !== actual) || VIDEO_PERSONAS[0];
-  localStorage.setItem('turnoVideo', siguiente);
-  return actual; // retorna el que le toca AHORA (antes de avanzar)
+  // Devuelve a quién le toca AHORA según los datos. No hay que "avanzar" nada:
+  // al guardar la nueva asignatura con su videoPersona, la siguiente llamada ya ve el cambio.
+  return siguienteVideoPersona();
 }
 
 // Paleta por rol
