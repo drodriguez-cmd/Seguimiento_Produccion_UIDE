@@ -1259,7 +1259,7 @@ function obtenerUbicacion(){
   return ubicacion;
 }
 
-function parseFechaCol(str){
+function parseFechaCol(str, persona){
   if(!str||str==='undefined'||str==='null') return 0;
   const s = String(str).trim();
   
@@ -1295,29 +1295,15 @@ function parseFechaCol(str){
         if(ampm.toUpperCase()==='AM' && h===12) h=0;
       }
       
-      // Obtener ubicación del usuario
-      const ubicacion = localStorage.getItem('userUbicacion') || 'Colombia';
-      
-      // Crear fecha en UTC y ajustar según ubicación
+      // El timestamp se guardó en la hora local del DISPOSITIVO de quien registró.
+      // Convertir a hora Colombia según la zona de ESA persona (no la del que mira).
       const dt = new Date(y, mo-1, d, h, min, sec);
-      const utcTime = dt.getTime();
-      
-      // Diferencia horaria desde la ubicación del usuario hasta Colombia (UTC-5)
-      let offsetHoras = 0;
-      if(ubicacion === 'París') {
-        // París UTC+1 → Colombia UTC-5 = -6 horas
-        offsetHoras = -6;
-      } else if(ubicacion === 'Canarias') {
-        // Canarias UTC+0 → Colombia UTC-5 = -5 horas
-        offsetHoras = -5;
-      } else {
-        // Colombia UTC-5 → Colombia = 0 horas
-        offsetHoras = 0;
-      }
-      
-      // Convertir a hora Colombia
-      const colTime = utcTime + (offsetHoras * 3600000);
-      return colTime;
+      const wallTime = dt.getTime();
+      const zona = zonaDePersona(persona||'').tz;
+      if(zona === ZONA_DEFECTO) return wallTime; // Bogotá → sin ajuste
+      const ymd = y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      const horasAdelante = offsetHorasVsBogota(zona, ymd); // ej. Canarias verano: +6
+      return wallTime - (horasAdelante * 3600000);
     }
   } catch(e){}
   
@@ -3924,7 +3910,7 @@ async function cargarDesdeSheets(){
           rol:matchedRol,
           persona:personaName, tarea:String(r[4]||''), unidad:String(r[5]||''),
           mins:parseFloat(r[6])||0, dias:parseFloat(r[6]||0)/480,
-          inicio:parseFechaCol(r[8]), fin:parseFechaCol(r[9]),
+          inicio:parseFechaCol(r[8], personaName), fin:parseFechaCol(r[9], personaName),
           notas:String(r[10]||''),
           manual:String(r[11]||'').toLowerCase()==='sí'||String(r[11]||'').toLowerCase()==='si'
         };
@@ -3975,7 +3961,7 @@ async function cargarDesdeSheets(){
           tarea:String(r[3]), unidad:String(r[4]), asigNombre:String(r[5]),
           estado:String(r[7]||'Activo'),
           inicioStr:String(r[6]), inicio:(()=>{
-            const ts = parseFechaCol(String(r[6]||''));
+            const ts = parseFechaCol(String(r[6]||''), String(r[1]||''));
             const now = Date.now();
             return (ts > 0 && ts <= now && (now - ts) < 86400000) ? ts : now;
           })(), running:true
@@ -4003,7 +3989,7 @@ async function cargarDesdeSheets(){
           (s.persona===personaComp && s.asigNombre===asigNombreComp && s.tarea===tareaComp && s.unidad===unidadComp));
         
         if(!yaExiste){
-          const inicio = parseFechaCol(inicioStr);
+          const inicio = parseFechaCol(inicioStr, personaComp);
           const fin = inicio > 0 ? inicio + 1800000 : Date.now();
           const mins = Math.round((fin - inicio) / 60000);
           
@@ -4144,7 +4130,7 @@ setInterval(async ()=>{
           tarea:String(r[3]), unidad:String(r[4]), asigNombre:String(r[5]),
           estado:String(r[7]||'Activo'),
           inicioStr:String(r[6]), inicio:(()=>{
-            const ts = parseFechaCol(String(r[6]||''));
+            const ts = parseFechaCol(String(r[6]||''), String(r[1]||''));
             const now = Date.now();
             return (ts > 0 && ts <= now && (now - ts) < 57600000) ? ts : now;
           })(), running:String(r[7]||'').toLowerCase()==='activo'
