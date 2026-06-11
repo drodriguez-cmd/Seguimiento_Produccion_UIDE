@@ -1560,7 +1560,7 @@ function crearAsignatura(){
   setSyncStatus('sync');
   sheetGuardar('Asignaturas',
     ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
-    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs, today(), asig.tipo||'estandar', asig.celula||'', '', '', link, asig.videoPersona||'']
+    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs, today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', link, asig.videoPersona||'']
   );
   // Notificar Teams si es célula asignada directamente
   if(esCelula && celulaId && modoIngreso==='directo'){
@@ -1791,10 +1791,10 @@ async function intentarAutoAsignar(){
 
   // Actualizar en Sheets
   sheetActualizar('Asignaturas',
-    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Prioridad','Tipo','Celula','Fecha Completado','Video Persona'],
+    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
     [siguiente.id, siguiente.nombre, siguiente.prog, siguiente.inicio, siguiente.df,
-     'En producción', siguiente.obs||'', siguiente.prioridad||'media',
-     'celula', disponible.celulaId, '', siguiente.videoPersona||'']
+     'En producción', siguiente.obs||'', today(),
+     'celula', disponible.celulaId, siguiente.fechaCompletado||'', siguiente.fechaInicioProduccion||'', siguiente.link||'', siguiente.videoPersona||'']
   );
 
   const cfg = CELULA_CFG[disponible.celulaId];
@@ -2092,10 +2092,10 @@ function verificarAutoCompletado(asigId){
     guardarEstadoLocal();
     // Save to Sheets
     sheetActualizar('Asignaturas',
-      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Prioridad','Tipo','Celula','Fecha Completado'],
+      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
       [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'Completada',
-       asig.obs||'', asig.prioridad||'media', asig.tipo||'estandar', asig.celula||'',
-       asig.fechaCompletado]
+       asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'',
+       asig.fechaCompletado, asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'']
     );
     renderAsignaturas();
     renderDashboard();
@@ -2191,10 +2191,10 @@ function iniciarTimer(){
     }
     guardarEstadoLocal();
     sheetActualizar('Asignaturas',
-      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Prioridad','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion'],
+      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
       [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En producción',
-       asig.obs||'', asig.prioridad||'media', asig.tipo||'estandar', asig.celula||'',
-       asig.fechaCompletado||'', asig.fechaInicioProduccion]
+       asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'',
+       asig.fechaCompletado||'', asig.fechaInicioProduccion, asig.link||'', asig.videoPersona||'']
     );
   }
   STATE.intervals[id]=setInterval(()=>{
@@ -2825,8 +2825,8 @@ function cambiarStatus(id){
   guardarEstadoLocal();
   setSyncStatus('sync');
   sheetActualizar('Asignaturas',
-    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Prioridad'],
-    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', asig.prioridad||'media']
+    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
+    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'']
   );
   renderAsignaturas();
 }
@@ -3915,7 +3915,9 @@ async function cargarDesdeSheets(){
         tipo: String(r[8]||'estandar').toLowerCase()==='celula'?'celula':'estandar',
         celula: String(r[9]||''),
         fechaCompletado: String(r[10]||''),
+        fechaInicioProduccion: String(r[11]||''),
         link: String(r[12]||''),
+        videoPersona: String(r[13]||''),
         handoffs: {h1:null,h2:null,h3:null},
         tareasCelula: null,
         equipo:{calidad:'Calidad',dis1:'Diseñador gráfico 1',dis2:'Diseñador gráfico 2',video:'Editor de video',coord:'Coordinación'},
@@ -3940,6 +3942,8 @@ async function cargarDesdeSheets(){
           }
           local.celula=sa.celula||local.celula||'';
           local.link=sa.link||local.link||'';
+          if(sa.videoPersona) local.videoPersona=sa.videoPersona;
+          if(sa.fechaInicioProduccion && !local.fechaInicioProduccion) local.fechaInicioProduccion=sa.fechaInicioProduccion;
           if(sa.fechaCompletado) local.fechaCompletado=sa.fechaCompletado;
           if(sa.handoffs&&!local.handoffs) local.handoffs=sa.handoffs;
           if(!local.tareasCelula && sa.tipo==='celula' && sa.celula) local.tareasCelula=iniciarTareasCelula(sa.celula);
@@ -3968,12 +3972,12 @@ async function cargarDesdeSheets(){
           actualizado = true;
           // Persistir en Sheets para que quede asignado de forma permanente
           sheetActualizar('Asignaturas',
-            ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Prioridad','Tipo','Celula','Fecha Completado','Video Persona'],
-            [a.id, a.nombre, a.prog, a.inicio, a.df, a.status, a.obs||'', a.prioridad||'media',
-             'celula', a.celula||'', a.fechaCompletado||'', a.videoPersona]
+            ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
+            [a.id, a.nombre, a.prog, a.inicio, a.df, a.status, a.obs||'', today(),
+             'celula', a.celula||'', a.fechaCompletado||'', a.fechaInicioProduccion||'', a.link||'', a.videoPersona]
           );
-          // Notificar al editor que tiene una nueva asignatura de video
-          notificarVideoPersona(a);
+          // NO notificar aquí — el patch corre en cada sync y generaría spam.
+          // La notificación al editor ya ocurre una sola vez en crearAsignatura().
         });
         localStorage.setItem('turnoVideo', VIDEO_PERSONAS[turnoIdx % VIDEO_PERSONAS.length]);
         console.log('[PATCH] videoPersona asignada a', sinVideo.length, 'asignaturas (incluye cola)');
@@ -4177,9 +4181,9 @@ async function cargarDesdeSheets(){
           notificarTeams(a);
           enviarEmailCompletada(a);
           sheetActualizar('Asignaturas',
-            ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Prioridad','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion'],
-            [a.id,a.nombre,a.prog,a.inicio,a.df,'Completada',a.obs||'',a.prioridad||'media',
-             a.tipo||'estandar',a.celula||'',a.fechaCompletado,a.fechaInicioProduccion||'']
+            ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
+            [a.id,a.nombre,a.prog,a.inicio,a.df,'Completada',a.obs||'',today(),
+             a.tipo||'estandar',a.celula||'',a.fechaCompletado,a.fechaInicioProduccion||'',a.link||'',a.videoPersona||'']
           );
         }
       });
