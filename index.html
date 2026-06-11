@@ -874,6 +874,7 @@ function renderCelulasDir(){
   const celulasHTML = Object.entries(CELULA_CFG).map(([id, cfg])=>{
     if(id==='JuanDiego') return ''; // Video se muestra aparte
     const asigActiva = todas.find(a=>a.celula===id && a.status==='En producción');
+    const preAsignada = todas.find(a=>a.celula===id && a.status==='En espera');
     const pct = asigActiva ? progAsig(asigActiva) : 0;
     const dias = asigActiva ? diasAsig(asigActiva).toFixed(1) : '0';
     const completadasCelula = todas.filter(a=>a.celula===id && a.status==='Completada' && a.tipo==='celula');
@@ -887,6 +888,9 @@ function renderCelulasDir(){
     const statusColor = asigActiva ? '#d97706' : '#16a34a';
     const statusBg = asigActiva ? 'rgba(217,119,6,.1)' : 'rgba(22,163,74,.1)';
     const barColor = pct>=60 ? '#16a34a' : pct>=30 ? '#d97706' : cfg.color;
+    const preAsignadaTxt = preAsignada
+      ? `<div style="font-size:11px;color:#6366f1;margin-top:2px;font-weight:500">⏭ Pre-asignada: ${preAsignada.nombre}</div>`
+      : '';
 
     return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border)">
       <div style="width:12px;height:12px;border-radius:50%;background:${cfg.color};flex-shrink:0"></div>
@@ -894,6 +898,7 @@ function renderCelulasDir(){
         <div style="font-size:13px;font-weight:600">${cfg.label}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${cfg.lider} · ${cfg.disenador}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigActiva?asigActiva.nombre:'Sin asignatura activa'}</div>
+        ${preAsignadaTxt}
       </div>
       <div style="width:100px;flex-shrink:0">
         <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px">
@@ -1781,7 +1786,12 @@ async function intentarAutoAsignar(){
 
   // Asignar célula de diseño
   siguiente.celula = disponible.celulaId;
-  siguiente.status = 'En producción';
+  // El status depende del tipo de asignación:
+  // - 'libre': la célula no tiene nada activo → la asignatura arranca, pasa a En producción
+  // - 'preasignacion': la célula sigue ocupada con otra → la asignatura queda PRE-ASIGNADA
+  //   (sigue En espera, solo sabe a qué célula irá). Pasará a En producción cuando inicien su timer.
+  const esPreAsignacion = disponible.tipo === 'preasignacion';
+  siguiente.status = esPreAsignacion ? 'En espera' : 'En producción';
   if(!siguiente.tareasCelula) siguiente.tareasCelula = iniciarTareasCelula(disponible.celulaId);
   // El video ya se asignó al crear la asignatura (incluso en cola).
   // Solo asignar si por alguna razón no lo tuviera.
@@ -1793,7 +1803,7 @@ async function intentarAutoAsignar(){
   sheetActualizar('Asignaturas',
     ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
     [siguiente.id, siguiente.nombre, siguiente.prog, siguiente.inicio, siguiente.df,
-     'En producción', siguiente.obs||'', today(),
+     siguiente.status, siguiente.obs||'', today(),
      'celula', disponible.celulaId, siguiente.fechaCompletado||'', siguiente.fechaInicioProduccion||'', siguiente.link||'', siguiente.videoPersona||'']
   );
 
@@ -1806,7 +1816,9 @@ async function intentarAutoAsignar(){
 
   renderDashboard();
   renderAsignaturas();
-  toast(`🏭 Asignatura asignada a ${cfg?.label||disponible.celulaId}${esPre?' (pre-asignación)':''}`);
+  toast(esPreAsignacion
+    ? `⏭ ${cfg?.label||disponible.celulaId}: próxima asignatura pre-asignada (queda en espera)`
+    : `🏭 Asignatura asignada a ${cfg?.label||disponible.celulaId}`);
 }
 
 async function notificarAsignacion(asig, celulaId, esPre){
@@ -2674,6 +2686,7 @@ function renderAsignaturas(filtro='all'){
             ${sesA.length>0?`<span style="color:var(--video);font-weight:500">📌 Esfuerzo: ${Math.round(sesA.reduce((acc,s)=>acc+s.mins,0)/60)}h en ${sesA.length} sesión${sesA.length>1?'es':''}</span>`:''}
             ${timersA>0?`<span style="color:var(--warn)">▶ ${timersA} timer${timersA>1?'s':''} activo${timersA>1?'s':''}</span>`:''}
           </div>
+          ${a.link?`<a href="${a.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:600;color:#2563eb;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2);padding:4px 12px;border-radius:99px;text-decoration:none;width:fit-content">📁 Carpeta del curso (insumos)</a>`:''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
           <span class="badge ${stBadgeDisplay}">${statusDisplay}</span>
