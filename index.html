@@ -3951,25 +3951,32 @@ async function cargarDesdeSheets(){
       });
       actualizado = true;
 
-      // Patch: asignar videoPersona a asignaturas célula que no la tienen (orden de creación)
+      // Patch: asignar videoPersona a TODAS las células sin video (incluye las que están en cola).
+      // El video es independiente y puede arrancar antes que diseño, así que las de cola también reciben editor.
       const sinVideo = STATE.asignaturas
-        .filter(a => a.tipo==='celula' && a.celula !== 'JuanDiego' && !a.videoPersona && a.status !== 'En espera')
-        .sort((a,b) => new Date(a.inicio) - new Date(b.inicio));
+        .filter(a => a.tipo==='celula' && a.celula !== 'JuanDiego' && !a.videoPersona)
+        .sort((a,b) => String(a.id).localeCompare(String(b.id)));
       if(sinVideo.length > 0){
         // Determinar turno actual basado en las que ya tienen asignado
         const conVideo = STATE.asignaturas
           .filter(a => a.tipo==='celula' && a.videoPersona)
-          .sort((a,b) => new Date(a.inicio) - new Date(b.inicio));
-        // El turno empieza donde terminó el último asignado
+          .sort((a,b) => String(a.id).localeCompare(String(b.id)));
         let turnoIdx = conVideo.length % VIDEO_PERSONAS.length;
         sinVideo.forEach(a => {
           a.videoPersona = VIDEO_PERSONAS[turnoIdx % VIDEO_PERSONAS.length];
           turnoIdx++;
           actualizado = true;
+          // Persistir en Sheets para que quede asignado de forma permanente
+          sheetActualizar('Asignaturas',
+            ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Prioridad','Tipo','Celula','Fecha Completado','Video Persona'],
+            [a.id, a.nombre, a.prog, a.inicio, a.df, a.status, a.obs||'', a.prioridad||'media',
+             'celula', a.celula||'', a.fechaCompletado||'', a.videoPersona]
+          );
+          // Notificar al editor que tiene una nueva asignatura de video
+          notificarVideoPersona(a);
         });
-        // Actualizar el turno guardado para las próximas
         localStorage.setItem('turnoVideo', VIDEO_PERSONAS[turnoIdx % VIDEO_PERSONAS.length]);
-        console.log('[PATCH] videoPersona asignada a', sinVideo.length, 'asignaturas');
+        console.log('[PATCH] videoPersona asignada a', sinVideo.length, 'asignaturas (incluye cola)');
       }
     }
 
