@@ -1821,6 +1821,38 @@ async function intentarAutoAsignar(){
     : `🏭 Asignatura asignada a ${cfg?.label||disponible.celulaId}`);
 }
 
+async function asignarCelulaManual(asigId, celulaId){
+  const asig = STATE.asignaturas.find(a=>a.id===asigId);
+  if(!asig){ toast('No se encontró la asignatura'); return; }
+  if(!celulaId || !CELULA_CFG[celulaId] || celulaId==='JuanDiego'){ toast('Elige una célula válida'); return; }
+  // Avisar (pero permitir) si la célula ya tiene OTRA en producción
+  const ocupada = STATE.asignaturas.find(a=>a.celula===celulaId && a.status==='En producción' && a.tipo==='celula' && a.id!==asigId);
+  if(ocupada && !confirm(`La célula ${CELULA_CFG[celulaId].label} ya tiene "${ocupada.nombre}" en producción.\n¿Asignar "${asig.nombre}" de todas formas?`)) return;
+
+  // Convertir a célula y poner en producción
+  asig.tipo = 'celula';
+  asig.celula = celulaId;
+  asig.status = 'En producción';
+  if(!asig.tareasCelula) asig.tareasCelula = iniciarTareasCelula(celulaId);
+  // Editor de video por turno (desde datos), solo si aún no tiene
+  if(!asig.videoPersona) asig.videoPersona = siguienteVideoPersona();
+
+  guardarEstadoLocal();
+  setSyncStatus('sync');
+  // Guardar en Sheets con el MISMO set de 14 columnas (no corrompe Tipo/Celula)
+  sheetActualizar('Asignaturas',
+    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
+    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En producción', asig.obs||'', today(), 'celula', celulaId, asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'']
+  );
+
+  await notificarAsignacion(asig, celulaId, false);
+
+  renderAsignaturas();
+  renderDashboard();
+  if(typeof renderCelulasDir==='function') renderCelulasDir();
+  toast(`🏭 "${asig.nombre}" asignada a ${CELULA_CFG[celulaId].label}`);
+}
+
 async function notificarAsignacion(asig, celulaId, esPre){
   if(!TEAMS_WEBHOOK) return;
   const cfg = CELULA_CFG[celulaId];
@@ -2692,6 +2724,13 @@ function renderAsignaturas(filtro='all'){
           <span class="badge ${stBadgeDisplay}">${statusDisplay}</span>
           ${alertaHTML}
           ${a.prioridad?`<span style="font-size:10px;color:${priColor2};font-weight:600">${a.prioridad==='alta'?'🔴':a.prioridad==='media'?'🟡':'🟢'} ${(a.prioridad||'').charAt(0).toUpperCase()+(a.prioridad||'').slice(1)}</span>`:''}
+          ${(a.status==='En espera'||a.status==='En producción'||a.status==='Pausada')?`
+          <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-top:6px">
+            <select id="asigncel-${a.id}" onclick="event.stopPropagation()" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:white;max-width:150px">
+              ${Object.entries(CELULA_CFG).filter(([id])=>id!=='JuanDiego').map(([id,c])=>`<option value="${id}" ${a.celula===id?'selected':''}>${c.label}</option>`).join('')}
+            </select>
+            <button class="btn btn-sm" onclick="event.stopPropagation();asignarCelulaManual('${a.id}',document.getElementById('asigncel-${a.id}').value)" style="background:var(--ok);color:white;border:none;white-space:nowrap">${a.status==='En espera'?'🏭 Asignar':'🔄 Mover'}</button>
+          </div>`:''}
         </div>
         <div class="asig-expand" id="arr-${a.id}">▾</div>
       </div>
