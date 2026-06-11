@@ -876,7 +876,7 @@ function renderCelulasDir(){
     const asigActiva = todas.find(a=>a.celula===id && a.status==='En producción');
     const pct = asigActiva ? progAsig(asigActiva) : 0;
     const dias = asigActiva ? diasAsig(asigActiva).toFixed(1) : '0';
-    const completadasCelula = todas.filter(a=>a.celula===id && a.status==='Completada');
+    const completadasCelula = todas.filter(a=>a.celula===id && a.status==='Completada' && a.tipo==='celula');
     const promCelula = completadasCelula.length>0
       ? (completadasCelula.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasCelula.length).toFixed(1)
       : null;
@@ -919,7 +919,7 @@ function renderCelulasDir(){
   const videoHTML = videoPersonas.map(persona=>{
     const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción');
     const enCola = todas.filter(a=>a.videoPersona===persona && a.status==='En espera');
-    const completadasV = todas.filter(a=>a.videoPersona===persona && a.status==='Completada');
+    const completadasV = todas.filter(a=>a.videoPersona===persona && a.status==='Completada' && a.tipo==='celula');
     const promV = completadasV.length>0
       ? (completadasV.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasV.length).toFixed(1)
       : null;
