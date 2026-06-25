@@ -828,10 +828,14 @@ async function sheetBorrar(hoja, columna, valor){
 
 // Borra del Sheet TODO el rastro de una asignatura (por su nombre exacto):
 // sus sesiones, sus entregables y sus timers. Deja el histórico en cero de verdad.
-async function borrarDatosAsignatura(nombre){
+async function borrarDatosAsignatura(nombre, id){
   if(!nombre || !String(nombre).trim()) return;
+  // Entregables: borrar por ID de asignatura (col 0) si lo tenemos — es lo más confiable
+  // y es lo que mueve el % (evita que el avance reviva). Si no hay id, cae a nombre (col 1).
+  const r2 = id ? await sheetBorrar('Entregables', 0, id)
+                : await sheetBorrar('Entregables', 1, nombre);
+  // Sesiones y Timers SOLO guardan el nombre de la asignatura → van por nombre
   const r1 = await sheetBorrar('Sesiones', 1, nombre);       // col 1 = Asignatura
-  const r2 = await sheetBorrar('Entregables', 1, nombre);    // col 1 = Nombre
   const r3 = await sheetBorrar('Timers_Activos', 5, nombre); // col 5 = Asignatura
   console.log('🗑 Borrado en Sheet para "'+nombre+'":',
     'Sesiones='+(r1&&r1.borradas||0),
@@ -2943,7 +2947,7 @@ async function cambiarStatus(id){
     );
     toast('▶ Despausada: vuelve a la cola en cero para reasignar');
     // Borrar del Sheet el rastro viejo (sesiones, entregables, timers) para que el cero sea permanente
-    await borrarDatosAsignatura(asig.nombre);
+    await borrarDatosAsignatura(asig.nombre, asig.id);
     renderAsignaturas(); renderDashboard(); if(typeof renderCelulasDir==='function') renderCelulasDir();
     intentarAutoAsignar(); // reasignar según la carga actual de las células
     return;
