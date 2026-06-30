@@ -2505,7 +2505,7 @@ function renderTimers(){
             <div class="timer-display" id="remote-timer-${t.id}" style="color:${displayColor}">${isPausado?'⏸ Pausado':fmtMs(elapsed)}</div>
           </div>
           <div class="timer-actions" style="margin-top:8px">
-            <button class="btn btn-sm btn-ok" onclick="completarTimerRemoto('${t.id}','${(t.persona||'').replace(/'/g,"\\'")}')">✓ Completar (si quedó trabado)</button>
+            <button class="btn btn-sm btn-ok" onclick="completarTimerRemoto('${t.id}','${(t.persona||'').replace(/'/g,"\\'")}')">✓ Completar</button>
           </div>
         </div>`;
       };
