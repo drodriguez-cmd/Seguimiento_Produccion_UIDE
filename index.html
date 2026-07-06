@@ -393,6 +393,7 @@ textarea{resize:vertical;min-height:70px}
               <option>Inteligencia Artificial Aplicada</option>
               <option>Inteligencia de Negocios</option>
               <option>Marketing y Comunicación</option>
+              <option>Mercadotecnia</option>
               <option>MKT Digital</option>
               <option>Neuromarketing</option>
               <option>Nutrición Deportiva</option>
@@ -1478,6 +1479,53 @@ function diasAsig(a){
   }
   totalMs += cf-ci;
   return (totalMs/60000)/MIN_JORNADA; // días de 8h
+}
+
+// Info por frente (Diseño vs Video) de una asignatura, calculada desde las sesiones/timers reales:
+// - iniciado: si ese frente ya arrancó
+// - fechaMs: fecha del primer trabajo de ese frente
+// - diasTranscurridos: días hábiles (festivos Colombia) desde ese primer trabajo hasta hoy
+// - diasProduccion: días de producción efectivos (tiempo real ÷ jornada 8h), fusionando paralelos
+// Video = Juan Diego / Valentina (o rol 'video'). Diseño = todo lo demás.
+function infoFrente(a, esVideo){
+  if(!a) return { iniciado:false };
+  const MIN_JORNADA = 480;
+  const esDelFrente = (persona, rol) => {
+    const esV = VIDEO_PERSONAS.includes(persona) || String(rol||'').toLowerCase()==='video';
+    return esVideo ? esV : !esV;
+  };
+  const intervalos = [];
+  let primerInicio = null;
+  const considerar = (ini, fin, persona, rol) => {
+    if(!esDelFrente(persona, rol)) return;
+    if(ini>0 && fin>ini){ intervalos.push([ini,fin]); if(primerInicio===null||ini<primerInicio) primerInicio=ini; }
+  };
+  STATE.sesiones.forEach(s=>{
+    if(s.asigId===a.id || s.asigNombre===a.nombre) considerar(Number(s.inicio), Number(s.fin), s.persona, s.rol);
+  });
+  Object.values(STATE.timers||{}).forEach(t=>{
+    if((t.asigId===a.id || t.asigNombre===a.nombre) && t.running) considerar(Number(t.inicio), Date.now(), t.persona, t.rol);
+  });
+  const localIds=Object.keys(STATE.timers||{});
+  (STATE.timersSheets||[]).forEach(t=>{
+    if(!localIds.includes(t.id) && (t.asigId===a.id || t.asigNombre===a.nombre)) considerar(Number(t.inicio), Date.now(), t.persona, t.rol);
+  });
+  if(!intervalos.length || primerInicio===null) return { iniciado:false };
+  intervalos.sort((x,y)=>x[0]-y[0]);
+  let totalMs=0, ci=intervalos[0][0], cf=intervalos[0][1];
+  for(let i=1;i<intervalos.length;i++){
+    const ini=intervalos[i][0], fin=intervalos[i][1];
+    if(ini<=cf){ if(fin>cf) cf=fin; } else { totalMs+=cf-ci; ci=ini; cf=fin; }
+  }
+  totalMs += cf-ci;
+  const d=new Date(primerInicio);
+  const ymd=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return {
+    iniciado:true,
+    fechaMs: primerInicio,
+    diasTranscurridos: diasHabilesEntre(ymd, new Date()),
+    diasProduccion: totalMs/60000/MIN_JORNADA
+  };
 }
 
 function diasDesde(fecha){
@@ -2755,6 +2803,13 @@ function renderAsignaturas(filtro='all'){
     // For célula asignaturas, show célula badge in header
     const celulaCfg = a.tipo==='celula' && a.celula ? (CELULA_CFG[a.celula]||null) : null;
 
+    // Fechas/días por frente (Diseño vs Video), calculadas desde las sesiones reales
+    const infDis = infoFrente(a, false);
+    const infVid = infoFrente(a, true);
+    const frenteHTML = (label, emoji, inf) => inf.iniciado
+      ? `<span>${emoji} <b>${label}:</b> desde ${fmtFecha(new Date(inf.fechaMs))} · ${inf.diasTranscurridos}d transc. · ${inf.diasProduccion.toFixed(1)}d prod.</span>`
+      : `<span style="opacity:.6">${emoji} <b>${label}:</b> sin iniciar</span>`;
+
     return `<div class="asig-card"${celulaCfg?` style="border-left:3px solid ${celulaCfg.color}"`:''}> 
       <div class="asig-head" onclick="toggleAsigBody('${a.id}')">
         <div class="asig-prog-ring" style="position:relative">
@@ -2769,8 +2824,8 @@ function renderAsignaturas(filtro='all'){
           <div class="asig-name">${a.nombre}${celulaCfg?` <span style="font-size:10px;background:${celulaCfg.color}20;color:${celulaCfg.color};padding:2px 7px;border-radius:4px;font-weight:600;vertical-align:middle">🏭 ${celulaCfg.label}</span>`:''}</div>
           <div class="asig-meta">
             <span>${a.prog}</span>
-            <span>Inicio: ${fmtFecha(a.inicio)}</span>
-            <span>${a.status==='En espera'?'En espera':dias.toFixed(1)+'d '+(a.status==='Completada'?'de producción':'en producción')}</span>
+            ${frenteHTML('Diseño','🎨',infDis)}
+            ${frenteHTML('Video','🎬',infVid)}
             <span>DF est: ${a.df}d</span>
             ${sesA.length>0?`<span style="color:var(--video);font-weight:500">📌 Esfuerzo: ${Math.round(sesA.reduce((acc,s)=>acc+s.mins,0)/60)}h en ${sesA.length} sesión${sesA.length>1?'es':''}</span>`:''}
             ${timersA>0?`<span style="color:var(--warn)">▶ ${timersA} timer${timersA>1?'s':''} activo${timersA>1?'s':''}</span>`:''}
