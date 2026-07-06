@@ -1849,9 +1849,12 @@ function encontrarCelulaDisponible(){
 }
 
 function obtenerSiguienteEnCola(){
-  // Asignaturas en espera ordenadas: Alta → Media → Baja, luego por fecha
+  // Candidatas a recibir célula de DISEÑO: son de tipo célula, aún SIN célula, y no están
+  // completadas ni pausadas. Incluye:
+  //  - 'En espera'      → entraron a la cola normal (células estaban full)
+  //  - 'En producción'  → ya arrancaron por VIDEO (independiente) pero les falta la célula de diseño
   const enEspera = STATE.asignaturas.filter(a=>
-    a.status==='En espera' && a.tipo==='celula' && !a.celula
+    (a.status==='En espera' || a.status==='En producción') && a.tipo==='celula' && !a.celula
   ).sort((a,b)=>{
     const prioOrder = {alta:0, media:1, baja:2};
     const pa = prioOrder[a.prioridad||'media'];
