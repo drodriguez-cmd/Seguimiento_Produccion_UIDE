@@ -4184,6 +4184,22 @@ async function cargarDesdeSheets(){
           STATE.asignaturas.push(sa);
         }
       });
+
+      // 🧹 LIMPIEZA DE DUPLICADOS (el Sheet manda sobre qué asignaturas existen):
+      // 1) Quitar duplicados locales que compartan el mismo ID (dejar uno solo).
+      const idsVistos = new Set();
+      STATE.asignaturas = STATE.asignaturas.filter(a=>{
+        if(idsVistos.has(a.id)) return false;
+        idsVistos.add(a.id); return true;
+      });
+      // 2) Quitar "huérfanos": copias locales cuyo NOMBRE sí existe en el Sheet pero cuyo ID
+      //    ya NO está en el Sheet (duplicados pegados en el navegador que revivían).
+      //    Se conservan las recién creadas (nombre que aún no está en el Sheet), para no perderlas.
+      //    Es seguro: el blindaje ya garantizó que la lectura de Asignaturas no vino vacía.
+      const idsSheet = new Set(deSheets.map(s=>s.id));
+      const nombresSheet = new Set(deSheets.map(s=>s.nombre));
+      STATE.asignaturas = STATE.asignaturas.filter(a => idsSheet.has(a.id) || !nombresSheet.has(a.nombre));
+
       actualizado = true;
 
       // Patch: asignar videoPersona a TODAS las células sin video (incluye las que están en cola).
