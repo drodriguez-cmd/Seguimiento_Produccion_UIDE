@@ -4114,8 +4114,25 @@ async function cargarDesdeSheets(){
 
     console.log('[CARGA] Leyendo Emails_Enviados...');
     const filaEmails = await sheetLeer('Emails_Enviados');
-    STATE.emailsEnviados = (filaEmails||[]).slice(1).map(r=>String(r[0]||'')).filter(Boolean);
-    console.log('[CARGA] Emails_Enviados:', STATE.emailsEnviados.length, 'ids');
+    if(filaEmails && filaEmails.length > 0){
+      STATE.emailsEnviados = filaEmails.slice(1).map(r=>String(r[0]||'')).filter(Boolean);
+    }
+    console.log('[CARGA] Emails_Enviados:', (STATE.emailsEnviados||[]).length, 'ids');
+
+    // 🛡 BLINDAJE "0 filas": si alguna hoja crítica llegó completamente vacía (0 filas),
+    // es una lectura FALLIDA por conexión (estas hojas siempre tienen al menos encabezado).
+    // En ese caso NO procesamos nada: conservamos lo último bueno en pantalla y evitamos
+    // borrar datos o generar entregables fantasma. Reintentará en la próxima sincronización.
+    const lecturaFallida =
+      !filaAsig   || filaAsig.length===0   ||
+      !filaSes    || filaSes.length===0    ||
+      !filaEnt    || filaEnt.length===0    ||
+      !filaTimers || filaTimers.length===0;
+    if(lecturaFallida){
+      console.warn('[CARGA] ⚠ Lectura incompleta (alguna hoja llegó en 0 filas). Se conserva lo último bueno y NO se procesa, para evitar borrados o datos fantasma.');
+      setSyncStatus(tieneLocal ? 'local' : 'err');
+      return;
+    }
 
     let actualizado = false;
 
