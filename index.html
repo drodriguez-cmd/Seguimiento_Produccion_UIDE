@@ -4114,7 +4114,8 @@ async function cargarDesdeSheets(){
 
     console.log('[CARGA] Leyendo Emails_Enviados...');
     const filaEmails = await sheetLeer('Emails_Enviados');
-    if(filaEmails && filaEmails.length > 0){
+    const emailsCargoOk = !!(filaEmails && filaEmails.length > 0);
+    if(emailsCargoOk){
       STATE.emailsEnviados = filaEmails.slice(1).map(r=>String(r[0]||'')).filter(Boolean);
     }
     console.log('[CARGA] Emails_Enviados:', (STATE.emailsEnviados||[]).length, 'ids');
@@ -4409,7 +4410,9 @@ async function cargarDesdeSheets(){
           alguienCompletado = true;
           // Avisar a Teams y enviar correo (igual que en la Puerta 1)
           notificarTeams(a);
-          enviarEmailCompletada(a);
+          // Candado anti-duplicados: solo enviar correo si la lista de "ya enviados" cargó bien.
+          // Si no cargó (mala conexión), NO enviamos aquí para no reenviar correos repetidos.
+          if(emailsCargoOk) enviarEmailCompletada(a);
           sheetActualizar('Asignaturas',
             ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
             [a.id,a.nombre,a.prog,a.inicio,a.df,'Completada',a.obs||'',today(),
