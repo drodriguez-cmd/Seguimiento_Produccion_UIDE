@@ -375,6 +375,7 @@ textarea{resize:vertical;min-height:70px}
               <option>Dirección Financiera</option>
               <option>Dirección Publicitaria y Creativa</option>
               <option>Educación</option>
+              <option>Educación Básica: Didáctica, Innovación, Evaluación y Diversidad</option>
               <option>Educación, Tecnología e Innovación</option>
               <option>Energías Renovables</option>
               <option>Finanzas Corporativas</option>
@@ -956,7 +957,7 @@ function renderCelulasDir(){
   }).join('');
 
   // Video cell
-  const videoPersonas = ['Juan Diego Cruz','Valentina Rodríguez'];
+  const videoPersonas = ['Juan Diego Cruz','Valentina Rodríguez','Cristina Alisente'];
   const videoHTML = videoPersonas.map(persona=>{
     const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción');
     const enCola = todas.filter(a=>a.videoPersona===persona && a.status==='En espera');
@@ -1173,7 +1174,7 @@ const STATE = {
 // ════════════════════════════════════════════
 // TURNO DE VIDEO — alternado Juan Diego / Valentina
 // ════════════════════════════════════════════
-const VIDEO_PERSONAS = ['Juan Diego Cruz', 'Valentina Rodríguez'];
+const VIDEO_PERSONAS = ['Juan Diego Cruz', 'Valentina Rodríguez', 'Cristina Alisente'];
 // El turno se calcula desde los DATOS compartidos (no de localStorage), para que la
 // alternancia sea consistente entre todos los equipos: se mira a quién le tocó la
 // ÚLTIMA asignatura de video y se devuelve al otro.
@@ -1182,8 +1183,10 @@ function siguienteVideoPersona(){
     .filter(a => a.tipo==='celula' && a.videoPersona && VIDEO_PERSONAS.includes(a.videoPersona))
     .sort((a,b)=> String(a.id).localeCompare(String(b.id))); // id lleva timestamp de creación
   const ultima = conVideo[conVideo.length-1];
-  if(!ultima) return VIDEO_PERSONAS[0]; // la primera de todas → Juan Diego
-  return VIDEO_PERSONAS.find(p => p !== ultima.videoPersona) || VIDEO_PERSONAS[0];
+  if(!ultima) return VIDEO_PERSONAS[0]; // la primera de todas
+  // Rotación real en orden (funciona con 2, 3 o más): después de la última, la siguiente de la lista
+  const idx = VIDEO_PERSONAS.indexOf(ultima.videoPersona);
+  return VIDEO_PERSONAS[(idx + 1) % VIDEO_PERSONAS.length];
 }
 function getTurnoVideo(){ return siguienteVideoPersona(); }
 function avanzarTurnoVideo(){
@@ -2327,18 +2330,23 @@ function iniciarTimer(){
   STATE.timers[id]=nuevoTimer;
   sheetTimerActivo('guardar', nuevoTimer);
   // Set fechaInicioProduccion on first timer for this asignatura
+  let huboCambio = false;
   if(asig && !asig.fechaInicioProduccion){
     asig.fechaInicioProduccion = new Date().toISOString().split('T')[0];
-    // Al iniciar el primer timer, pasar a En producción si estaba En espera
-    if(asig.status === 'En espera' || asig.status === 'En producción'){
-      asig.status = 'En producción';
-    }
+    huboCambio = true;
+  }
+  // Al iniciar CUALQUIER timer, si está En espera pasa a En producción (aunque no sea el primero)
+  if(asig && asig.status === 'En espera'){
+    asig.status = 'En producción';
+    huboCambio = true;
+  }
+  if(huboCambio){
     guardarEstadoLocal();
     sheetActualizar('Asignaturas',
       ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
-      [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En producción',
+      [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status,
        asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'',
-       asig.fechaCompletado||'', asig.fechaInicioProduccion, asig.link||'', asig.videoPersona||'']
+       asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'']
     );
   }
   STATE.intervals[id]=setInterval(()=>{
