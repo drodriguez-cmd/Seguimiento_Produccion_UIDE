@@ -345,6 +345,19 @@ textarea{resize:vertical;min-height:70px}
     <button class="chip" onclick="filterAsig('Completada',this)">Completadas</button>
     <button class="chip" onclick="filterAsig('Pausada',this)">Pausadas</button>
   </div>
+  <div class="asig-tools" style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px">
+    <input id="asig-search" type="text" placeholder="🔍 Buscar por nombre o maestría..." oninput="buscarAsig(this.value)"
+      style="flex:1;min-width:240px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text)">
+    <select id="asig-celula-filter" onchange="filtrarCelulaAsig(this.value)"
+      style="padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text)">
+      <option value="all">Todas las células</option>
+      <option value="Sofia">Célula Sofía</option>
+      <option value="Gabriel">Célula Gabriel</option>
+      <option value="Fabian">Célula Fabián</option>
+      <option value="Melisa">Célula Melisa</option>
+      <option value="JuanDiego">Célula Video</option>
+    </select>
+  </div>
   <div id="asig-list"></div>
 </div>
 
@@ -2753,18 +2766,30 @@ function renderDashboard(){
   renderDashboardTimers();
 }
 
-function renderAsignaturas(filtro='all'){
+let _asigStatus='all', _asigQuery='', _asigCelula='all';
+function buscarAsig(v){ _asigQuery=(v||'').toLowerCase().trim(); renderAsignaturas(); }
+function filtrarCelulaAsig(v){ _asigCelula=v||'all'; renderAsignaturas(); }
+function renderAsignaturas(filtro){
+  if(filtro!==undefined) _asigStatus=filtro;
   const el=document.getElementById('asig-list');
   const ordenStatus = {'En producción':0,'Pausada':1,'En espera':2,'Completada':3};
-  let list=filtro==='all'
-    ? [...STATE.asignaturas].sort((a,b)=>{
-        const oa=ordenStatus[a.status]??4, ob=ordenStatus[b.status]??4;
-        if(oa!==ob) return oa-ob;
-        return new Date(b.inicio)-new Date(a.inicio);
-      })
-    : [...STATE.asignaturas].filter(a=>a.status===filtro)
-        .sort((a,b)=>new Date(b.inicio)-new Date(a.inicio));
-  if(!list.length){ el.innerHTML='<div class="card"><div class="empty-state"><div class="empty-icon">📚</div><div class="empty-txt">Sin asignaturas</div></div></div>'; return; }
+  let list=[...STATE.asignaturas];
+  // Filtro por estado (pestaña)
+  if(_asigStatus!=='all') list=list.filter(a=>a.status===_asigStatus);
+  // Búsqueda por nombre o programa/maestría
+  if(_asigQuery) list=list.filter(a=>
+    String(a.nombre||'').toLowerCase().includes(_asigQuery) ||
+    String(a.prog||'').toLowerCase().includes(_asigQuery)
+  );
+  // Filtro por célula
+  if(_asigCelula!=='all') list=list.filter(a=>a.celula===_asigCelula);
+  // Orden: en "Todas" por estado y luego fecha; en pestañas por fecha (más reciente arriba)
+  if(_asigStatus==='all'){
+    list.sort((a,b)=>{ const oa=ordenStatus[a.status]??4, ob=ordenStatus[b.status]??4; if(oa!==ob) return oa-ob; return new Date(b.inicio)-new Date(a.inicio); });
+  } else {
+    list.sort((a,b)=>new Date(b.inicio)-new Date(a.inicio));
+  }
+  if(!list.length){ el.innerHTML='<div class="card"><div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-txt">Sin resultados</div></div></div>'; return; }
   el.innerHTML=list.map(a=>{
     // Ensure célula data is initialized
     if(a.tipo==='celula'){
@@ -4420,15 +4445,18 @@ async function cargarDesdeSheets(){
       STATE.asignaturas.filter(a=>a.status==='En producción').forEach(a=>{
         const pct = progAsig(a);
         if(pct===100){
+          // 🔒 Para no dejar materias "completadas sin correo": solo se completa aquí si la lista
+          // de correos cargó bien (para poder enviar sin riesgo de duplicar). Si vino floja, la
+          // dejamos En producción y se completará —con correo— en la próxima sincronización buena.
+          if(!emailsCargoOk) return;
           a.status='Completada';
           // Sellar siempre la fecha/hora real del cierre (no conservar una vieja/sin hora)
           a.fechaCompletado = new Date().toISOString();
           alguienCompletado = true;
-          // Avisar a Teams y enviar correo (igual que en la Puerta 1)
+          // Avisar a Teams y enviar correo (igual que en la Puerta 1). enviarEmailCompletada
+          // ya tiene su propio control anti-duplicados (yaSeEnvioEmail).
           notificarTeams(a);
-          // Candado anti-duplicados: solo enviar correo si la lista de "ya enviados" cargó bien.
-          // Si no cargó (mala conexión), NO enviamos aquí para no reenviar correos repetidos.
-          if(emailsCargoOk) enviarEmailCompletada(a);
+          enviarEmailCompletada(a);
           sheetActualizar('Asignaturas',
             ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona'],
             [a.id,a.nombre,a.prog,a.inicio,a.df,'Completada',a.obs||'',today(),
