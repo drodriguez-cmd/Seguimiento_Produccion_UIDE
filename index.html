@@ -358,6 +358,24 @@ textarea{resize:vertical;min-height:70px}
       <option value="JuanDiego">Célula Video</option>
     </select>
   </div>
+  <div class="asig-tools" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 8px">
+    <span style="font-size:13px;color:var(--muted)">📅 Fecha de:</span>
+    <select id="asig-fecha-tipo" onchange="filtrarFechaAsig()"
+      style="padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text)">
+      <option value="inicio">Inicio</option>
+      <option value="fin">Finalización</option>
+    </select>
+    <label style="font-size:13px;color:var(--muted)">Desde
+      <input id="asig-fecha-desde" type="date" onchange="filtrarFechaAsig()"
+        style="padding:8px 10px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text);margin-left:4px">
+    </label>
+    <label style="font-size:13px;color:var(--muted)">Hasta
+      <input id="asig-fecha-hasta" type="date" onchange="filtrarFechaAsig()"
+        style="padding:8px 10px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text);margin-left:4px">
+    </label>
+    <button onclick="limpiarFechaAsig()" title="Limpiar fechas"
+      style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--bg2);color:var(--muted);cursor:pointer">✕ Limpiar</button>
+  </div>
   <div id="asig-list"></div>
 </div>
 
@@ -1419,10 +1437,19 @@ function festivosColombia(year){
   [juevesSanto,viernesSanto].forEach(d=>{
     festivos.add(d.toISOString().slice(0,10));
   });
-  // Festivos "puente" (se mueven al siguiente lunes) — simplificado con fechas aproximadas
-  // Reyes, S.José, S.Pedro, Asunción, Colombianidad, Raza, Todos Santos, Independencia Cartagena
+  // Festivos basados en Pascua que se trasladan al lunes siguiente (Ley Emiliani):
+  // Ascensión (+43 días), Corpus Christi (+64), Sagrado Corazón (+71)
+  [43,64,71].forEach(off=>{
+    const f=new Date(pascua); f.setDate(pascua.getDate()+off);
+    const dow=f.getDay();
+    if(dow!==1){ f.setDate(f.getDate()+((1-dow+7)%7)); }
+    festivos.add(f.toISOString().slice(0,10));
+  });
+  // Festivos "puente" (se mueven al siguiente lunes)
+  // Reyes, S.José, S.Pedro, N.Sra. Chiquinquirá (9 jul, nuevo festivo nacional), Asunción,
+  // Raza, Todos Santos, Independencia Cartagena
   const puentes=[
-    [1,6],[3,19],[6,29],[8,15],[8,16],[10,12],[11,1],[11,11]
+    [1,6],[3,19],[6,29],[7,9],[8,15],[10,12],[11,1],[11,11]
   ];
   puentes.forEach(([m,d])=>{
     const fecha=new Date(year,m-1,d);
@@ -1511,10 +1538,14 @@ function infoFrente(a, esVideo){
     return esVideo ? esV : !esV;
   };
   const intervalos = [];
-  let primerInicio = null;
+  let primerInicio = null, ultimoFin = null;
   const considerar = (ini, fin, persona, rol) => {
     if(!esDelFrente(persona, rol)) return;
-    if(ini>0 && fin>ini){ intervalos.push([ini,fin]); if(primerInicio===null||ini<primerInicio) primerInicio=ini; }
+    if(ini>0 && fin>ini){
+      intervalos.push([ini,fin]);
+      if(primerInicio===null||ini<primerInicio) primerInicio=ini;
+      if(ultimoFin===null||fin>ultimoFin) ultimoFin=fin;
+    }
   };
   STATE.sesiones.forEach(s=>{
     if(s.asigId===a.id || s.asigNombre===a.nombre) considerar(Number(s.inicio), Number(s.fin), s.persona, s.rol);
@@ -1539,7 +1570,7 @@ function infoFrente(a, esVideo){
   return {
     iniciado:true,
     fechaMs: primerInicio,
-    diasTranscurridos: diasHabilesEntre(ymd, new Date()),
+    diasTranscurridos: diasHabilesEntre(ymd, new Date(ultimoFin)),
     diasProduccion: totalMs/60000/MIN_JORNADA
   };
 }
@@ -2767,8 +2798,29 @@ function renderDashboard(){
 }
 
 let _asigStatus='all', _asigQuery='', _asigCelula='all';
+let _asigFechaTipo='inicio', _asigFechaDesde='', _asigFechaHasta='';
 function buscarAsig(v){ _asigQuery=(v||'').toLowerCase().trim(); renderAsignaturas(); }
 function filtrarCelulaAsig(v){ _asigCelula=v||'all'; renderAsignaturas(); }
+function filtrarFechaAsig(){
+  _asigFechaTipo = document.getElementById('asig-fecha-tipo')?.value || 'inicio';
+  _asigFechaDesde = document.getElementById('asig-fecha-desde')?.value || '';
+  _asigFechaHasta = document.getElementById('asig-fecha-hasta')?.value || '';
+  renderAsignaturas();
+}
+function limpiarFechaAsig(){
+  const d=document.getElementById('asig-fecha-desde'), h=document.getElementById('asig-fecha-hasta');
+  if(d) d.value=''; if(h) h.value='';
+  _asigFechaDesde=''; _asigFechaHasta='';
+  renderAsignaturas();
+}
+// Devuelve la fecha (YYYY-MM-DD) de la asignatura según el tipo elegido, o null si no aplica
+function fechaAsigPara(a, tipo){
+  const raw = tipo==='fin' ? a.fechaCompletado : a.inicio;
+  if(!raw) return null;
+  const d = new Date(raw);
+  if(isNaN(d)) return null;
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function renderAsignaturas(filtro){
   if(filtro!==undefined) _asigStatus=filtro;
   const el=document.getElementById('asig-list');
@@ -2783,6 +2835,16 @@ function renderAsignaturas(filtro){
   );
   // Filtro por célula
   if(_asigCelula!=='all') list=list.filter(a=>a.celula===_asigCelula);
+  // Filtro por rango de fecha (inicio o finalización)
+  if(_asigFechaDesde || _asigFechaHasta){
+    list=list.filter(a=>{
+      const f = fechaAsigPara(a, _asigFechaTipo);
+      if(!f) return false; // sin esa fecha (p.ej. finalización en una no completada) → no entra
+      if(_asigFechaDesde && f < _asigFechaDesde) return false;
+      if(_asigFechaHasta && f > _asigFechaHasta) return false;
+      return true;
+    });
+  }
   // Orden: en "Todas" por estado y luego fecha; en pestañas por fecha (más reciente arriba)
   if(_asigStatus==='all'){
     list.sort((a,b)=>{ const oa=ordenStatus[a.status]??4, ob=ordenStatus[b.status]??4; if(oa!==ob) return oa-ob; return new Date(b.inicio)-new Date(a.inicio); });
