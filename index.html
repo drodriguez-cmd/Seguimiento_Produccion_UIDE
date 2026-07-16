@@ -455,9 +455,19 @@ textarea{resize:vertical;min-height:70px}
           </div>
           <div class="fg" style="margin-bottom:14px"><label>Modo de ingreso</label>
             <select id="n-modo-ingreso" onchange="onModoIngresoChange()">
-              <option value="espera">⏳ Agregar a cola de espera (auto-asignar)</option>
-              <option value="directo">⚡ Asignar célula manualmente</option>
+              <option value="espera">⏳ Agregar a cola (auto-asignar persona)</option>
+              <option value="directo">⚡ Asignar persona manualmente</option>
             </select>
+            <div id="celula-form-extra" style="display:none;margin-top:10px">
+              <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Persona asignada</label>
+              <select id="n-celula">
+                <option value="Sofia">Sofía Lugo</option>
+                <option value="David">David Bolaños</option>
+                <option value="Juliana">Juliana Zarate</option>
+                <option value="Melissa">Melissa Pantoja</option>
+                <option value="Julieth">Julieth Pantoja</option>
+              </select>
+            </div>
           </div>
           <div class="divider">Roles del equipo</div>
           <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
@@ -468,24 +478,6 @@ textarea{resize:vertical;min-height:70px}
           </div>
           <div class="fg"><label>Observaciones</label><textarea id="n-obs" placeholder="Notas iniciales..."></textarea></div>
           <div class="fg"><label>Link del curso</label><input type="url" id="n-link" placeholder="https://..." style="padding:10px;border:1px solid var(--border2);border-radius:8px;font-size:13px;width:100%;box-sizing:border-box"></div>
-          <!-- Célula toggle -->
-          <div style="background:rgba(232,51,109,.05);border:1px solid rgba(232,51,109,.2);border-radius:10px;padding:12px;margin-bottom:12px">
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
-              <input type="checkbox" id="n-es-celula" onchange="toggleCelulaForm()" style="accent-color:#e8336d;width:16px;height:16px">
-              <span style="font-weight:600;color:#e8336d;font-size:13px">🏭 Asignar a célula de producción</span>
-            </label>
-            <div id="celula-form-extra" style="display:none;margin-top:12px">
-              <div class="fg" style="margin-bottom:0"><label>Persona asignada</label>
-                <select id="n-celula">
-                  <option value="Sofia">Sofía Lugo</option>
-                  <option value="David">David Bolaños</option>
-                  <option value="Juliana">Juliana Zarate</option>
-                  <option value="Melissa">Melissa Pantoja</option>
-                  <option value="Julieth">Julieth Pantoja</option>
-                </select>
-              </div>
-            </div>
-          </div>
           <button class="btn btn-primary" onclick="crearAsignatura()" style="width:100%;justify-content:center">Crear asignatura</button>
         </div>
       </div>
@@ -1667,8 +1659,8 @@ function crearAsignatura(){
   const link=document.getElementById('n-link').value.trim();
   const prioridad=document.getElementById('n-prioridad')?.value||'media';
   if(!nombre||!prog){ toast('Completa nombre y programa'); return; }
-  const esCelula = document.getElementById('n-es-celula')?.checked || false;
-  const modoIngreso = document.getElementById('n-modo-ingreso')?.value || 'directo';
+  const esCelula = true; // en el modelo por persona, toda asignatura nueva es de diseño
+  const modoIngreso = document.getElementById('n-modo-ingreso')?.value || 'espera';
   const celulaId = (esCelula && modoIngreso==='directo') ? (document.getElementById('n-celula')?.value||'') : '';
   const statusInicial = esCelula && modoIngreso==='espera' ? 'En espera' : 'En producción';
   const asig={
@@ -1693,8 +1685,10 @@ function crearAsignatura(){
   guardarEstadoLocal();
   // Limpiar formulario
   ['n-nombre','n-df','n-obs','n-link'].forEach(id=>document.getElementById(id).value='');
-  const cb = document.getElementById('n-es-celula');
-  if(cb){ cb.checked=false; document.getElementById('celula-form-extra').style.display='none'; }
+  const modoSel = document.getElementById('n-modo-ingreso');
+  if(modoSel) modoSel.value='espera';
+  const extraDiv = document.getElementById('celula-form-extra');
+  if(extraDiv) extraDiv.style.display='none';
   document.getElementById('n-prog').value='';
   toast('Asignatura creada: '+nombre);
   // Renderizar inmediatamente
@@ -2332,12 +2326,8 @@ function toggleTareaAsigCelula(asigId, rol, tarea){
 }
 
 function toggleCelulaForm(){
-  const checked = document.getElementById('n-es-celula')?.checked;
-  const extra = document.getElementById('celula-form-extra');
-  const modoWrap = document.getElementById('n-modo-ingreso')?.closest('.fg');
-  if(extra) extra.style.display = checked ? '' : 'none';
-  if(modoWrap) modoWrap.style.display = checked ? '' : 'none';
-  if(checked) onModoIngresoChange();
+  // Obsoleta: el checkbox se eliminó. El modo de ingreso ahora controla todo.
+  onModoIngresoChange();
 }
 
 function onModoIngresoChange(){
