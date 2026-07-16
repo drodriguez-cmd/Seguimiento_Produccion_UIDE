@@ -988,7 +988,7 @@ function renderCelulasDir(){
   }).join('');
 
   // Video cell
-  const videoPersonas = ['Juan Diego Cruz','Valentina Rodríguez','Cristina Alisente'];
+  const videoPersonas = ['Valentina Rodríguez','Cristina Alisente'];
   const videoHTML = videoPersonas.map(persona=>{
     const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción');
     const enCola = todas.filter(a=>a.videoPersona===persona && a.status==='En espera');
@@ -1205,7 +1205,7 @@ const STATE = {
 // ════════════════════════════════════════════
 // TURNO DE VIDEO — alternado Juan Diego / Valentina
 // ════════════════════════════════════════════
-const VIDEO_PERSONAS = ['Juan Diego Cruz', 'Valentina Rodríguez', 'Cristina Alisente'];
+const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Cristina Alisente'];
 // El turno se calcula desde los DATOS compartidos (no de localStorage), para que la
 // alternancia sea consistente entre todos los equipos: se mira a quién le tocó la
 // ÚLTIMA asignatura de video y se devuelve al otro.
@@ -1818,7 +1818,7 @@ const CELULA_CFG = {
   Juliana:   { label: 'Juliana Zarate',  color: '#16a34a', icon: '🟢', lider: 'Juliana Zarate',  disenador: 'Juliana Zarate' },
   Melissa:   { label: 'Melissa Pantoja', color: '#ea6c1a', icon: '🟠', lider: 'Melissa Pantoja', disenador: 'Melissa Pantoja' },
   Julieth:   { label: 'Julieth Pantoja', color: '#db2777', icon: '🔴', lider: 'Julieth Pantoja', disenador: 'Julieth Pantoja' },
-  JuanDiego: { label: 'Célula Video',    color: '#2563eb', icon: '🎬', lider: 'Juan Diego Cruz',  disenador: 'Valentina Rodríguez' },
+  JuanDiego: { label: 'Célula Video',    color: '#2563eb', icon: '🎬', lider: 'Valentina Rodríguez', disenador: 'Cristina Alisente' },
   // Legacy — solo para MOSTRAR asignaturas que ya venían en células y siguen en producción
   Gabriel:   { label: 'Célula Gabriel',  color: '#0891b2', icon: '🔵', lider: 'Gabriel Villarejo', disenador: 'Leidy Gonzales' },
   Fabian:    { label: 'Célula Fabián',   color: '#ea6c1a', icon: '🟠', lider: 'Fabián Patiño',    disenador: 'Julieth Pantoja' },
