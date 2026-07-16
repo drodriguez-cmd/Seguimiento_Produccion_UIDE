@@ -350,12 +350,16 @@ textarea{resize:vertical;min-height:70px}
       style="flex:1;min-width:240px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text)">
     <select id="asig-celula-filter" onchange="filtrarCelulaAsig(this.value)"
       style="padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text)">
-      <option value="all">Todas las células</option>
-      <option value="Sofia">Célula Sofía</option>
-      <option value="Gabriel">Célula Gabriel</option>
-      <option value="Fabian">Célula Fabián</option>
-      <option value="Melisa">Célula Melisa</option>
-      <option value="JuanDiego">Célula Video</option>
+      <option value="all">Todas las personas</option>
+      <option value="Sofia">Sofía Lugo</option>
+      <option value="David">David Bolaños</option>
+      <option value="Juliana">Juliana Zarate</option>
+      <option value="Melissa">Melissa Pantoja</option>
+      <option value="Julieth">Julieth Pantoja</option>
+      <option value="JuanDiego">Video</option>
+      <option value="Gabriel">Célula Gabriel (en cierre)</option>
+      <option value="Fabian">Célula Fabián (en cierre)</option>
+      <option value="Melisa">Célula Melisa (en cierre)</option>
     </select>
   </div>
   <div class="asig-tools" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 8px">
@@ -470,12 +474,13 @@ textarea{resize:vertical;min-height:70px}
               <span style="font-weight:600;color:#e8336d;font-size:13px">🏭 Asignar a célula de producción</span>
             </label>
             <div id="celula-form-extra" style="display:none;margin-top:12px">
-              <div class="fg" style="margin-bottom:0"><label>Célula asignada</label>
+              <div class="fg" style="margin-bottom:0"><label>Persona asignada</label>
                 <select id="n-celula">
-                  <option value="Sofia">Célula Sofía · Sofía Lugo + David Bolaños</option>
-                  <option value="Gabriel">Célula Gabriel · Gabriel Villarejo + Leidy Gonzales</option>
-                  <option value="Fabian">Célula Fabián · Fabián Patiño + Julieth Pantoja</option>
-                  <option value="Melisa">Célula Melisa · Melisa Pantoja + Juliana Zarate</option>
+                  <option value="Sofia">Sofía Lugo</option>
+                  <option value="David">David Bolaños</option>
+                  <option value="Juliana">Juliana Zarate</option>
+                  <option value="Melissa">Melissa Pantoja</option>
+                  <option value="Julieth">Julieth Pantoja</option>
                 </select>
               </div>
             </div>
@@ -938,9 +943,9 @@ function renderCelulasDir(){
       </div>`).join('')}
   </div>`;
 
-  // Células — estado y progreso
-  const celulasHTML = Object.entries(CELULA_CFG).map(([id, cfg])=>{
-    if(id==='JuanDiego') return ''; // Video se muestra aparte
+  // Personas de diseño — estado y progreso (modelo por persona)
+  const celulasHTML = UNIDADES_DISENO.map((id)=>{
+    const cfg = CELULA_CFG[id];
     const asigActiva = todas.find(a=>a.celula===id && a.status==='En producción');
     const preAsignada = todas.find(a=>a.celula===id && a.status==='En espera');
     const pct = asigActiva ? progAsig(asigActiva) : 0;
@@ -1070,7 +1075,7 @@ function renderCelulasDir(){
         <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:16px">
           <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
             <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Células de diseño</span>
-            <span style="font-size:11px;padding:2px 10px;border-radius:99px;background:var(--bg3);color:var(--muted)">${Object.keys(CELULA_CFG).filter(k=>k!=='JuanDiego').length} células</span>
+            <span style="font-size:11px;padding:2px 10px;border-radius:99px;background:var(--bg3);color:var(--muted)">${UNIDADES_DISENO.length} personas</span>
           </div>
           ${celulasHTML}
         </div>
@@ -1810,18 +1815,31 @@ function renderCelulaBodyInline(a){
 // CÉLULAS — configuración de equipos
 // ════════════════════════════════════════════
 const CELULA_CFG = {
-  Sofia:     { label: 'Célula Sofía',    color: '#7c3aed', icon: '🟣', lider: 'Sofia Lugo',       disenador: 'David Bolaños' },
+  // Unidades de diseño individuales (modelo por persona · objetivo 3 días)
+  Sofia:     { label: 'Sofía Lugo',      color: '#7c3aed', icon: '🟣', lider: 'Sofia Lugo',      disenador: 'Sofia Lugo' },
+  David:     { label: 'David Bolaños',   color: '#0891b2', icon: '🔵', lider: 'David Bolaños',   disenador: 'David Bolaños' },
+  Juliana:   { label: 'Juliana Zarate',  color: '#16a34a', icon: '🟢', lider: 'Juliana Zarate',  disenador: 'Juliana Zarate' },
+  Melissa:   { label: 'Melissa Pantoja', color: '#ea6c1a', icon: '🟠', lider: 'Melissa Pantoja', disenador: 'Melissa Pantoja' },
+  Julieth:   { label: 'Julieth Pantoja', color: '#db2777', icon: '🔴', lider: 'Julieth Pantoja', disenador: 'Julieth Pantoja' },
+  JuanDiego: { label: 'Célula Video',    color: '#2563eb', icon: '🎬', lider: 'Juan Diego Cruz',  disenador: 'Valentina Rodríguez' },
+  // Legacy — solo para MOSTRAR asignaturas que ya venían en células y siguen en producción
   Gabriel:   { label: 'Célula Gabriel',  color: '#0891b2', icon: '🔵', lider: 'Gabriel Villarejo', disenador: 'Leidy Gonzales' },
   Fabian:    { label: 'Célula Fabián',   color: '#ea6c1a', icon: '🟠', lider: 'Fabián Patiño',    disenador: 'Julieth Pantoja' },
   Melisa:    { label: 'Célula Melisa',   color: '#16a34a', icon: '🟢', lider: 'Melisa Pantoja',   disenador: 'Juliana Zarate' },
-  JuanDiego: { label: 'Célula Video',    color: '#2563eb', icon: '🎬', lider: 'Juan Diego Cruz',  disenador: 'Valentina Rodríguez' },
 };
+// Unidades de diseño ACTIVAS para asignar (modelo por persona). El video va aparte (JuanDiego).
+// Las legacy (Gabriel/Fabian/Melisa) NO se asignan; solo existen para mostrar lo que ya está en producción.
+const UNIDADES_DISENO = ['Sofia','David','Juliana','Melissa','Julieth'];
 
 // ════════════════════════════════════════════
 // LÍDERES DE CÉLULA — emails para notificaciones
 // ════════════════════════════════════════════
 const CELULA_LIDERES = {
   Sofia:     { nombre: 'Sofía Lugo',           email: 'slugo@eigedu.com' },
+  David:     { nombre: 'David Bolaños',        email: '' },
+  Juliana:   { nombre: 'Juliana Zarate',       email: '' },
+  Melissa:   { nombre: 'Melissa Pantoja',      email: '' },
+  Julieth:   { nombre: 'Julieth Pantoja',      email: '' },
   Gabriel:   { nombre: 'Gabriel Villarejo',    email: 'jvilla@eigedu.com' },
   Fabian:    { nombre: 'Fabián Patiño',        email: 'fpatino@eigedu.com' },
   Melisa:    { nombre: 'Melisa Pantoja',       email: '' },
@@ -1858,7 +1876,7 @@ function estadoCelula(celulaId){
 
 function evaluarCargaCelulas(){
   const resultado = {};
-  Object.keys(CELULA_CFG).forEach(id=>{
+  UNIDADES_DISENO.forEach(id=>{
     resultado[id] = estadoCelula(id);
   });
   return resultado;
@@ -2937,7 +2955,8 @@ function renderAsignaturas(filtro){
           ${(a.status==='En espera'||a.status==='En producción'||a.status==='Pausada')?`
           <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-top:6px">
             <select id="asigncel-${a.id}" onclick="event.stopPropagation()" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:white;max-width:150px">
-              ${Object.entries(CELULA_CFG).filter(([id])=>id!=='JuanDiego').map(([id,c])=>`<option value="${id}" ${a.celula===id?'selected':''}>${c.label}</option>`).join('')}
+              ${UNIDADES_DISENO.map(id=>{const c=CELULA_CFG[id];return `<option value="${id}" ${a.celula===id?'selected':''}>${c.label}</option>`;}).join('')}
+              ${(a.celula && !UNIDADES_DISENO.includes(a.celula) && a.celula!=='JuanDiego' && CELULA_CFG[a.celula]) ? `<option value="${a.celula}" selected>${CELULA_CFG[a.celula].label}</option>` : ''}
             </select>
             <button class="btn btn-sm" onclick="event.stopPropagation();asignarCelulaManual('${a.id}',document.getElementById('asigncel-${a.id}').value)" style="background:var(--ok);color:white;border:none;white-space:nowrap">${a.status==='En espera'?'🏭 Asignar':'🔄 Mover'}</button>
           </div>`:''}
@@ -4504,7 +4523,7 @@ async function cargarDesdeSheets(){
     if(actualizado){
       // Check all asignaturas for auto-completion (catches ones completed before this feature)
       let alguienCompletado = false;
-      STATE.asignaturas.filter(a=>a.status==='En producción').forEach(a=>{
+      STATE.asignaturas.filter(a=>a.status==='En producción' || a.status==='En espera').forEach(a=>{
         const pct = progAsig(a);
         if(pct===100){
           // 🔒 Para no dejar materias "completadas sin correo": solo se completa aquí si la lista
