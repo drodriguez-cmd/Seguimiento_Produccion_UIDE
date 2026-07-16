@@ -339,11 +339,12 @@ textarea{resize:vertical;min-height:70px}
     <p>Seguimiento por materia con sus 3 clases y entregables</p>
   </div>
   <div class="chips" id="asig-filter-chips">
+    <button class="chip" onclick="filterAsig('En producción',this)">🏭 En producción</button>
+    <button class="chip" onclick="filterAsig('Por iniciar',this)">🕐 Por iniciar</button>
+    <button class="chip" onclick="filterAsig('En cola',this)">📋 En cola</button>
+    <button class="chip" onclick="filterAsig('Pausada',this)">⏸ Pausada</button>
+    <button class="chip" onclick="filterAsig('Completada',this)">✅ Completadas</button>
     <button class="chip active" onclick="filterAsig('all',this)">Todas</button>
-    <button class="chip" onclick="filterAsig('En producción',this)">En producción</button>
-    <button class="chip" onclick="filterAsig('En espera',this)">⏳ En espera</button>
-    <button class="chip" onclick="filterAsig('Completada',this)">Completadas</button>
-    <button class="chip" onclick="filterAsig('Pausada',this)">Pausadas</button>
   </div>
   <div class="asig-tools" style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px">
     <input id="asig-search" type="text" placeholder="🔍 Buscar por nombre o maestría..." oninput="buscarAsig(this.value)"
@@ -910,9 +911,10 @@ function renderCelulasDir(){
   if(!el) return;
 
   const todas = STATE.asignaturas;
-  const enProd = todas.filter(a=>a.status==='En producción').length;
-  const comp = todas.filter(a=>a.status==='Completada').length;
-  const cola = todas.filter(a=>a.status==='En espera').length;
+  const enProd = todas.filter(a=>categoriaAsig(a)==='En producción').length;
+  const porIniciar = todas.filter(a=>categoriaAsig(a)==='Por iniciar').length;
+  const comp = todas.filter(a=>categoriaAsig(a)==='Completada').length;
+  const cola = todas.filter(a=>categoriaAsig(a)==='En cola').length;
   const total = todas.length;
   const pctComp = total>0?Math.round(comp/total*100):0;
   const completadas = todas.filter(a=>a.status==='Completada');
@@ -927,12 +929,13 @@ function renderCelulasDir(){
   const enRiesgo = todas.filter(a=>a.status==='En producción'&&diasAsig(a)>=(a.df||3)).length;
   const timersN = Object.values(STATE.timers).filter(t=>t.running).length;
   const kpiHTML = `
-  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px">
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-bottom:20px">
     ${[
       {lbl:'Total asignaturas', val:total, sub:'en la fábrica', c:'#818cf8'},
-      {lbl:'En producción', val:enProd, sub:'células activas', c:'#d97706'},
+      {lbl:'En producción', val:enProd, sub:'ya arrancaron', c:'#d97706'},
+      {lbl:'Por iniciar', val:porIniciar, sub:'con persona, sin arrancar', c:'#6366f1'},
+      {lbl:'En cola', val:cola, sub:'esperando persona', c:'#e8336d'},
       {lbl:'Completadas', val:comp, sub:pctComp+'% del total', c:'#16a34a'},
-      {lbl:'En cola', val:cola, sub:'esperando célula', c:'#e8336d'},
       {lbl:'En riesgo', val:enRiesgo, sub:enRiesgo>0?'superaron DF':'dentro del plazo', c:enRiesgo>0?'#dc2626':'#16a34a'},
       {lbl:'Días prom.', val:promDias+(promDias!=='—'?'d':''), sub:dfProm!=='—'?'DF est: '+dfProm+'d':'sin completadas', c:promDias!=='—'&&parseFloat(promDias)<=parseFloat(dfProm)?'#16a34a':'#d97706'},
     ].map(k=>`
@@ -2816,6 +2819,21 @@ function renderDashboard(){
 }
 
 let _asigStatus='all', _asigQuery='', _asigCelula='all';
+// ¿La asignatura ya arrancó? (tiene al menos una sesión o timer, de diseño o video)
+function arrancoAsig(a){
+  return STATE.sesiones.some(s=>s.asigId===a.id||s.asigNombre===a.nombre)
+    || Object.values(STATE.timers||{}).some(t=>t.asigId===a.id||t.asigNombre===a.nombre)
+    || (STATE.timersSheets||[]).some(t=>t.asigId===a.id||t.asigNombre===a.nombre);
+}
+// Categoría VISIBLE (no cambia el status guardado, solo cómo se muestra/filtra):
+//  Completada · Pausada · En producción (ya arrancó) · Por iniciar (tiene persona, sin arrancar) · En cola (sin persona)
+function categoriaAsig(a){
+  if(a.status==='Completada') return 'Completada';
+  if(a.status==='Pausada') return 'Pausada';
+  if(arrancoAsig(a)) return 'En producción';
+  if(a.celula) return 'Por iniciar';
+  return 'En cola';
+}
 let _asigFechaTipo='inicio', _asigFechaDesde='', _asigFechaHasta='';
 function buscarAsig(v){ _asigQuery=(v||'').toLowerCase().trim(); renderAsignaturas(); }
 function filtrarCelulaAsig(v){ _asigCelula=v||'all'; renderAsignaturas(); }
@@ -2842,10 +2860,10 @@ function fechaAsigPara(a, tipo){
 function renderAsignaturas(filtro){
   if(filtro!==undefined) _asigStatus=filtro;
   const el=document.getElementById('asig-list');
-  const ordenStatus = {'En producción':0,'Pausada':1,'En espera':2,'Completada':3};
+  const ordenStatus = {'En producción':0,'Por iniciar':1,'En cola':2,'Pausada':3,'Completada':4};
   let list=[...STATE.asignaturas];
-  // Filtro por estado (pestaña)
-  if(_asigStatus!=='all') list=list.filter(a=>a.status===_asigStatus);
+  // Filtro por categoría (pestaña)
+  if(_asigStatus!=='all') list=list.filter(a=>categoriaAsig(a)===_asigStatus);
   // Búsqueda por nombre o programa/maestría
   if(_asigQuery) list=list.filter(a=>
     String(a.nombre||'').toLowerCase().includes(_asigQuery) ||
@@ -2865,7 +2883,7 @@ function renderAsignaturas(filtro){
   }
   // Orden: en "Todas" por estado y luego fecha; en pestañas por fecha (más reciente arriba)
   if(_asigStatus==='all'){
-    list.sort((a,b)=>{ const oa=ordenStatus[a.status]??4, ob=ordenStatus[b.status]??4; if(oa!==ob) return oa-ob; return new Date(b.inicio)-new Date(a.inicio); });
+    list.sort((a,b)=>{ const oa=ordenStatus[categoriaAsig(a)]??5, ob=ordenStatus[categoriaAsig(b)]??5; if(oa!==ob) return oa-ob; return new Date(b.inicio)-new Date(a.inicio); });
   } else {
     list.sort((a,b)=>new Date(b.inicio)-new Date(a.inicio));
   }
@@ -2893,8 +2911,8 @@ function renderAsignaturas(filtro){
     const timersA=Object.values(STATE.timers).filter(t=>t.asigId===a.id).length;
     
     // Si no hay sesiones y está "En producción", mostrar como "En espera"
-    const statusDisplay = a.status;
-    const stBadgeDisplay = statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='En espera'?'badge-info':'badge-muted';
+    const statusDisplay = categoriaAsig(a);
+    const stBadgeDisplay = statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='Por iniciar'?'badge-info':'badge-muted';
 
     // Assets HTML
     const mkAssets=(u,key)=>{
