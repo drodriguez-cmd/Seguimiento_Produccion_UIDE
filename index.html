@@ -1820,6 +1820,7 @@ const CELULA_CFG = {
   Juliana:   { label: 'Juliana Zarate',  color: '#16a34a', icon: '🟢', lider: 'Juliana Zarate',  disenador: 'Juliana Zarate' },
   Melissa:   { label: 'Melissa Pantoja', color: '#ea6c1a', icon: '🟠', lider: 'Melissa Pantoja', disenador: 'Melissa Pantoja' },
   Julieth:   { label: 'Julieth Pantoja', color: '#db2777', icon: '🔴', lider: 'Julieth Pantoja', disenador: 'Julieth Pantoja' },
+  GabrielV:  { label: 'Gabriel Villarejo', color: '#0d9488', icon: '🟢', lider: 'Gabriel Villarejo', disenador: 'Gabriel Villarejo', disponibleDesde: '2026-07-27' },
   JuanDiego: { label: 'Célula Video',    color: '#2563eb', icon: '🎬', lider: 'Valentina Rodríguez', disenador: 'Cristina Alisente' },
   // Legacy — solo para MOSTRAR asignaturas que ya venían en células y siguen en producción
   Gabriel:   { label: 'Célula Gabriel',  color: '#0891b2', icon: '🔵', lider: 'Gabriel Villarejo', disenador: 'Leidy Gonzales' },
@@ -1828,7 +1829,7 @@ const CELULA_CFG = {
 };
 // Unidades de diseño ACTIVAS para asignar (modelo por persona). El video va aparte (JuanDiego).
 // Las legacy (Gabriel/Fabian/Melisa) NO se asignan; solo existen para mostrar lo que ya está en producción.
-const UNIDADES_DISENO = ['Sofia','David','Juliana','Melissa','Julieth'];
+const UNIDADES_DISENO = ['Sofia','David','Juliana','Melissa','Julieth','GabrielV'];
 
 // ════════════════════════════════════════════
 // LÍDERES DE CÉLULA — emails para notificaciones
@@ -1839,6 +1840,7 @@ const CELULA_LIDERES = {
   Juliana:   { nombre: 'Juliana Zarate',       email: '' },
   Melissa:   { nombre: 'Melissa Pantoja',      email: '' },
   Julieth:   { nombre: 'Julieth Pantoja',      email: '' },
+  GabrielV:  { nombre: 'Gabriel Villarejo',    email: 'jvilla@eigedu.com' },
   Gabriel:   { nombre: 'Gabriel Villarejo',    email: 'jvilla@eigedu.com' },
   Fabian:    { nombre: 'Fabián Patiño',        email: 'fpatino@eigedu.com' },
   Melisa:    { nombre: 'Melisa Pantoja',       email: '' },
@@ -1885,7 +1887,13 @@ const PRE_ASIGN_PCT = 60; // Pre-asignar cuando la célula alcance este % de pro
 
 function encontrarCelulaDisponible(){
   const carga = evaluarCargaCelulas();
-  const entries = Object.entries(carga).filter(([id])=>id!=='JuanDiego'); // el video va aparte
+  const hoy = today();
+  const entries = Object.entries(carga).filter(([id])=>{
+    if(id==='JuanDiego') return false; // el video va aparte
+    const disp = CELULA_CFG[id]?.disponibleDesde;
+    if(disp && hoy < disp) return false; // aún no ha ingresado
+    return true;
+  });
 
   // 1. Células totalmente libres (sin activa NI reserva) → arranca ya
   const libres = entries.filter(([id,c])=>c.estado==='libre').map(([id])=>id);
