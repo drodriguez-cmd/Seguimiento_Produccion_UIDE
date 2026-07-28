@@ -2503,8 +2503,8 @@ function completarTimer(id,nota=''){
   guardarEstadoLocal(); // also clears this timer from localStorage
   setSyncStatus('sync');
   sheetGuardar('Sesiones',
-    ['ID','Asignatura','Programa','Rol','Tarea','Clase','Minutos','Dias','Fecha Inicio','Fecha Fin','Notas','Manual','Persona'],
-    [sesion.id, sesion.asigNombre, STATE.asignaturas.find(a=>a.id===sesion.asigId)?.prog||'', ROL_CFG[sesion.rol]?.label||sesion.rol, sesion.tarea, sesion.unidad||'', sesion.mins, sesion.dias.toFixed(3), new Date(sesion.inicio).toLocaleString('es-CO'), new Date(sesion.fin).toLocaleString('es-CO'), nota||'', 'No', sesion.persona]
+    ['ID','Asignatura','Programa','Rol','Tarea','Clase','Minutos','Dias','Fecha Inicio','Fecha Fin','Notas','Manual','Persona','ID Asignatura'],
+    [sesion.id, sesion.asigNombre, STATE.asignaturas.find(a=>a.id===sesion.asigId)?.prog||'', ROL_CFG[sesion.rol]?.label||sesion.rol, sesion.tarea, sesion.unidad||'', sesion.mins, sesion.dias.toFixed(3), new Date(sesion.inicio).toLocaleString('es-CO'), new Date(sesion.fin).toLocaleString('es-CO'), nota||'', 'No', sesion.persona, sesion.asigId||'']
   );
   sheetTimerActivo('completar', t);
   renderTimers(); renderDashboardTimers(); toast('Sesión guardada · '+minsToStr(mins));
@@ -2589,8 +2589,8 @@ function guardarManual(){
   guardarEstadoLocal();
   setSyncStatus('sync');
   sheetGuardar('Sesiones',
-    ['ID','Asignatura','Programa','Rol','Tarea','Clase','Minutos','Dias','Fecha Inicio','Fecha Fin','Notas','Manual','Persona'],
-    [sesion.id,sesion.asigNombre,asig?.prog||'',ROL_CFG[rol]?.label||rol,tarea,unidad,mins,dias.toFixed(3),new Date(inicio).toLocaleString('es-CO'),new Date(fin).toLocaleString('es-CO'),notas,'Sí',persona]
+    ['ID','Asignatura','Programa','Rol','Tarea','Clase','Minutos','Dias','Fecha Inicio','Fecha Fin','Notas','Manual','Persona','ID Asignatura'],
+    [sesion.id,sesion.asigNombre,asig?.prog||'',ROL_CFG[rol]?.label||rol,tarea,unidad,mins,dias.toFixed(3),new Date(inicio).toLocaleString('es-CO'),new Date(fin).toLocaleString('es-CO'),notas,'Sí',persona,asigId||'']
   );
   // Reset form
   ['m-asig','m-rol','m-tarea','m-unidad','m-fecha','m-hinicio','m-hfin','m-notas','m-nombre'].forEach(id=>{
@@ -2702,7 +2702,7 @@ function renderTimers(){
       `<td>${s.tarea}${s.unidad?' · '+s.unidad:''}${s.manual?' <span style="background:#D98E04;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:.3px">MANUAL</span>':''}</td>`+
       `<td><span class="role-pill ${ROL_CFG[s.rol]?.rp||''}" style="font-size:10px;padding:2px 8px">${rolIcon(s.rol)} ${rolLabel(s.rol)}</span></td>`+
       `<td>${minsToStr(s.mins)}</td>`+
-      `<td style="font-family:var(--fhead);font-weight:700">${s.dias.toFixed(2)}</td>`+
+      `<td style="font-family:var(--fhead);font-weight:700">${(s.dias||0).toFixed(2)}</td>`+
     `</tr>`).join('')+'</tbody></table>';
 }
 
@@ -2922,7 +2922,7 @@ function renderAsignaturas(filtro){
       else alertaHTML=`<span class="badge badge-ok">🟢 En plazo</span>`;
     }
     const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
-    const diasTotal=sesA.reduce((acc,s)=>acc+s.dias,0);
+    const diasTotal=sesA.reduce((acc,s)=>acc+(s.dias||0),0);
     const timersA=Object.values(STATE.timers).filter(t=>t.asigId===a.id).length;
     
     // Si no hay sesiones y está "En producción", mostrar como "En espera"
@@ -3242,7 +3242,7 @@ function renderRoles(){
     const cfg=ROL_CFG[rol];
     const byTarea={};
     ss.forEach(s=>{ byTarea[s.tarea]=(byTarea[s.tarea]||[]); byTarea[s.tarea].push(s); });
-    const maxDias=Math.max(...ss.map(s=>s.dias),0.1);
+    const maxDias=Math.max(...ss.map(s=>s.dias||0),0.1);
     return `<div class="card">
       <div class="card-head"><span class="card-title">${cfg.icon} ${cfg.label}</span><span class="badge ${cfg.badge}">${ss.length} sesiones</span></div>
       ${Object.entries(byTarea).length?(()=>{
@@ -4423,7 +4423,7 @@ async function cargarDesdeSheets(){
         }
 
         return {
-          id:String(r[0]||''), asigId:'', asigNombre:String(r[1]||''),
+          id:String(r[0]||''), asigId:String(r[13]||''), asigNombre:String(r[1]||''),
           rol:matchedRol,
           persona:personaName, tarea:String(r[4]||''), unidad:String(r[5]||''),
           mins:parseFloat(r[6])||0, dias:parseFloat(r[6]||0)/480,
@@ -4434,8 +4434,13 @@ async function cargarDesdeSheets(){
       }).filter(s=>s.asigNombre && s.asigNombre !== 'undefined' && s.asigNombre !== '');
       STATE.sesiones = [];
       deSheets.forEach(ss=>{
-        const asigMatch = STATE.asignaturas.find(a=>a.nombre===ss.asigNombre);
-        if(asigMatch) ss.asigId = asigMatch.id;
+        // Preferir el ID guardado directamente (no se rompe si renombran la asignatura).
+        // Si no hay ID (sesiones viejas, previas a este fix), usar el nombre como respaldo.
+        if(ss.asigId && !STATE.asignaturas.find(a=>a.id===ss.asigId)) ss.asigId=''; // ID guardado ya no existe
+        if(!ss.asigId){
+          const asigMatch = STATE.asignaturas.find(a=>a.nombre===ss.asigNombre);
+          if(asigMatch) ss.asigId = asigMatch.id;
+        }
         STATE.sesiones.push(ss);
         // Auto-marcar entregables basado en sesiones de Sheets (silencioso)
         if(ss.asigId) autoMarcarEntregable(ss.asigId, ss.tarea, true, ss.unidad);
@@ -4522,6 +4527,7 @@ async function cargarDesdeSheets(){
             inicio: inicio > 0 ? inicio : Date.now(),
             fin: fin,
             mins: mins > 0 ? mins : 30,
+            dias: (mins > 0 ? mins : 30) / 480,
             manual: 'Sí'
           });
           
