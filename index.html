@@ -1815,7 +1815,7 @@ function renderCelulaBodyInline(a){
 // ════════════════════════════════════════════
 const CELULA_CFG = {
   // Unidades de diseño individuales (modelo por persona · objetivo 3 días)
-  Sofia:     { label: 'Sofía Lugo',      color: '#7c3aed', icon: '🟣', lider: 'Sofia Lugo',      disenador: 'Sofia Lugo' },
+  Sofia:     { label: 'Sofía Lugo',      color: '#7c3aed', icon: '🟣', lider: 'Sofia Lugo',      disenador: 'Sofia Lugo', pausada: true },
   David:     { label: 'David Bolaños',   color: '#0891b2', icon: '🔵', lider: 'David Bolaños',   disenador: 'David Bolaños' },
   Juliana:   { label: 'Juliana Zarate',  color: '#16a34a', icon: '🟢', lider: 'Juliana Zarate',  disenador: 'Juliana Zarate' },
   Melissa:   { label: 'Melissa Pantoja', color: '#ea6c1a', icon: '🟠', lider: 'Melissa Pantoja', disenador: 'Melissa Pantoja' },
@@ -1890,6 +1890,7 @@ function encontrarCelulaDisponible(){
   const hoy = today();
   const entries = Object.entries(carga).filter(([id])=>{
     if(id==='JuanDiego') return false; // el video va aparte
+    if(CELULA_CFG[id]?.pausada) return false; // temporalmente fuera de la operación
     const disp = CELULA_CFG[id]?.disponibleDesde;
     if(disp && hoy < disp) return false; // aún no ha ingresado
     return true;
