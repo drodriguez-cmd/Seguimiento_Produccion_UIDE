@@ -1208,19 +1208,23 @@ const STATE = {
 // ════════════════════════════════════════════
 // TURNO DE VIDEO — alternado Juan Diego / Valentina
 // ════════════════════════════════════════════
-const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Cristina Alisente'];
+const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Cristina Alisente', 'Juan Diego Cruz'];
 // El turno se calcula desde los DATOS compartidos (no de localStorage), para que la
 // alternancia sea consistente entre todos los equipos: se mira a quién le tocó la
 // ÚLTIMA asignatura de video y se devuelve al otro.
 function siguienteVideoPersona(){
+  // Solo rota entre quienes estén Activos en el Sheet "Equipo" (mismo mecanismo que diseño).
+  // Si por algún motivo TODOS quedaran pausados, se usa la lista completa para no romper el flujo.
+  const activos = VIDEO_PERSONAS.filter(p=>celulaActiva(p));
+  const pool = activos.length ? activos : VIDEO_PERSONAS;
   const conVideo = (STATE.asignaturas||[])
-    .filter(a => a.tipo==='celula' && a.videoPersona && VIDEO_PERSONAS.includes(a.videoPersona))
+    .filter(a => a.tipo==='celula' && a.videoPersona && pool.includes(a.videoPersona))
     .sort((a,b)=> String(a.id).localeCompare(String(b.id))); // id lleva timestamp de creación
   const ultima = conVideo[conVideo.length-1];
-  if(!ultima) return VIDEO_PERSONAS[0]; // la primera de todas
-  // Rotación real en orden (funciona con 2, 3 o más): después de la última, la siguiente de la lista
-  const idx = VIDEO_PERSONAS.indexOf(ultima.videoPersona);
-  return VIDEO_PERSONAS[(idx + 1) % VIDEO_PERSONAS.length];
+  if(!ultima) return pool[0]; // la primera de todas
+  // Rotación real en orden (funciona con 2, 3 o más): después de la última, la siguiente del pool activo
+  const idx = pool.indexOf(ultima.videoPersona);
+  return pool[(idx + 1) % pool.length];
 }
 function getTurnoVideo(){ return siguienteVideoPersona(); }
 function avanzarTurnoVideo(){
@@ -4390,13 +4394,15 @@ async function cargarDesdeSheets(){
         .filter(a => a.tipo==='celula' && a.celula !== 'JuanDiego' && !a.videoPersona)
         .sort((a,b) => String(a.id).localeCompare(String(b.id)));
       if(sinVideo.length > 0){
+        const poolVideo = VIDEO_PERSONAS.filter(p=>celulaActiva(p));
+        const pool = poolVideo.length ? poolVideo : VIDEO_PERSONAS;
         // Determinar turno actual basado en las que ya tienen asignado
         const conVideo = STATE.asignaturas
           .filter(a => a.tipo==='celula' && a.videoPersona)
           .sort((a,b) => String(a.id).localeCompare(String(b.id)));
-        let turnoIdx = conVideo.length % VIDEO_PERSONAS.length;
+        let turnoIdx = conVideo.length % pool.length;
         sinVideo.forEach(a => {
-          a.videoPersona = VIDEO_PERSONAS[turnoIdx % VIDEO_PERSONAS.length];
+          a.videoPersona = pool[turnoIdx % pool.length];
           turnoIdx++;
           actualizado = true;
           // Persistir en Sheets para que quede asignado de forma permanente
@@ -4408,7 +4414,7 @@ async function cargarDesdeSheets(){
           // NO notificar aquí — el patch corre en cada sync y generaría spam.
           // La notificación al editor ya ocurre una sola vez en crearAsignatura().
         });
-        localStorage.setItem('turnoVideo', VIDEO_PERSONAS[turnoIdx % VIDEO_PERSONAS.length]);
+        localStorage.setItem('turnoVideo', pool[turnoIdx % pool.length]);
         console.log('[PATCH] videoPersona asignada a', sinVideo.length, 'asignaturas (incluye cola)');
       }
     }
