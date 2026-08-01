@@ -954,15 +954,16 @@ function renderCelulasDir(){
     const dfEst = asigActiva?.df||3;
     const velColor = !promCelula ? 'var(--muted)' : parseFloat(promCelula)<=dfEst ? '#16a34a' : '#d97706';
     const velLabel = !promCelula ? 'sin completadas' : parseFloat(promCelula)<=dfEst ? '✅ En plazo' : '⚠️ Sobre DF';
-    const statusLabel = asigActiva ? 'En producción' : 'Libre';
-    const statusColor = asigActiva ? '#d97706' : '#16a34a';
-    const statusBg = asigActiva ? 'rgba(217,119,6,.1)' : 'rgba(22,163,74,.1)';
+    const activaEnEquipo = celulaActiva(id);
+    const statusLabel = !activaEnEquipo ? '⏸ Pausado' : asigActiva ? 'En producción' : 'Libre';
+    const statusColor = !activaEnEquipo ? '#6b7280' : asigActiva ? '#d97706' : '#16a34a';
+    const statusBg = !activaEnEquipo ? 'rgba(107,114,128,.12)' : asigActiva ? 'rgba(217,119,6,.1)' : 'rgba(22,163,74,.1)';
     const barColor = pct>=60 ? '#16a34a' : pct>=30 ? '#d97706' : cfg.color;
     const preAsignadaTxt = preAsignada
       ? `<div style="font-size:11px;color:#6366f1;margin-top:2px;font-weight:500">⏭ Pre-asignada: ${preAsignada.nombre}</div>`
       : '';
 
-    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border)">
+    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);opacity:${activaEnEquipo?1:.55}">
       <div style="width:12px;height:12px;border-radius:50%;background:${cfg.color};flex-shrink:0"></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">${cfg.label}</div>
@@ -990,7 +991,7 @@ function renderCelulasDir(){
   }).join('');
 
   // Video cell
-  const videoPersonas = ['Valentina Rodríguez','Cristina Alisente'];
+  const videoPersonas = VIDEO_PERSONAS;
   const videoHTML = videoPersonas.map(persona=>{
     const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción');
     const enCola = todas.filter(a=>a.videoPersona===persona && a.status==='En espera');
@@ -1001,7 +1002,11 @@ function renderCelulasDir(){
     const colaTxt = enCola.length>0
       ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>a.nombre).join(' · ')}</div>`
       : '';
-    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border)">
+    const activaEnEquipoV = celulaActiva(persona);
+    const statusVLabel = !activaEnEquipoV ? '⏸ Pausado' : `${asigs.length} activas`;
+    const statusVColor = !activaEnEquipoV ? '#6b7280' : '#2563eb';
+    const statusVBg = !activaEnEquipoV ? 'rgba(107,114,128,.12)' : 'rgba(37,99,235,.1)';
+    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);opacity:${activaEnEquipoV?1:.55}">
       <div style="width:12px;height:12px;border-radius:50%;background:#2563eb;flex-shrink:0"></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">🎬 ${persona}</div>
@@ -1013,7 +1018,7 @@ function renderCelulasDir(){
         <div style="font-size:11px;color:var(--muted)">Velocidad prom.</div>
         <div style="font-size:14px;font-weight:700;color:${promV?'#16a34a':'var(--muted)'}">${promV?promV+'d':'—'}</div>
       </div>
-      <div style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:rgba(37,99,235,.1);color:#2563eb;flex-shrink:0">${asigs.length} activas</div>
+      <div style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:${statusVBg};color:${statusVColor};flex-shrink:0">${statusVLabel}</div>
     </div>`;
   }).join('');
 
@@ -1071,7 +1076,7 @@ function renderCelulasDir(){
       <div>
         <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:16px">
           <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Células de diseño</span>
+            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Personas en producción</span>
             <span style="font-size:11px;padding:2px 10px;border-radius:99px;background:var(--bg3);color:var(--muted)">${UNIDADES_DISENO.length} personas</span>
           </div>
           ${celulasHTML}
