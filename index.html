@@ -400,43 +400,43 @@ textarea{resize:vertical;min-height:70px}
             <select id="n-prog">
               <option value="">Seleccionar...</option>
               <option>Cadenas de Suministro (SUPPLY)</option>
-              <option>Ciencia de Datos</option>
+              <option>Ciencia de Datos y Máquinas de Aprendizaje con mención en Inteligencia Artificial</option>
               <option>Ciberseguridad</option>
-              <option>Comunicación Política con mención en Gobernanza y Procesos Electorales</option>
+              <option>Comunicación Política en Gobernanza y Procesos Electorales</option>
               <option>Criminalística</option>
               <option>Derecho Constitucional</option>
               <option>Derecho Laboral</option>
-              <option>Derecho Procesal Penal (PBL)</option>
-              <option>Desarrollo Sostenible</option>
-              <option>Dirección Financiera</option>
+              <option>Derecho Procesal Penal y Litigación Oral</option>
+              <option>Desarrollo Sostenible y Responsabilidad Social Organizacional</option>
+              <option>Dirección Financiera mención en Mercados Internacionales</option>
               <option>Dirección Publicitaria y Creativa</option>
               <option>Educación</option>
-              <option>Educación Básica: Didáctica, Innovación, Evaluación y Diversidad</option>
+              <option>Educación Básica</option>
               <option>Educación, Tecnología e Innovación</option>
               <option>Energías Renovables</option>
               <option>Finanzas Corporativas</option>
-              <option>Gerencia de la Salud</option>
-              <option>Gestión de la Calidad e Innovación</option>
+              <option>Gerencia en Salud</option>
+              <option>Gerencia de la calidad e Innovación</option>
               <option>Gestión de la Seguridad Privada</option>
               <option>Gestión de Proyectos</option>
               <option>Gestión de Riesgos</option>
               <option>Gestión del Talento Humano</option>
-              <option>Gestión del Transporte</option>
+              <option>Gestión del Transporte con mención en Tráfico, Movilidad y Seguridad Vial</option>
               <option>Gestión Deportiva</option>
               <option>Gestión Educativa</option>
               <option>Gestión Estratégica de la Cadena de Suministro</option>
               <option>Gestión Integral de Seguros</option>
               <option>Gestión Pública</option>
-              <option>Ingeniería Automotriz (PBL)</option>
+              <option>Ingeniería Automotriz, Mención en Procesos y Calidad del Servicio Automotriz</option>
               <option>Inteligencia Artificial Aplicada</option>
-              <option>Inteligencia de Negocios</option>
+              <option>Inteligencia de negocios y comportamiento del consumidor</option>
               <option>Marketing y Comunicación</option>
-              <option>Mercadotecnia</option>
+              <option>Mercadotecnia mención estratégica digital</option>
               <option>MKT Digital</option>
               <option>Neuromarketing</option>
               <option>Nutrición Deportiva</option>
               <option>Planificación y Diseño Urbano</option>
-              <option>Protección de Datos (PBL)</option>
+              <option>Protección de Datos</option>
               <option>Psicopedagogía</option>
               <option>Salud Pública</option>
               <option>Seguridad y Salud Ocupacional</option>
@@ -1201,7 +1201,8 @@ const STATE = {
   timers: {},
   sesiones: [],
   intervals: {},
-  emailsEnviados: []
+  emailsEnviados: [],
+  equipoEstado: {} // { Sofia:{activo:true/false, disponibleDesde:'YYYY-MM-DD'|''}, ... } — leído del Sheet
 };
 
 // ════════════════════════════════════════════
@@ -1885,13 +1886,27 @@ function evaluarCargaCelulas(){
 
 const PRE_ASIGN_PCT = 60; // Pre-asignar cuando la célula alcance este % de progreso
 
+// Estado real de disponibilidad de una persona: primero mira el Sheet (pestaña "Equipo",
+// editable por Derly sin tocar código); si esa persona aún no tiene fila ahí, usa el
+// respaldo escrito en CELULA_CFG (para no romper nada si el Sheet no está poblado aún).
+function celulaActiva(id){
+  const enSheet = STATE.equipoEstado[id];
+  if(enSheet && typeof enSheet.activo === 'boolean') return enSheet.activo;
+  return !CELULA_CFG[id]?.pausada;
+}
+function celulaDisponibleDesde(id){
+  const enSheet = STATE.equipoEstado[id];
+  if(enSheet && enSheet.disponibleDesde) return enSheet.disponibleDesde;
+  return CELULA_CFG[id]?.disponibleDesde || null;
+}
+
 function encontrarCelulaDisponible(){
   const carga = evaluarCargaCelulas();
   const hoy = today();
   const entries = Object.entries(carga).filter(([id])=>{
     if(id==='JuanDiego') return false; // el video va aparte
-    if(CELULA_CFG[id]?.pausada) return false; // temporalmente fuera de la operación
-    const disp = CELULA_CFG[id]?.disponibleDesde;
+    if(!celulaActiva(id)) return false; // pausada (Sheet, o respaldo en código)
+    const disp = celulaDisponibleDesde(id);
     if(disp && hoy < disp) return false; // aún no ha ingresado
     return true;
   });
@@ -4263,6 +4278,29 @@ async function cargarDesdeSheets(){
       STATE.emailsEnviados = filaEmails.slice(1).map(r=>String(r[0]||'')).filter(Boolean);
     }
     console.log('[CARGA] Emails_Enviados:', (STATE.emailsEnviados||[]).length, 'ids');
+
+    // Equipo: pestaña self-service donde Derly activa/pausa personas sin tocar código.
+    // Columnas: ID | Nombre | Estado (Activo/Pausado) | Disponible Desde (opcional, YYYY-MM-DD)
+    // Opcional por diseño: si la hoja no existe aún o está vacía, no rompe nada — cada
+    // persona simplemente cae al respaldo escrito en CELULA_CFG (ver celulaActiva()).
+    try{
+      console.log('[CARGA] Leyendo Equipo...');
+      const filaEquipo = await sheetLeer('Equipo');
+      if(filaEquipo && filaEquipo.length > 1){
+        const nuevoEstado = {};
+        filaEquipo.slice(1).forEach(r=>{
+          const id = String(r[0]||'').trim();
+          if(!id) return;
+          const estadoTxt = String(r[2]||'').trim().toLowerCase();
+          nuevoEstado[id] = {
+            activo: estadoTxt === 'activo' ? true : estadoTxt === 'pausado' ? false : true, // por defecto activo si la celda está mal escrita
+            disponibleDesde: String(r[3]||'').trim()
+          };
+        });
+        STATE.equipoEstado = nuevoEstado;
+      }
+      console.log('[CARGA] Equipo:', Object.keys(STATE.equipoEstado).length, 'personas con estado en Sheet');
+    }catch(e){ console.log('[CARGA] Equipo: sin datos (se usa respaldo del código)'); }
 
     // 🛡 BLINDAJE "0 filas": si alguna hoja crítica llegó completamente vacía (0 filas),
     // es una lectura FALLIDA por conexión (estas hojas siempre tienen al menos encabezado).
