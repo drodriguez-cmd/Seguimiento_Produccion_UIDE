@@ -799,8 +799,14 @@ function jsonp(url){
   return new Promise((resolve)=>{
     const cb = 'cb_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
     const script = document.createElement('script');
-    const timer = setTimeout(()=>{ cleanup(); resolve({ok:false,filas:[]}); }, 15000);
-    function cleanup(){ clearTimeout(timer); delete window[cb]; if(script.parentNode) script.parentNode.removeChild(script); }
+    const timer = setTimeout(()=>{ cleanup(); resolve({ok:false,filas:[]}); }, 45000);
+    function cleanup(){
+      clearTimeout(timer);
+      // No borramos window[cb]: si la respuesta llega tarde (después del timeout),
+      // que caiga en una función vacía en vez de lanzar "is not defined" en consola.
+      window[cb] = ()=>{};
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
     window[cb] = (data)=>{ cleanup(); resolve(data); };
     script.onerror = ()=>{ cleanup(); resolve({ok:false,filas:[]}); };
     script.src = url + (url.includes('?')?'&':'?') + 'callback='+cb;
@@ -4265,25 +4271,22 @@ async function cargarDesdeSheets(){
 
   // 2. Intentar sincronizar con Sheets en background
   try{
-    // Sequential calls to avoid overloading the Apps Script
-    console.log('[CARGA] Leyendo Asignaturas...');
-    const filaAsig = await sheetLeer('Asignaturas');
+    // Llamadas EN PARALELO (antes eran una por una, y con las hojas ya grandes
+    // la suma de las 6 esperas se acercaba o pasaba el límite de tiempo por llamada).
+    console.log('[CARGA] Leyendo Asignaturas, Sesiones, Entregables, Timers_Activos, Emails_Enviados y Equipo en paralelo...');
+    const [filaAsig, filaSes, filaEnt, filaTimers, filaEmails, filaEquipo] = await Promise.all([
+      sheetLeer('Asignaturas'),
+      sheetLeer('Sesiones'),
+      sheetLeer('Entregables'),
+      sheetLeer('Timers_Activos'),
+      sheetLeer('Emails_Enviados'),
+      sheetLeer('Equipo')
+    ]);
     console.log('[CARGA] Asignaturas:', filaAsig?.length, 'filas');
-    
-    console.log('[CARGA] Leyendo Sesiones...');
-    const filaSes = await sheetLeer('Sesiones');
     console.log('[CARGA] Sesiones:', filaSes?.length, 'filas');
-    
-    console.log('[CARGA] Leyendo Entregables...');
-    const filaEnt = await sheetLeer('Entregables');
     console.log('[CARGA] Entregables:', filaEnt?.length, 'filas');
-    
-    console.log('[CARGA] Leyendo Timers_Activos...');
-    const filaTimers = await sheetLeer('Timers_Activos');
     console.log('[CARGA] Timers_Activos:', filaTimers?.length, 'filas');
 
-    console.log('[CARGA] Leyendo Emails_Enviados...');
-    const filaEmails = await sheetLeer('Emails_Enviados');
     const emailsCargoOk = !!(filaEmails && filaEmails.length > 0);
     if(emailsCargoOk){
       STATE.emailsEnviados = filaEmails.slice(1).map(r=>String(r[0]||'')).filter(Boolean);
@@ -4295,8 +4298,6 @@ async function cargarDesdeSheets(){
     // Opcional por diseño: si la hoja no existe aún o está vacía, no rompe nada — cada
     // persona simplemente cae al respaldo escrito en CELULA_CFG (ver celulaActiva()).
     try{
-      console.log('[CARGA] Leyendo Equipo...');
-      const filaEquipo = await sheetLeer('Equipo');
       if(filaEquipo && filaEquipo.length > 1){
         const nuevoEstado = {};
         filaEquipo.slice(1).forEach(r=>{
