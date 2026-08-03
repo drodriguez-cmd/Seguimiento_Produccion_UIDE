@@ -447,6 +447,11 @@ textarea{resize:vertical;min-height:70px}
             <div class="fg"><label>Fecha inicio producción</label><input type="date" id="n-inicio"></div>
             <div class="fg"><label>DF estimado (días)</label><input type="number" id="n-df" placeholder="4" min="1" max="60" value="4"></div>
           </div>
+          <div class="fg" style="margin-bottom:14px">
+            <label>Fecha límite de entrega (opcional)</label>
+            <input type="date" id="n-fecha-limite">
+            <small style="color:var(--muted);display:block;margin-top:4px">Si la pones, la prioridad se calcula y se ajusta sola con el tiempo (Alta/Media/Baja), comparando cuánto falta contra el DF estimado. Sin fecha, la prioridad queda siempre en manual.</small>
+          </div>
           <div class="fg" style="margin-bottom:14px"><label>Prioridad</label>
             <select id="n-prioridad">
               <option value="alta">🔴 Alta</option>
@@ -1688,6 +1693,7 @@ function crearAsignatura(){
   const obs=document.getElementById('n-obs').value;
   const link=document.getElementById('n-link').value.trim();
   const prioridad=document.getElementById('n-prioridad')?.value||'media';
+  const fechaLimite=document.getElementById('n-fecha-limite')?.value||'';
   if(!nombre||!prog){ toast('Completa nombre y programa'); return; }
   const esCelula = true; // en el modelo por persona, toda asignatura nueva es de diseño
   const modoIngreso = document.getElementById('n-modo-ingreso')?.value || 'espera';
@@ -1695,6 +1701,8 @@ function crearAsignatura(){
   const statusInicial = esCelula && modoIngreso==='espera' ? 'En espera' : 'En producción';
   const asig={
     id:uid(), nombre, prog, inicio, df, obs, prioridad, status: statusInicial, link,
+    fechaLimite, prioridadManual:false, // al crear, la prioridad seleccionada es solo el punto de partida:
+    // si hay fecha límite, el cálculo automático la ajusta de inmediato (ver abajo).
     tipo: esCelula ? 'celula' : 'estandar',
     celula: celulaId,
     fechaCompletado: '',
@@ -1711,10 +1719,16 @@ function crearAsignatura(){
   if(esCelula){
     asig.videoPersona = avanzarTurnoVideo();
   }
+  // Si puso fecha límite, calculamos la prioridad real de una vez (no la que quedó
+  // seleccionada por defecto en el formulario) — así ya nace con el valor correcto.
+  if(asig.fechaLimite){
+    const p = calcularPrioridadPorFecha(asig);
+    if(p) asig.prioridad = p;
+  }
   STATE.asignaturas.unshift(asig);
   guardarEstadoLocal();
   // Limpiar formulario
-  ['n-nombre','n-df','n-obs','n-link'].forEach(id=>document.getElementById(id).value='');
+  ['n-nombre','n-df','n-obs','n-link','n-fecha-limite'].forEach(id=>document.getElementById(id).value='');
   const modoSel = document.getElementById('n-modo-ingreso');
   if(modoSel) modoSel.value='espera';
   const extraDiv = document.getElementById('celula-form-extra');
@@ -1726,8 +1740,8 @@ function crearAsignatura(){
   renderAsignaturas();
   setSyncStatus('sync');
   sheetGuardar('Asignaturas',
-    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
-    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs, today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', link, asig.videoPersona||'', asig.prioridad||'media']
+    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
+    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs, today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', link, asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No']
   );
   // Notificar Teams si es célula asignada directamente
   if(esCelula && celulaId && modoIngreso==='directo'){
@@ -2007,10 +2021,10 @@ async function intentarAutoAsignar(){
     guardarEstadoLocal();
 
     sheetActualizar('Asignaturas',
-      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
+      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
       [siguiente.id, siguiente.nombre, siguiente.prog, siguiente.inicio, siguiente.df,
        siguiente.status, siguiente.obs||'', today(),
-       'celula', disponible.celulaId, siguiente.fechaCompletado||'', siguiente.fechaInicioProduccion||'', siguiente.link||'', siguiente.videoPersona||'', siguiente.prioridad||'media']
+       'celula', disponible.celulaId, siguiente.fechaCompletado||'', siguiente.fechaInicioProduccion||'', siguiente.link||'', siguiente.videoPersona||'', siguiente.prioridad||'media', siguiente.fechaLimite||'', siguiente.prioridadManual?'Si':'No']
     );
 
     const cfg = CELULA_CFG[disponible.celulaId];
@@ -2031,14 +2045,53 @@ function cambiarPrioridad(asigId, valor){
   if(!asig) return;
   if(!['alta','media','baja'].includes(valor)) return;
   asig.prioridad = valor;
+  asig.prioridadManual = true; // cambio explícito del usuario: el cálculo automático por fecha ya no la toca
   guardarEstadoLocal();
   setSyncStatus('sync');
   sheetActualizar('Asignaturas',
-    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
-    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad]
+    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
+    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad, asig.fechaLimite||'', 'Si']
   );
-  toast('Prioridad actualizada: '+valor);
+  toast('Prioridad actualizada: '+valor+' (manual — el sistema ya no la recalcula sola)');
   renderAsignaturas();
+}
+
+// ════════════════════════════════════════════
+// PRIORIDAD AUTOMÁTICA POR FECHA LÍMITE
+// ════════════════════════════════════════════
+// Compara cuántos días hábiles quedan hasta la fecha límite de entrega contra
+// cuántos días necesita el diseñador (DF estimado). Sin fecha límite, no calcula nada
+// (se respeta la prioridad manual de siempre). Umbrales: ≤1x = Alta · 1x-2x = Media · >2x = Baja.
+function calcularPrioridadPorFecha(asig){
+  if(!asig.fechaLimite) return null;
+  const diasNecesarios = asig.df || 4;
+  const diasRestantes = diasHabilesEntre(today(), asig.fechaLimite);
+  if(diasRestantes <= diasNecesarios) return 'alta';
+  if(diasRestantes <= diasNecesarios*2) return 'media';
+  return 'baja';
+}
+
+function recalcularPrioridadesAutomaticas(){
+  let huboCambios = false;
+  STATE.asignaturas.forEach(asig=>{
+    if(asig.status==='Completada') return;
+    if(asig.prioridadManual) return; // respeta el cambio manual, siempre
+    if(!asig.fechaLimite) return;
+    const nueva = calcularPrioridadPorFecha(asig);
+    if(nueva && nueva !== asig.prioridad){
+      asig.prioridad = nueva;
+      huboCambios = true;
+      sheetActualizar('Asignaturas',
+        ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
+        [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad, asig.fechaLimite||'', 'No']
+      );
+    }
+  });
+  if(huboCambios){
+    guardarEstadoLocal();
+    renderAsignaturas();
+    if(typeof renderCelulasDir==='function') renderCelulasDir();
+  }
 }
 
 async function asignarCelulaManual(asigId, celulaId){
@@ -2075,8 +2128,8 @@ async function asignarCelulaManual(asigId, celulaId){
   setSyncStatus('sync');
   // Guardar en Sheets con el MISMO set de 14 columnas (no corrompe Tipo/Celula)
   sheetActualizar('Asignaturas',
-    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
-    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, nuevoStatus, asig.obs||'', today(), 'celula', celulaId, asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media']
+    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
+    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, nuevoStatus, asig.obs||'', today(), 'celula', celulaId, asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No']
   );
 
   await notificarAsignacion(asig, celulaId, nuevoStatus==='En espera');
@@ -2368,10 +2421,10 @@ function verificarAutoCompletado(asigId){
     guardarEstadoLocal();
     // Save to Sheets
     sheetActualizar('Asignaturas',
-      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
+      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
       [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'Completada',
        asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'',
-       asig.fechaCompletado, asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media']
+       asig.fechaCompletado, asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No']
     );
     renderAsignaturas();
     renderDashboard();
@@ -2468,10 +2521,10 @@ function iniciarTimer(){
   if(huboCambio){
     guardarEstadoLocal();
     sheetActualizar('Asignaturas',
-      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
+      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
       [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status,
        asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'',
-       asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media']
+       asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No']
     );
   }
   STATE.intervals[id]=setInterval(()=>{
@@ -3021,6 +3074,7 @@ function renderAsignaturas(filtro){
             ${frenteHTML('Diseño','🎨',infDis)}
             ${frenteHTML('Video','🎬',infVid)}
             <span>DF est: ${a.df}d</span>
+            ${a.fechaLimite?`<span style="color:${a.prioridad==='alta'?'var(--danger)':'var(--muted)'};font-weight:600">🎯 Límite: ${fmtFecha(a.fechaLimite)}</span>`:''}
             ${sesA.length>0?`<span style="color:var(--video);font-weight:500">📌 Esfuerzo: ${Math.round(sesA.reduce((acc,s)=>acc+s.mins,0)/60)}h en ${sesA.length} sesión${sesA.length>1?'es':''}</span>`:''}
             ${timersA>0?`<span style="color:var(--warn)">▶ ${timersA} timer${timersA>1?'s':''} activo${timersA>1?'s':''}</span>`:''}
           </div>
@@ -3034,6 +3088,7 @@ function renderAsignaturas(filtro){
             <option value="media" ${(a.prioridad||'media')==='media'?'selected':''}>🟡 Media</option>
             <option value="baja" ${a.prioridad==='baja'?'selected':''}>🟢 Baja</option>
           </select>
+          ${a.fechaLimite?`<span style="font-size:9px;color:var(--muted)" title="${a.prioridadManual?'La cambiaste a mano — ya no se recalcula sola':'Se recalcula sola según la fecha límite'}">${a.prioridadManual?'✋ Manual':'🤖 Auto'}</span>`:''}
           ${(a.status==='En espera'||a.status==='En producción'||a.status==='Pausada')?`
           <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-top:6px">
             <select id="asigncel-${a.id}" onclick="event.stopPropagation()" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:white;max-width:150px">
@@ -3205,8 +3260,8 @@ async function cambiarStatus(id){
     guardarEstadoLocal();
     setSyncStatus('sync');
     sheetActualizar('Asignaturas',
-      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
-      [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En espera', asig.obs||'', today(), asig.tipo||'estandar', '', '', '', asig.link||'', asig.videoPersona||'', asig.prioridad||'media']
+      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
+      [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En espera', asig.obs||'', today(), asig.tipo||'estandar', '', '', '', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No']
     );
     toast('▶ Despausada: vuelve a la cola en cero para reasignar');
     // Borrar del Sheet el rastro viejo (sesiones, entregables, timers) para que el cero sea permanente
@@ -3221,8 +3276,8 @@ async function cambiarStatus(id){
   guardarEstadoLocal();
   setSyncStatus('sync');
   sheetActualizar('Asignaturas',
-    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
-    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media']
+    ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
+    [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No']
   );
   renderAsignaturas();
   // Si se PAUSÓ, la célula quedó libre → intentar llenarla desde la cola
@@ -4362,6 +4417,8 @@ async function cargarDesdeSheets(){
         id:String(r[0]||''), nombre:String(r[1]||''), prog:String(r[2]||''), inicio:String(r[3]||today()).split('T')[0],
         df:parseInt(r[4])||4, status:String(r[5]||'En producción'), obs:String(r[6]||''),
         prioridad:(String(r[14]||'').toLowerCase()==='alta'||String(r[14]||'').toLowerCase()==='baja')?String(r[14]).toLowerCase():'media',
+        fechaLimite: String(r[15]||''),
+        prioridadManual: String(r[16]||'').toLowerCase()==='si'||String(r[16]||'').toLowerCase()==='sí',
         // r[7]=Fecha Creacion (ignorada), r[8]=Tipo, r[9]=Celula, r[10]=Fecha Completado, r[11]=Fecha Inicio Produccion, r[12]=Link Curso, r[14]=Prioridad
         tipo: String(r[8]||'estandar').toLowerCase()==='celula'?'celula':'estandar',
         celula: String(r[9]||''),
@@ -4385,6 +4442,8 @@ async function cargarDesdeSheets(){
           local.obs=sa.obs;
           local.df=sa.df;
           local.prioridad=sa.prioridad||local.prioridad||'media';
+          local.fechaLimite=sa.fechaLimite||local.fechaLimite||'';
+          local.prioridadManual = sa.prioridadManual || local.prioridadManual || false;
           // Proteger tipo: si localmente es célula con célula asignada, no degradar a estándar
           if(local.tipo==='celula' && local.celula && sa.tipo!=='celula'){
             // mantener célula local (Sheets quedó desactualizado)
@@ -4441,9 +4500,9 @@ async function cargarDesdeSheets(){
           actualizado = true;
           // Persistir en Sheets para que quede asignado de forma permanente
           sheetActualizar('Asignaturas',
-            ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
+            ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
             [a.id, a.nombre, a.prog, a.inicio, a.df, a.status, a.obs||'', today(),
-             'celula', a.celula||'', a.fechaCompletado||'', a.fechaInicioProduccion||'', a.link||'', a.videoPersona, a.prioridad||'media']
+             'celula', a.celula||'', a.fechaCompletado||'', a.fechaInicioProduccion||'', a.link||'', a.videoPersona, a.prioridad||'media', a.fechaLimite||'', a.prioridadManual?'Si':'No']
           );
           // NO notificar aquí — el patch corre en cada sync y generaría spam.
           // La notificación al editor ya ocurre una sola vez en crearAsignatura().
@@ -4661,9 +4720,9 @@ async function cargarDesdeSheets(){
           notificarTeams(a);
           enviarEmailCompletada(a);
           sheetActualizar('Asignaturas',
-            ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad'],
+            ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual'],
             [a.id,a.nombre,a.prog,a.inicio,a.df,'Completada',a.obs||'',today(),
-             a.tipo||'estandar',a.celula||'',a.fechaCompletado,a.fechaInicioProduccion||'',a.link||'',a.videoPersona||'', a.prioridad||'media']
+             a.tipo||'estandar',a.celula||'',a.fechaCompletado,a.fechaInicioProduccion||'',a.link||'',a.videoPersona||'', a.prioridad||'media', a.fechaLimite||'', a.prioridadManual?'Si':'No']
           );
         }
       });
@@ -4682,6 +4741,8 @@ async function cargarDesdeSheets(){
       else if(ap==='celulas-dir') renderCelulasDir();
     }
     setSyncStatus('ok');
+    // Recalcular prioridad por fecha límite (respeta las que ya fueron cambiadas a mano)
+    recalcularPrioridadesAutomaticas();
     // Tras sincronizar, reevaluar la cola por si quedó algo pendiente de asignar
     intentarAutoAsignar();
   }catch(e){
