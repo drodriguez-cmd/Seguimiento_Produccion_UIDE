@@ -892,6 +892,18 @@ async function sheetLeer(hoja){
   }catch(e){ return []; }
 }
 
+// Trae varias hojas en UNA sola llamada al backend (evita disparar varias ejecuciones
+// simultáneas de Apps Script, que chocan contra su límite de concurrencia y generan
+// timeouts). Si el backend aún no tiene la acción 'leerTodo' (no se ha republicado),
+// devuelve null y el que llama cae a pedirlas una por una como respaldo.
+async function sheetLeerTodo(){
+  try{
+    const url = API+'?accion=leerTodo';
+    const r = await jsonp(url);
+    return (r && r.ok && r.hojas) ? r.hojas : null;
+  }catch(e){ return null; }
+}
+
 function setSyncStatus(estado){
   const el=document.getElementById('sync-status');
   if(!el)return;
@@ -4271,17 +4283,31 @@ async function cargarDesdeSheets(){
 
   // 2. Intentar sincronizar con Sheets en background
   try{
-    // Llamadas EN PARALELO (antes eran una por una, y con las hojas ya grandes
-    // la suma de las 6 esperas se acercaba o pasaba el límite de tiempo por llamada).
-    console.log('[CARGA] Leyendo Asignaturas, Sesiones, Entregables, Timers_Activos, Emails_Enviados y Equipo en paralelo...');
-    const [filaAsig, filaSes, filaEnt, filaTimers, filaEmails, filaEquipo] = await Promise.all([
-      sheetLeer('Asignaturas'),
-      sheetLeer('Sesiones'),
-      sheetLeer('Entregables'),
-      sheetLeer('Timers_Activos'),
-      sheetLeer('Emails_Enviados'),
-      sheetLeer('Equipo')
-    ]);
+    // Preferido: UNA sola llamada que trae las 6 hojas (evita el límite de
+    // ejecuciones simultáneas de Apps Script). Si el backend aún no tiene esta
+    // acción (no se ha republicado el despliegue), cae al método anterior.
+    console.log('[CARGA] Intentando leerTodo (1 sola llamada)...');
+    const todasHojas = await sheetLeerTodo();
+    let filaAsig, filaSes, filaEnt, filaTimers, filaEmails, filaEquipo;
+    if(todasHojas){
+      filaAsig    = todasHojas.Asignaturas     || [];
+      filaSes     = todasHojas.Sesiones        || [];
+      filaEnt     = todasHojas.Entregables     || [];
+      filaTimers  = todasHojas.Timers_Activos  || [];
+      filaEmails  = todasHojas.Emails_Enviados || [];
+      filaEquipo  = todasHojas.Equipo          || [];
+      console.log('[CARGA] leerTodo funcionó ✅ (1 sola llamada al backend)');
+    } else {
+      console.log('[CARGA] leerTodo no disponible aún (backend sin republicar) — usando respaldo en paralelo');
+      [filaAsig, filaSes, filaEnt, filaTimers, filaEmails, filaEquipo] = await Promise.all([
+        sheetLeer('Asignaturas'),
+        sheetLeer('Sesiones'),
+        sheetLeer('Entregables'),
+        sheetLeer('Timers_Activos'),
+        sheetLeer('Emails_Enviados'),
+        sheetLeer('Equipo')
+      ]);
+    }
     console.log('[CARGA] Asignaturas:', filaAsig?.length, 'filas');
     console.log('[CARGA] Sesiones:', filaSes?.length, 'filas');
     console.log('[CARGA] Entregables:', filaEnt?.length, 'filas');
