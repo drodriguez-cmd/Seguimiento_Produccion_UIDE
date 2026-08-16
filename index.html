@@ -565,10 +565,10 @@ textarea{resize:vertical;min-height:70px}
             </select>
           </div>
           <!-- Célula rol selector — shown only for célula asignaturas -->
-          <div class="fg" id="t-celula-rol-wrap" style="display:none"><label>Tu rol en la célula</label>
+          <div class="fg" id="t-celula-rol-wrap" style="display:none"><label>Tu rol en la asignatura</label>
             <select id="t-celula-rol" onchange="updateTareaOptsCelula()">
               <option value="">Seleccionar rol...</option>
-              <option value="lider">👑 Líder de célula</option>
+              <option value="lider">👑 Líder</option>
               <option value="diseno">🎨 Diseñador</option>
               <option value="video_celula">🎬 Editor de video</option>
             </select>
@@ -717,7 +717,7 @@ textarea{resize:vertical;min-height:70px}
 <div class="page active" id="page-celulas-dir">
   <div class="page-header">
     <h1>Dashboard</h1>
-    <p>Vista ejecutiva de producción por célula en tiempo real</p>
+    <p>Vista ejecutiva de producción del equipo en tiempo real</p>
   </div>
   <div id="celulas-dir-content"></div>
 </div>
@@ -2156,7 +2156,7 @@ function recalcularPrioridadesAutomaticas(){
 async function asignarCelulaManual(asigId, celulaId){
   const asig = STATE.asignaturas.find(a=>a.id===asigId);
   if(!asig){ toast('No se encontró la asignatura'); return; }
-  if(!celulaId || !CELULA_CFG[celulaId] || celulaId==='JuanDiego'){ toast('Elige una célula válida'); return; }
+  if(!celulaId || !CELULA_CFG[celulaId] || celulaId==='JuanDiego'){ toast('Elige un diseñador válido'); return; }
 
   // Estado real de la célula destino (sin contar la asignatura que se está moviendo)
   const activa  = STATE.asignaturas.find(a=>a.celula===celulaId && a.tipo==='celula' && a.status==='En producción' && a.id!==asigId);
@@ -2168,9 +2168,9 @@ async function asignarCelulaManual(asigId, celulaId){
     nuevoStatus = 'En producción';
   } else {
     if(reserva){
-      if(!confirm(`La célula ${CELULA_CFG[celulaId].label} ya tiene activa ("${activa.nombre}") y reserva ("${reserva.nombre}") — su cupo está lleno.\n¿Asignar igualmente "${asig.nombre}"? Quedaría como otra en espera.`)) return;
+      if(!confirm(`${CELULA_CFG[celulaId].label} ya tiene activa ("${activa.nombre}") y reserva ("${reserva.nombre}") — su cupo está lleno.\n¿Asignar igualmente "${asig.nombre}"? Quedaría como otra en espera.`)) return;
     } else {
-      if(!confirm(`La célula ${CELULA_CFG[celulaId].label} ya tiene "${activa.nombre}" en producción.\n¿Poner "${asig.nombre}" como su RESERVA? (queda en espera y arranca cuando esa termine)`)) return;
+      if(!confirm(`${CELULA_CFG[celulaId].label} ya tiene "${activa.nombre}" en producción.\n¿Poner "${asig.nombre}" como su RESERVA? (queda en espera y arranca cuando esa termine)`)) return;
     }
     nuevoStatus = 'En espera';
   }
@@ -2326,14 +2326,14 @@ async function notificarSinCola(){
           "body": [
             {
               "type": "TextBlock",
-              "text": "⚠️ Célula disponible sin asignatura",
+              "text": "⚠️ Diseñador disponible sin asignatura",
               "weight": "Bolder",
               "size": "Large",
               "color": "Warning"
             },
             {
               "type": "TextBlock",
-              "text": "Hay células disponibles pero no hay asignaturas en la cola de espera.",
+              "text": "Hay diseñadores disponibles pero no hay asignaturas en la cola de espera.",
               "wrap": true
             },
             {
@@ -2543,7 +2543,7 @@ function iniciarTimer(){
   let rol;
   if(esCelula){
     const rolCelula=document.getElementById('t-celula-rol').value;
-    if(!rolCelula){ toast('Selecciona tu rol en la célula'); return; }
+    if(!rolCelula){ toast('Selecciona tu rol en la asignatura'); return; }
     rol = rolCelula==='lider'?'coord':rolCelula==='diseno'?'disenador':'video';
   } else {
     rol=document.getElementById('t-rol').value;
