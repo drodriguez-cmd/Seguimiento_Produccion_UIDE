@@ -1947,11 +1947,18 @@ function evaluarCargaCelulas(){
 const PRE_ASIGN_PCT = 60; // Pre-asignar cuando la célula alcance este % de progreso
 
 // Estado real de disponibilidad de una persona: primero mira el Sheet (pestaña "Equipo",
-// editable por Derly sin tocar código); si esa persona aún no tiene fila ahí, usa el
-// respaldo escrito en CELULA_CFG (para no romper nada si el Sheet no está poblado aún).
+// editable por Derly sin tocar código). Si esa persona tiene una fecha en "Disponible Desde",
+// ESA FECHA MANDA por completo: antes de la fecha, pausada; desde la fecha en adelante,
+// activa automáticamente — sin importar qué diga la columna "Estado" (así Derly no tiene
+// que acordarse de volver a cambiar "Pausado" a "Activo" a mano el día que alguien regresa).
+// Sin fecha, se usa la columna "Estado" tal cual. Si esa persona aún no tiene fila en el
+// Sheet, se usa el respaldo escrito en CELULA_CFG.
 function celulaActiva(id){
   const enSheet = STATE.equipoEstado[id];
-  if(enSheet && typeof enSheet.activo === 'boolean') return enSheet.activo;
+  if(enSheet){
+    if(enSheet.disponibleDesde) return today() >= enSheet.disponibleDesde;
+    if(typeof enSheet.activo === 'boolean') return enSheet.activo;
+  }
   return !CELULA_CFG[id]?.pausada;
 }
 function celulaDisponibleDesde(id){
