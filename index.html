@@ -2096,6 +2096,40 @@ function calcularPrioridadPorFecha(asig){
   return 'baja';                                      // todavía hay margen de sobra
 }
 
+// ════════════════════════════════════════════
+// LIBERAR ASIGNATURAS DE PERSONAS QUE SE PAUSAN
+// ════════════════════════════════════════════
+// Si alguien pasa a "Pausado" en el Sheet y tenía algo asignado que AÚN no arrancó
+// (sin sesiones ni timers), se la quitamos y vuelve a la cola — para que otra persona
+// libre la tome, en vez de quedar colgada esperando a alguien que no va a trabajar.
+// Lo que YA está en producción real (con trabajo empezado) NO se toca.
+// La prioridad (y si era manual) se conserva exactamente igual — solo cambia célula y status.
+function liberarAsignaturasDePausados(){
+  let huboCambios = false;
+  STATE.asignaturas.forEach(asig=>{
+    if(asig.tipo!=='celula' || !asig.celula) return;
+    if(asig.status==='Completada' || asig.status==='Pausada') return;
+    if(celulaActiva(asig.celula)) return; // la persona sigue activa, no tocar
+    if(arrancoAsig(asig)) return; // ya tiene trabajo real empezado, no se le quita
+
+    const celulaAnterior = CELULA_CFG[asig.celula]?.label || asig.celula;
+    asig.celula = '';
+    asig.status = 'En espera';
+    asig.fechaInicioProduccion = '';
+    huboCambios = true;
+    sheetActualizar('Asignaturas',
+      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
+      [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En espera', asig.obs||'', today(), asig.tipo||'estandar', '', asig.fechaCompletado||'', '', asig.link||'', asig.videoPersona||'', asig.prioridad, asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
+    );
+    toast(`↩ "${asig.nombre}" liberada de ${celulaAnterior} (pausada) — vuelve a la cola con prioridad ${asig.prioridad}`);
+  });
+  if(huboCambios){
+    guardarEstadoLocal();
+    renderAsignaturas();
+    if(typeof renderCelulasDir==='function') renderCelulasDir();
+  }
+}
+
 function recalcularPrioridadesAutomaticas(){
   let huboCambios = false;
   STATE.asignaturas.forEach(asig=>{
@@ -4772,6 +4806,8 @@ async function cargarDesdeSheets(){
       else if(ap==='celulas-dir') renderCelulasDir();
     }
     setSyncStatus('ok');
+    // Si alguien se pausó y tenía algo sin arrancar, liberarlo primero (conserva su prioridad)
+    liberarAsignaturasDePausados();
     // Recalcular prioridad por fecha límite (respeta las que ya fueron cambiadas a mano)
     recalcularPrioridadesAutomaticas();
     // Tras sincronizar, reevaluar la cola por si quedó algo pendiente de asignar
