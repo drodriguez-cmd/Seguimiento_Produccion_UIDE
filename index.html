@@ -542,7 +542,10 @@ textarea{resize:vertical;min-height:70px}
         <div class="card-head"><span class="card-title">Iniciar timer de rol</span></div>
         <div class="form-section">
           <div class="fg"><label>Asignatura</label>
-            <select id="t-asig" onchange="onAsigTimerChange()"><option value="">Seleccionar asignatura...</option></select>
+            <input type="text" id="t-asig-buscar" list="t-asig-datalist" placeholder="🔍 Escribe el nombre o la maestría..." autocomplete="off" oninput="onAsigSearchInput()">
+            <datalist id="t-asig-datalist"></datalist>
+            <input type="hidden" id="t-asig">
+            <small id="t-asig-noencontrado" style="display:none;color:var(--danger);margin-top:4px">No encontré esa asignatura exacta — elígela de las sugerencias</small>
           </div>
           <div class="fg"><label>Nombre de la persona</label>
             <input type="text" id="t-nombre" placeholder="Ej: Juliana Zárate" autocomplete="off">
@@ -1802,6 +1805,23 @@ function crearAsignatura(){
   }
   goPage('asignaturas',document.querySelector('[onclick*=asignaturas]'));
 }
+// Traduce lo que la persona escribió/eligió en el buscador de asignatura a su ID real
+// (el resto del flujo sigue funcionando igual, porque #t-asig sigue teniendo el ID).
+function onAsigSearchInput(){
+  const texto=document.getElementById('t-asig-buscar')?.value.trim()||'';
+  const hidden=document.getElementById('t-asig');
+  const aviso=document.getElementById('t-asig-noencontrado');
+  const encontrada=STATE.asignaturas.find(a=>a.nombre===texto);
+  if(encontrada){
+    hidden.value=encontrada.id;
+    if(aviso) aviso.style.display='none';
+    onAsigTimerChange();
+  } else {
+    hidden.value='';
+    if(aviso) aviso.style.display = texto ? 'block' : 'none';
+  }
+}
+
 function onAsigTimerChange(){
   const asigId = document.getElementById('t-asig').value;
   const asig = STATE.asignaturas.find(a=>a.id===asigId);
@@ -2871,12 +2891,20 @@ function renderTimers(){
   // Cargar ubicación guardada del usuario
   obtenerUbicacion();
   
-  // Poblar select de asignaturas
-  const sel=document.getElementById('t-asig');
-  const cur=sel.value;
-  sel.innerHTML='<option value="">Seleccionar asignatura...</option>';
-  STATE.asignaturas.forEach(a=>{ const o=document.createElement('option'); o.value=a.id; o.textContent=a.nombre; sel.appendChild(o); });
-  if(cur) sel.value=cur;
+  // Poblar datalist de búsqueda de asignaturas (buscador en vez de lista desplegable larga)
+  const dl=document.getElementById('t-asig-datalist');
+  if(dl){
+    dl.innerHTML='';
+    STATE.asignaturas.forEach(a=>{ const o=document.createElement('option'); o.value=a.nombre; dl.appendChild(o); });
+  }
+  // Si ya había una asignatura elegida (ej. al refrescar la lista mientras se llena el form),
+  // mantener el texto visible sincronizado con el ID guardado en el campo oculto.
+  const idPrevio=document.getElementById('t-asig')?.value;
+  if(idPrevio){
+    const prevAsig=STATE.asignaturas.find(a=>a.id===idPrevio);
+    const buscarInput=document.getElementById('t-asig-buscar');
+    if(prevAsig && buscarInput && !buscarInput.value) buscarInput.value=prevAsig.nombre;
+  }
   // Populate sesiones filter too
   const selF=document.getElementById('filtro-timer-asig');
   if(selF){ const curF=selF.value; selF.innerHTML='<option value="">Todas las asignaturas</option>'; STATE.asignaturas.forEach(a=>{ const o=document.createElement('option'); o.value=a.id; o.textContent=a.nombre; selF.appendChild(o); }); if(curF) selF.value=curF; }
