@@ -1373,7 +1373,12 @@ function diasResumen(d){ return `${d.toFixed(2)}d`; }
 function fmtFecha(f){
   if(!f||f==='—') return '—';
   try{
-    const d=new Date(f);
+    // Si viene como YYYY-MM-DD (con o sin hora detrás), armamos la fecha en LOCAL
+    // usando año/mes/día directos — evita que new Date("2026-09-23") se interprete
+    // como medianoche UTC y, al mostrarla en hora Colombia (o cualquier zona detrás
+    // de UTC), se corra un día hacia atrás (23 → 22).
+    const m = String(f).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const d = m ? new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3])) : new Date(f);
     if(isNaN(d.getTime())) return f;
     return d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'/');
   }catch(e){ return f; }
