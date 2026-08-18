@@ -455,12 +455,12 @@ textarea{resize:vertical;min-height:70px}
           <div class="fg" style="margin-bottom:14px">
             <label>Fecha en que debería entrar a producción (opcional)</label>
             <input type="date" id="n-fecha-entrada">
-            <small style="color:var(--muted);display:block;margin-top:4px">Según tu planeación (tus 15 días supuestos). Esta es la que mueve la prioridad automática — si ya pasó o es hoy, queda en Alta.</small>
+            <small style="color:var(--muted);display:block;margin-top:4px">Según tu planeación (tus 15 días supuestos). Si ya pasó o es hoy, la prioridad sube a Alta directo.</small>
           </div>
           <div class="fg" style="margin-bottom:14px">
             <label>Fecha de lanzamiento (opcional)</label>
             <input type="date" id="n-fecha-limite">
-            <small style="color:var(--muted);display:block;margin-top:4px">Cuando el estudiante la ve — pasa por un proceso ajeno a fábrica, no dispara la prioridad. Solo informativa.</small>
+            <small style="color:var(--muted);display:block;margin-top:4px">Cuando el estudiante la ve. Esta es la que manda la prioridad (comparando cuánto falta contra el DF estimado) — lo que pase después de que entreguen no es problema de fábrica.</small>
           </div>
           <div class="fg" style="margin-bottom:14px"><label>Prioridad</label>
             <select id="n-prioridad">
@@ -1037,15 +1037,15 @@ function renderCelulasDir(){
   // Video cell
   const videoPersonas = VIDEO_PERSONAS;
   const videoHTML = videoPersonas.map(persona=>{
-    const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción' && !videoCompletoAsig(a));
-    const enCola = todas.filter(a=>a.videoPersona===persona && a.status==='En espera');
+    const asigs = ordenarPorPrioridad(todas.filter(a=>a.videoPersona===persona && a.status==='En producción' && !videoCompletoAsig(a)));
+    const enCola = ordenarPorPrioridad(todas.filter(a=>a.videoPersona===persona && a.status==='En espera'));
     const esperandoDiseno = todas.filter(a=>a.videoPersona===persona && a.status==='En producción' && videoCompletoAsig(a) && !disenoCompletoAsig(a));
     const completadasV = todas.filter(a=>a.videoPersona===persona && a.status==='Completada' && a.tipo==='celula');
     const promV = completadasV.length>0
       ? (completadasV.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasV.length).toFixed(1)
       : null;
     const colaTxt = enCola.length>0
-      ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>a.nombre).join(' · ')}</div>`
+      ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>PRIORIDAD_EMOJI[a.prioridad||'media']+' '+a.nombre).join(' · ')}</div>`
       : '';
     const esperandoDisenoTxt = esperandoDiseno.length>0
       ? `<div style="font-size:11px;color:#a855f7;margin-top:2px;font-weight:500">✅🎨 Video listo, esperando diseño: ${esperandoDiseno.map(a=>a.nombre).join(' · ')}</div>`
@@ -1059,7 +1059,7 @@ function renderCelulasDir(){
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">🎬 ${persona}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${asigs.length} activa${asigs.length!==1?'s':''} · ${enCola.length} en cola</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigs.map(a=>a.nombre).join(' · ')||'Sin asignaturas activas'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigs.map(a=>PRIORIDAD_EMOJI[a.prioridad||'media']+' '+a.nombre).join(' · ')||'Sin asignaturas activas'}</div>
         ${colaTxt}
         ${esperandoDisenoTxt}
       </div>
@@ -1072,14 +1072,14 @@ function renderCelulasDir(){
   }).join('');
 
   // Cola
-  const colaAsigs = todas.filter(a=>a.status==='En espera');
+  const colaAsigs = ordenarPorPrioridad(todas.filter(a=>a.status==='En espera'));
   const colaHTML = colaAsigs.length===0
     ? `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No hay asignaturas en cola ✅</div>`
     : colaAsigs.map((a,i)=>`
       <div style="display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border)">
         <div style="width:22px;height:22px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted);flex-shrink:0">${i+1}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.nombre}</div>
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${PRIORIDAD_EMOJI[a.prioridad||'media']} ${a.nombre}</div>
           <div style="font-size:11px;color:var(--muted)">${a.prog} · DF: ${a.df||3}d</div>
         </div>
         <div style="font-size:10px;padding:2px 9px;border-radius:99px;background:#eef2ff;color:#6366f1;font-weight:600">${a.prog.split(' ')[0]}</div>
@@ -1763,9 +1763,9 @@ function crearAsignatura(){
   if(esCelula){
     asig.videoPersona = avanzarTurnoVideo();
   }
-  // Si puso fecha de entrada, calculamos la prioridad real de una vez (no la que quedó
-  // seleccionada por defecto en el formulario) — así ya nace con el valor correcto.
-  if(asig.fechaDeberiaEntrar){
+  // Si puso alguna fecha (lanzamiento o entrada), calculamos la prioridad real de una vez
+  // (no la que quedó seleccionada por defecto en el formulario) — así ya nace correcta.
+  if(asig.fechaLimite || asig.fechaDeberiaEntrar){
     const p = calcularPrioridadPorFecha(asig);
     if(p) asig.prioridad = p;
   }
@@ -2119,13 +2119,40 @@ function cambiarPrioridad(asigId, valor){
 // entrar a producción (según tu planeación, no la fecha de lanzamiento al estudiante —
 // esa pasa por un proceso ajeno a fábrica y tiene su propio colchón). Si ya llegó o pasó
 // esa fecha, es urgente. Sin esa fecha, no calcula nada (se respeta la prioridad manual).
+// Mira ambas fechas (si existen) y usa la señal MÁS URGENTE de las dos:
+// - Lanzamiento: días hábiles restantes vs. DF estimado (≤1x=Alta · ≤2x=Media · resto=Baja).
+//   Nos enfocamos solo en lo nuestro — lo que pase después del lanzamiento (cargue, etc.)
+//   no es problema nuestro, así que no se le agrega ningún colchón extra.
+// - Debía entrar: si ya llegó o pasó esa fecha → Alta directo (venía atrasada desde el plan).
+// Sin ninguna de las dos fechas, no calcula nada (se respeta la prioridad manual de siempre).
+// Orden compartido para cualquier lista de asignaturas: Alta primero, luego Media, luego Baja;
+// dentro del mismo nivel, la que lleva más tiempo esperando (fecha de inicio más antigua) primero.
+// Se usa tanto para diseño como para video, así el "por dónde sigo" es siempre el mismo criterio.
+const PRIORIDAD_RANK = {alta:0, media:1, baja:2};
+const PRIORIDAD_EMOJI = {alta:'🔴', media:'🟡', baja:'🟢'};
+function ordenarPorPrioridad(lista){
+  return [...lista].sort((a,b)=>{
+    const pa = PRIORIDAD_RANK[a.prioridad||'media'], pb = PRIORIDAD_RANK[b.prioridad||'media'];
+    if(pa!==pb) return pa-pb;
+    return new Date(a.inicio)-new Date(b.inicio);
+  });
+}
+
 function calcularPrioridadPorFecha(asig){
-  if(!asig.fechaDeberiaEntrar) return null;
   const diasNecesarios = asig.df || 4;
-  const diasHastaEntrada = diasHabilesEntre(today(), asig.fechaDeberiaEntrar);
-  if(diasHastaEntrada <= 0) return 'alta';           // ya debió entrar o es hoy
-  if(diasHastaEntrada <= diasNecesarios) return 'media'; // entra dentro del próximo ciclo de producción
-  return 'baja';                                      // todavía hay margen de sobra
+  const rank = {alta:0, media:1, baja:2};
+  const candidatos = [];
+
+  if(asig.fechaLimite){
+    const diasRestantes = diasHabilesEntre(today(), asig.fechaLimite);
+    candidatos.push(diasRestantes <= diasNecesarios ? 'alta' : diasRestantes <= diasNecesarios*2 ? 'media' : 'baja');
+  }
+  if(asig.fechaDeberiaEntrar){
+    const diasHastaEntrada = diasHabilesEntre(today(), asig.fechaDeberiaEntrar);
+    candidatos.push(diasHastaEntrada <= 0 ? 'alta' : diasHastaEntrada <= diasNecesarios ? 'media' : 'baja');
+  }
+  if(!candidatos.length) return null;
+  return candidatos.sort((a,b)=>rank[a]-rank[b])[0]; // la más urgente de las que existan
 }
 
 // ════════════════════════════════════════════
@@ -2167,7 +2194,7 @@ function recalcularPrioridadesAutomaticas(){
   STATE.asignaturas.forEach(asig=>{
     if(asig.status==='Completada') return;
     if(asig.prioridadManual) return; // respeta el cambio manual, siempre
-    if(!asig.fechaDeberiaEntrar) return;
+    if(!asig.fechaLimite && !asig.fechaDeberiaEntrar) return;
     const nueva = calcularPrioridadPorFecha(asig);
     if(nueva && nueva !== asig.prioridad){
       asig.prioridad = nueva;
@@ -3183,7 +3210,7 @@ function renderAsignaturas(filtro){
             <option value="media" ${(a.prioridad||'media')==='media'?'selected':''}>🟡 Media</option>
             <option value="baja" ${a.prioridad==='baja'?'selected':''}>🟢 Baja</option>
           </select>
-          ${a.fechaDeberiaEntrar?`<span style="font-size:9px;color:var(--muted)" title="${a.prioridadManual?'La cambiaste a mano — ya no se recalcula sola':'Se recalcula sola según la fecha en que debía entrar'}">${a.prioridadManual?'✋ Manual':'🤖 Auto'}</span>`:''}
+          ${(a.fechaLimite||a.fechaDeberiaEntrar)?`<span style="font-size:9px;color:var(--muted)" title="${a.prioridadManual?'La cambiaste a mano — ya no se recalcula sola':'Se recalcula sola según fecha de lanzamiento / debía entrar'}">${a.prioridadManual?'✋ Manual':'🤖 Auto'}</span>`:''}
           ${(a.status==='En espera'||a.status==='En producción'||a.status==='Pausada')?`
           <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-top:6px">
             <select id="asigncel-${a.id}" onclick="event.stopPropagation()" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:white;max-width:150px">
@@ -4850,6 +4877,11 @@ async function cargarDesdeSheets(){
 }
 
 initModo();
+
+// Resincronización completa cada 15 minutos (mientras esta pestaña esté abierta):
+// vuelve a leer todo el Sheet, recalcula prioridades por fecha y reintenta asignar
+// la cola — así queda "vivo" sin que alguien tenga que refrescar la página a mano.
+setInterval(()=>{ cargarDesdeSheets(); }, 900000);
 
 function yaSeEnvioEmail(asigId){
   // Global: registro compartido en la hoja Emails_Enviados (cualquier equipo/usuario)
