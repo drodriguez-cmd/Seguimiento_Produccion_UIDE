@@ -980,8 +980,11 @@ function renderCelulasDir(){
   // Personas de diseño — estado y progreso (modelo por persona)
   const celulasHTML = UNIDADES_DISENO.map((id)=>{
     const cfg = CELULA_CFG[id];
-    const asigActiva = todas.find(a=>a.celula===id && a.status==='En producción');
-    const preAsignada = todas.find(a=>a.celula===id && a.status==='En espera');
+    // Solo cuenta como "activa" si su DISEÑO aún no está completo (el video puede seguir pendiente sin bloquearla)
+    const asigActiva = todas.find(a=>a.celula===id && a.status==='En producción' && !disenoCompletoAsig(a));
+    const preAsignada = todas.find(a=>a.celula===id && a.status==='En espera' && !disenoCompletoAsig(a));
+    // Asignaturas donde YA terminó su diseño pero siguen vivas esperando a que video cierre
+    const esperandoVideo = todas.filter(a=>a.celula===id && a.status==='En producción' && disenoCompletoAsig(a) && !videoCompletoAsig(a));
     const pct = asigActiva ? progAsig(asigActiva) : 0;
     const dias = asigActiva ? diasAsig(asigActiva).toFixed(1) : '0';
     const completadasCelula = todas.filter(a=>a.celula===id && a.status==='Completada' && a.tipo==='celula');
@@ -999,6 +1002,9 @@ function renderCelulasDir(){
     const preAsignadaTxt = preAsignada
       ? `<div style="font-size:11px;color:#6366f1;margin-top:2px;font-weight:500">⏭ Pre-asignada: ${preAsignada.nombre}</div>`
       : '';
+    const esperandoVideoTxt = esperandoVideo.length>0
+      ? `<div style="font-size:11px;color:#a855f7;margin-top:2px;font-weight:500">✅🎬 Diseño listo, esperando video: ${esperandoVideo.map(a=>a.nombre).join(' · ')}</div>`
+      : '';
 
     return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);opacity:${activaEnEquipo?1:.55}">
       <div style="width:12px;height:12px;border-radius:50%;background:${cfg.color};flex-shrink:0"></div>
@@ -1007,6 +1013,7 @@ function renderCelulasDir(){
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${cfg.lider} · ${cfg.disenador}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigActiva?asigActiva.nombre:'Sin asignatura activa'}</div>
         ${preAsignadaTxt}
+        ${esperandoVideoTxt}
       </div>
       <div style="width:100px;flex-shrink:0">
         <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px">
@@ -1030,14 +1037,18 @@ function renderCelulasDir(){
   // Video cell
   const videoPersonas = VIDEO_PERSONAS;
   const videoHTML = videoPersonas.map(persona=>{
-    const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción');
+    const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción' && !videoCompletoAsig(a));
     const enCola = todas.filter(a=>a.videoPersona===persona && a.status==='En espera');
+    const esperandoDiseno = todas.filter(a=>a.videoPersona===persona && a.status==='En producción' && videoCompletoAsig(a) && !disenoCompletoAsig(a));
     const completadasV = todas.filter(a=>a.videoPersona===persona && a.status==='Completada' && a.tipo==='celula');
     const promV = completadasV.length>0
       ? (completadasV.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasV.length).toFixed(1)
       : null;
     const colaTxt = enCola.length>0
       ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>a.nombre).join(' · ')}</div>`
+      : '';
+    const esperandoDisenoTxt = esperandoDiseno.length>0
+      ? `<div style="font-size:11px;color:#a855f7;margin-top:2px;font-weight:500">✅🎨 Video listo, esperando diseño: ${esperandoDiseno.map(a=>a.nombre).join(' · ')}</div>`
       : '';
     const activaEnEquipoV = celulaActiva(persona);
     const statusVLabel = !activaEnEquipoV ? '⏸ Pausado' : `${asigs.length} activas`;
@@ -1050,6 +1061,7 @@ function renderCelulasDir(){
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${asigs.length} activa${asigs.length!==1?'s':''} · ${enCola.length} en cola</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigs.map(a=>a.nombre).join(' · ')||'Sin asignaturas activas'}</div>
         ${colaTxt}
+        ${esperandoDisenoTxt}
       </div>
       <div style="text-align:center;min-width:70px">
         <div style="font-size:11px;color:var(--muted)">Velocidad prom.</div>
@@ -1674,6 +1686,18 @@ function progAsig(a){
   }
   return total>0?Math.round(done/total*100):0;
 }
+// ¿Ya terminó el frente de DISEÑO de esta asignatura? (independiente de si video ya terminó o no)
+function disenoCompletoAsig(a){
+  if(!a?.assets) return false;
+  const keys=['html','genially','infografia','imagenes'];
+  return ['u1','u2','u3'].every(u=> a.assets[u] && keys.every(k=>a.assets[u][k]));
+}
+// ¿Ya terminó el frente de VIDEO de esta asignatura? (independiente de si diseño ya terminó o no)
+function videoCompletoAsig(a){
+  if(!a?.assets?.global) return false;
+  const keys=['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'];
+  return keys.every(k=> a.assets.global[k]);
+}
 function rolColor(rol){ return ROL_CFG[rol]?.color||'var(--muted)'; }
 function rolLabel(rol){ return ROL_CFG[rol]?.label||rol; }
 function rolIcon(rol){ return ROL_CFG[rol]?.icon||'●'; }
@@ -1927,9 +1951,12 @@ const EQUIPO_EMAILS = {
 // ════════════════════════════════════════════
 
 function estadoCelula(celulaId){
-  // Asignaturas de esta célula que NO están completadas
+  // Asignaturas de esta persona que NO están completadas Y cuyo DISEÑO aún no terminó.
+  // Si el diseño ya está listo, esa asignatura deja de "ocupar" a la persona — aunque
+  // el video siga pendiente, eso ya no depende de ella (queda viva en segundo plano
+  // hasta que ambos frentes cierren, pero no le bloquea tomar la siguiente).
   const suyas = STATE.asignaturas.filter(a =>
-    a.celula===celulaId && a.tipo==='celula' && a.status!=='Completada'
+    a.celula===celulaId && a.tipo==='celula' && a.status!=='Completada' && !disenoCompletoAsig(a)
   );
   // Activa = la que se está trabajando. Una Pausada NO ocupa la célula (la deja libre).
   const activa = suyas.find(a => a.status==='En producción') || null;
