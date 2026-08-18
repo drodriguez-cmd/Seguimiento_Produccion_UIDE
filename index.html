@@ -2189,35 +2189,51 @@ function liberarAsignaturasDePausados(){
   }
 }
 
-// Versión de video: como el video no tiene "cola de asignación" (ya nace con editor
-// desde que se crea la materia), cuando alguien de video se pausa no la devolvemos a
-// ningún lado — la REASIGNAMOS directo a quien le toque por turno entre los que sigan
-// activos. Solo se toca si el video de esa asignatura AÚN no tiene trabajo real empezado
-// (sin sesiones ni timers de video) — lo que ya se editó, se queda con la misma persona.
-function liberarVideoDePausados(){
-  let huboCambios = false;
-  const hayActivos = VIDEO_PERSONAS.some(p=>celulaActiva(p));
-  if(!hayActivos) return; // si nadie de video está activo, no hay a quién reasignarle
-  STATE.asignaturas.forEach(asig=>{
-    if(asig.tipo!=='celula' || !asig.videoPersona) return;
-    if(asig.status==='Completada' || asig.status==='Pausada') return;
-    if(videoCompletoAsig(asig)) return; // ya terminó su video, no se toca
-    if(celulaActiva(asig.videoPersona)) return; // su editor sigue activo, no tocar
-    if(infoFrente(asig, true).iniciado) return; // ya tiene trabajo real de video empezado, se queda igual
+// Detecta si el equipo ACTIVO de video cambió desde la última vez que se revisó
+// (alguien se pausó o alguien volvió) — solo en ese momento vale la pena reorganizar
+// todo; si nadie cambió, no tocamos nada para no mover cosas sin necesidad.
+function equipoVideoActivoCambio(){
+  const actual = VIDEO_PERSONAS.filter(p=>celulaActiva(p)).sort().join(',');
+  const anterior = localStorage.getItem('videoActivoUltimo');
+  localStorage.setItem('videoActivoUltimo', actual);
+  return anterior !== null && anterior !== actual;
+}
 
+// Reparte TODO el trabajo de video que aún no ha arrancado (en cola + activas sin tocar)
+// entre quienes estén activos EN ESTE MOMENTO, respetando prioridad (las más urgentes se
+// reparten primero) — para que sea justo con quien tenía poco y con quien vuelve de pausa.
+// Se dispara solo cuando cambia quién está activo (se pausa alguien o alguien vuelve),
+// no en cada sincronización. Lo que YA tiene trabajo real de video empezado no se toca.
+function rebalancearVideoEquipo(){
+  const pool = VIDEO_PERSONAS.filter(p=>celulaActiva(p));
+  if(!pool.length) return; // nadie activo, no hay a quién repartirle
+
+  const movibles = ordenarPorPrioridad(STATE.asignaturas.filter(a=>
+    a.tipo==='celula' && a.videoPersona && a.status!=='Completada' && a.status!=='Pausada' &&
+    !videoCompletoAsig(a) && !infoFrente(a, true).iniciado
+  ));
+  if(!movibles.length) return;
+
+  let huboCambios = false;
+  const cambios = [];
+  movibles.forEach((asig, i)=>{
+    const nuevo = pool[i % pool.length];
+    if(asig.videoPersona === nuevo) return; // ya le tocaba a esa misma persona, no mover
     const anterior = asig.videoPersona;
-    asig.videoPersona = siguienteVideoPersona();
+    asig.videoPersona = nuevo;
     huboCambios = true;
+    cambios.push(`${asig.nombre} (${anterior}→${nuevo})`);
     sheetActualizar('Asignaturas',
       ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
       [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona, asig.prioridad, asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
     );
-    toast(`🎬 "${asig.nombre}" pasada de ${anterior} (pausado/a) a ${asig.videoPersona}`);
   });
   if(huboCambios){
     guardarEstadoLocal();
     renderAsignaturas();
     if(typeof renderCelulasDir==='function') renderCelulasDir();
+    toast(`🎬 Video rebalanceado entre ${pool.join(', ')} — ${cambios.length} movida${cambios.length!==1?'s':''}`);
+    console.log('[REBALANCEO VIDEO]', cambios);
   }
 }
 
@@ -4899,7 +4915,7 @@ async function cargarDesdeSheets(){
     setSyncStatus('ok');
     // Si alguien se pausó y tenía algo sin arrancar, liberarlo primero (conserva su prioridad)
     liberarAsignaturasDePausados();
-    liberarVideoDePausados();
+    if(equipoVideoActivoCambio()) rebalancearVideoEquipo();
     // Recalcular prioridad por fecha límite (respeta las que ya fueron cambiadas a mano)
     recalcularPrioridadesAutomaticas();
     // Tras sincronizar, reevaluar la cola por si quedó algo pendiente de asignar
