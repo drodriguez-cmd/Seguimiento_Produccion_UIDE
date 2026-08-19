@@ -849,15 +849,19 @@ async function sheetGuardar(hoja, encabezados, fila){
 
 async function sheetTimerActivo(accion, timer){
   // accion: 'guardar' al iniciar, 'borrar' al completar (usando actualizar con estado=Completado)
+  // Guardamos SIEMPRE los minutos acumulados hasta este momento (aunque siga "Activo"),
+  // para que si el timer queda pausado y se recupera desde otro dispositivo/navegador,
+  // se sepa cuánto tiempo real ya se había trabajado — antes esto se perdía y quedaba en 0.
+  const minsAcumulados = Math.round((timer.elapsed||0)/60000);
   if(accion==='guardar'){
     sheetActualizar('Timers_Activos',
-      ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado'],
-      [timer.id, timer.persona, ROL_CFG[timer.rol]?.label||timer.rol, timer.tarea, timer.unidad||'', timer.asigNombre, new Date(timer.inicio).toLocaleString('es-CO'), 'Activo']
+      ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado','Minutos Acumulados'],
+      [timer.id, timer.persona, ROL_CFG[timer.rol]?.label||timer.rol, timer.tarea, timer.unidad||'', timer.asigNombre, new Date(timer.inicio).toLocaleString('es-CO'), 'Activo', 0]
     );
   } else {
     sheetActualizar('Timers_Activos',
-      ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado'],
-      [timer.id, timer.persona, ROL_CFG[timer.rol]?.label||timer.rol, timer.tarea, timer.unidad||'', timer.asigNombre, new Date(timer.inicio).toLocaleString('es-CO'), 'Completado']
+      ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado','Minutos Acumulados'],
+      [timer.id, timer.persona, ROL_CFG[timer.rol]?.label||timer.rol, timer.tarea, timer.unidad||'', timer.asigNombre, new Date(timer.inicio).toLocaleString('es-CO'), 'Completado', minsAcumulados]
     );
   }
 }
@@ -2732,7 +2736,10 @@ function pausarTimer(id){
       id:r.id, persona:r.persona, rol:r.rol, tarea:r.tarea, unidad:r.unidad,
       asigId: (STATE.asignaturas.find(a=>a.nombre===r.asigNombre)?.id)||'',
       asigNombre:r.asigNombre,
-      inicio:r.inicio, elapsed: r.running?(Date.now()-r.inicio):0, running:r.running
+      // Si sigue corriendo, el tiempo real es Date.now()-inicio. Si está pausado,
+      // usamos los minutos que se guardaron al momento de pausar (nunca Date.now()-inicio,
+      // porque eso incluiría todo el tiempo que estuvo pausado como si fuera trabajado).
+      inicio:r.inicio, elapsed: r.running?(Date.now()-r.inicio):(r.minutosAcumulados||0)*60000, running:r.running
     };
     STATE.timers[id]=t;
     if(t.running){
@@ -2744,9 +2751,9 @@ function pausarTimer(id){
   if(t.running){
     t.elapsed=Date.now()-t.inicio; t.running=false; clearInterval(STATE.intervals[id]);
     sheetActualizar('Timers_Activos',
-      ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado'],
+      ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado','Minutos Acumulados'],
       [t.id, t.persona, ROL_CFG[t.rol]?.label||t.rol, t.tarea, t.unidad||'', t.asigNombre,
-       new Date(t.inicio).toLocaleString('es-CO'), 'Pausado']
+       new Date(t.inicio).toLocaleString('es-CO'), 'Pausado', Math.round(t.elapsed/60000)]
     );
     toast('⏸ Timer pausado');
   } else {
@@ -2755,9 +2762,9 @@ function pausarTimer(id){
       if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; renderTimers(); renderDashboardTimers(); }
     },1000);
     sheetActualizar('Timers_Activos',
-      ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado'],
+      ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado','Minutos Acumulados'],
       [t.id, t.persona, ROL_CFG[t.rol]?.label||t.rol, t.tarea, t.unidad||'', t.asigNombre,
-       new Date(t.inicio).toLocaleString('es-CO'), 'Activo']
+       new Date(t.inicio).toLocaleString('es-CO'), 'Activo', 0]
     );
     toast('▶ Timer reanudado');
   }
@@ -2765,7 +2772,7 @@ function pausarTimer(id){
   renderTimers();
 }
 
-function completarTimer(id,nota=''){
+function completarTimer(id,nota='',minsManual=null){
   let t=STATE.timers[id];
   if(!t){
     const r=(STATE.timersSheets||[]).find(x=>x.id===id);
@@ -2773,12 +2780,15 @@ function completarTimer(id,nota=''){
     t={ id:r.id, persona:r.persona, rol:r.rol, tarea:r.tarea, unidad:r.unidad,
         asigId:(STATE.asignaturas.find(a=>a.nombre===r.asigNombre)?.id)||'',
         asigNombre:r.asigNombre, inicio:r.inicio,
-        elapsed:r.running?(Date.now()-r.inicio):0, running:r.running };
+        // Si sigue corriendo: Date.now()-inicio. Si está pausado: los minutos que se
+        // guardaron al momento de pausar (nunca 0 a ciegas, y nunca Date.now()-inicio,
+        // que contaría todo el tiempo pausado como si fuera trabajado).
+        elapsed:r.running?(Date.now()-r.inicio):(r.minutosAcumulados||0)*60000, running:r.running };
     STATE.timers[id]=t;
   }
   clearInterval(STATE.intervals[id]);
   const elapsed=t.running?Date.now()-t.inicio:t.elapsed;
-  const mins=Math.round(elapsed/60000);
+  const mins=minsManual!==null ? minsManual : Math.round(elapsed/60000);
   const dias=parseFloat((mins/480).toFixed(4)); // 480 min = 8h laborales
   const sesion={id:uid(),asigId:t.asigId,asigNombre:t.asigNombre,rol:t.rol,persona:t.persona,tarea:t.tarea,unidad:t.unidad,inicio:t.inicio,fin:Date.now(),mins,dias,notas:nota};
   STATE.sesiones.unshift(sesion);
@@ -2795,6 +2805,17 @@ function completarTimer(id,nota=''){
 }
 
 function completarTimerRemoto(id, persona){
+  const r=(STATE.timersSheets||[]).find(x=>x.id===id);
+  const minsCalculados = r && !r.running ? Math.round((r.minutosAcumulados||0)) : null;
+  if(r && !r.running && minsCalculados===0){
+    // No hay tiempo guardado (timer viejo, de antes de este arreglo) — pedirlo a mano
+    // en vez de cerrar en silencio con 0 minutos y perder el tiempo real trabajado.
+    const manual = prompt('No tengo guardado cuánto tiempo real trabajó '+(persona||'esta persona')+' antes de pausar (es un timer viejo).\n\n¿Cuántos MINUTOS reales fueron? (déjalo vacío o pon 0 si de verdad no se avanzó nada)', '');
+    if(manual===null) return; // canceló
+    const minsManual = parseInt(manual)||0;
+    completarTimer(id, minsManual>0?`Tiempo ingresado a mano: ${minsManual} min (timer recuperado)`:'', minsManual>0?minsManual:null);
+    return;
+  }
   if(!confirm('¿Cerrar y guardar el timer de '+(persona||'esta persona')+'?\n\nSe creará su sesión con el tiempo trabajado. Úsalo solo si el timer quedó trabado y la persona no pudo cerrarlo.')) return;
   completarTimer(id, '');
 }
@@ -4820,11 +4841,12 @@ async function cargarDesdeSheets(){
           id:String(r[0]), persona:String(r[1]), rol:Object.keys(ROL_CFG).find(k=>ROL_CFG[k].label===String(r[2]))||'calidad',
           tarea:String(r[3]), unidad:String(r[4]), asigNombre:String(r[5]),
           estado:String(r[7]||'Activo'),
+          minutosAcumulados: parseFloat(r[8])||0, // tiempo real ya trabajado, guardado al pausar
           inicioStr:String(r[6]), inicio:(()=>{
             const ts = parseFechaCol(String(r[6]||''), String(r[1]||''));
             const now = Date.now();
             return (ts > 0 && ts <= now && (now - ts) < 86400000) ? ts : now;
-          })(), running:true
+          })(), running:String(r[7]||'').toLowerCase()==='activo' // antes quedaba fijo en true, aunque estuviera Pausado
         }));
       
       // Procesar timers COMPLETADOS de Sheets → convertir a sesiones + entregables
@@ -5007,6 +5029,7 @@ setInterval(async ()=>{
           rol:Object.keys(ROL_CFG).find(k=>ROL_CFG[k].label===String(r[2]))||'calidad',
           tarea:String(r[3]), unidad:String(r[4]), asigNombre:String(r[5]),
           estado:String(r[7]||'Activo'),
+          minutosAcumulados: parseFloat(r[8])||0,
           inicioStr:String(r[6]), inicio:(()=>{
             const ts = parseFechaCol(String(r[6]||''), String(r[1]||''));
             const now = Date.now();
