@@ -2793,6 +2793,7 @@ function completarTimer(id,nota='',minsManual=null){
   const sesion={id:uid(),asigId:t.asigId,asigNombre:t.asigNombre,rol:t.rol,persona:t.persona,tarea:t.tarea,unidad:t.unidad,inicio:t.inicio,fin:Date.now(),mins,dias,notas:nota};
   STATE.sesiones.unshift(sesion);
   delete STATE.timers[id]; delete STATE.intervals[id];
+  if(STATE.timersSheets) STATE.timersSheets=STATE.timersSheets.filter(x=>x.id!==id); // desaparece de la vista al instante
   autoMarcarEntregable(sesion.asigId, sesion.tarea, false, sesion.unidad); // auto-checkbox si aplica
   guardarEstadoLocal(); // also clears this timer from localStorage
   setSyncStatus('sync');
@@ -2810,10 +2811,10 @@ function completarTimerRemoto(id, persona){
   if(r && !r.running && minsCalculados===0){
     // No hay tiempo guardado (timer viejo, de antes de este arreglo) — pedirlo a mano
     // en vez de cerrar en silencio con 0 minutos y perder el tiempo real trabajado.
-    const manual = prompt('No tengo guardado cuánto tiempo real trabajó '+(persona||'esta persona')+' antes de pausar (es un timer viejo).\n\n¿Cuántos MINUTOS reales fueron? (déjalo vacío o pon 0 si de verdad no se avanzó nada)', '');
+    const manual = prompt('No tengo guardado cuánto tiempo real trabajó '+(persona||'esta persona')+' antes de pausar (es un timer viejo).\n\n¿Cuántos MINUTOS reales fueron? (pon 0 si de verdad no se avanzó nada)', '');
     if(manual===null) return; // canceló
     const minsManual = parseInt(manual)||0;
-    completarTimer(id, minsManual>0?`Tiempo ingresado a mano: ${minsManual} min (timer recuperado)`:'', minsManual>0?minsManual:null);
+    completarTimer(id, minsManual>0?`Tiempo ingresado a mano: ${minsManual} min (timer recuperado)`:'Timer recuperado sin tiempo registrado', minsManual);
     return;
   }
   if(!confirm('¿Cerrar y guardar el timer de '+(persona||'esta persona')+'?\n\nSe creará su sesión con el tiempo trabajado. Úsalo solo si el timer quedó trabado y la persona no pudo cerrarlo.')) return;
