@@ -4544,13 +4544,26 @@ function renderIndicadores(){
   }
 }
 
+let _primerCargaHecha = false;
+let _tuvoLocalAlgunaVez = false;
 async function cargarDesdeSheets(){
   setSyncStatus('sync');
   console.log('[CARGA] Iniciando cargarDesdeSheets...');
 
-  // 1. Cargar localStorage inmediatamente (no hay espera)
-  const tieneLocal = cargarEstadoLocal();
-  console.log('[CARGA] tieneLocal:', tieneLocal);
+  // 1. Cargar localStorage — SOLO en la primera carga de la página. Si esto se repite
+  // en los refrescos periódicos (cada 15 min), pisaría cualquier timer que esté
+  // corriendo en ese momento con la versión guardada (que siempre queda "pausada" al
+  // guardar) — y por eso un timer activo se "pausaba solo" de la nada.
+  let tieneLocal = false;
+  if(!_primerCargaHecha){
+    tieneLocal = cargarEstadoLocal();
+    _primerCargaHecha = true;
+    _tuvoLocalAlgunaVez = tieneLocal;
+    console.log('[CARGA] tieneLocal:', tieneLocal);
+  } else {
+    tieneLocal = _tuvoLocalAlgunaVez; // solo para el indicador de estado si algo falla
+    console.log('[CARGA] Refresco periódico — NO se vuelve a cargar localStorage (no se tocan timers en curso)');
+  }
   // Siempre renderizar al inicio aunque no haya local
   setSyncStatus(tieneLocal ? 'local' : 'sync');
   renderDashboard();
