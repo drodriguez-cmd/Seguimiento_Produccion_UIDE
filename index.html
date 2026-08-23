@@ -1704,7 +1704,8 @@ function calcularFilasTiempos(){
         persona, frente: key, esVideo,
         inicioMs: info.fechaMs,
         diasTranscurridos, diasProduccion: info.diasProduccion,
-        objetivo, fechaEsperada, completo, sobreObjetivo
+        objetivo, fechaEsperada, completo, sobreObjetivo,
+        prioridad: a.prioridad||'media', fechaLimite: a.fechaLimite||''
       });
     });
   });
@@ -4598,15 +4599,18 @@ function renderTiempos(){
       ? (f.sobreObjetivo ? `⚠️ Terminó sobre el objetivo (+${(f.diasProduccion-f.objetivo).toFixed(1)}d)` : '✅ Terminó en plazo')
       : (f.sobreObjetivo ? `🔴 Sobre el objetivo (+${(f.diasProduccion-f.objetivo).toFixed(1)}d)` : '🟢 En plazo');
     const estadoColor = f.sobreObjetivo ? 'var(--danger)' : 'var(--ok)';
+    const PCOL={alta:'#ef4444',media:'#f59e0b',baja:'#22c55e'};
     return `<tr>
       <td style="font-weight:600">${f.persona}</td>
       <td>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div></td>
       <td><span class="role-pill" style="background:${frenteCfg.color}18;color:${frenteCfg.color};font-size:11px;padding:3px 10px">${frenteCfg.icon} ${frenteCfg.label}</span></td>
+      <td style="font-size:11px;font-weight:600;color:${PCOL[f.prioridad]||PCOL.media}">${PRIORIDAD_EMOJI[f.prioridad]||'🟡'} ${f.prioridad.charAt(0).toUpperCase()+f.prioridad.slice(1)}</td>
       <td style="font-size:12px">${fmtFechaHora(f.inicioMs)}</td>
-      <td style="text-align:center">${f.diasTranscurridos}d</td>
-      <td style="text-align:center;font-weight:700">${f.diasProduccion.toFixed(2)}d</td>
+      <td style="text-align:center" title="Días de calendario hábiles (lun-vie, sin festivos) desde que arrancó — no son horas trabajadas">${f.diasTranscurridos}d cal.</td>
+      <td style="text-align:center;font-weight:700" title="Horas de trabajo real acumuladas, convertidas a jornadas de 8h">${f.diasProduccion.toFixed(2)}d</td>
       <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
       <td style="font-size:12px">${fmtFechaHora(f.fechaEsperada.getTime())}</td>
+      <td style="font-size:12px">${f.fechaLimite?fmtFecha(f.fechaLimite):'—'}</td>
       <td style="color:${estadoColor};font-weight:600;font-size:12px">${estadoTxt}</td>
     </tr>`;
   };
@@ -4616,9 +4620,9 @@ function renderTiempos(){
       <div class="card-head"><span class="card-title">${icono} ${titulo}</span><span class="badge badge-muted">${lista.length}</span></div>
       ${lista.length ? `<div style="overflow-x:auto"><table>
         <thead><tr>
-          <th>Persona</th><th>Asignatura</th><th>Frente</th><th>Inicio</th>
-          <th>Días transcurridos</th><th>Producción real</th><th>Objetivo</th>
-          <th>Fecha esperada término</th><th>Estado</th>
+          <th>Persona</th><th>Asignatura</th><th>Frente</th><th>Prioridad</th><th>Inicio</th>
+          <th>Días calendario<br>transcurridos</th><th>Producción real<br>(jornadas 8h)</th><th>Objetivo</th>
+          <th>Fecha esperada término</th><th>Lanzamiento</th><th>Estado</th>
         </tr></thead>
         <tbody>${lista.map(filaHTML).join('')}</tbody>
       </table></div>` : `<div class="empty-state"><div class="empty-txt">${vacioTxt}</div></div>`}
