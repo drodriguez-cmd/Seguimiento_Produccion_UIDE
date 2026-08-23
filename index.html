@@ -291,6 +291,9 @@ textarea{resize:vertical;min-height:70px}
     <button class="nav-item" onclick="goPage('horarios-view',this)">
       <span class="dot" style="background:var(--warn)"></span> ⏰ Horarios
     </button>
+    <button class="nav-item" onclick="goPage('tiempos',this)">
+      <span class="dot" style="background:#e11d48"></span> ⏱️ Tiempos
+    </button>
   </nav>
 
 
@@ -713,6 +716,15 @@ textarea{resize:vertical;min-height:70px}
   </div>
   <div id="filtro-horarios-wrap"></div>
   <div id="horarios-view-content"></div>
+</div>
+
+<!-- ─── TIEMPOS ─── -->
+<div class="page" id="page-tiempos">
+  <div class="page-header">
+    <h1>⏱️ Tiempos</h1>
+    <p>Cuánto está tardando cada persona en diseño (objetivo: 3 días) y video (objetivo: 1 día) — jornadas de 8h laborales</p>
+  </div>
+  <div id="tiempos-content"></div>
 </div>
 
 </div><!-- /main -->
@@ -1553,6 +1565,23 @@ function diasHabilesEntre(fechaInicio, fechaFin){
   return count;
 }
 
+// Suma N días HÁBILES completos a una fecha/hora exacta (para "fecha esperada de término"),
+// saltando fines de semana y festivos de Colombia, conservando la hora exacta de arranque
+// (si empezó a las 9:03am, el resultado también queda a las 9:03am del día calculado).
+function sumarDiasHabiles(inicioMs, diasHabilesObjetivo){
+  const cur = new Date(inicioMs);
+  let contados = 0;
+  const dias = Math.max(0, Math.round(diasHabilesObjetivo));
+  while(contados < dias){
+    cur.setDate(cur.getDate()+1);
+    const dow = cur.getDay();
+    const iso = cur.toISOString().slice(0,10);
+    const festivos = festivosColombia(cur.getFullYear());
+    if(dow!==0 && dow!==6 && !festivos.has(iso)) contados++;
+  }
+  return cur;
+}
+
 function diasAsig(a){
   // DÍAS DE PRODUCCIÓN (cálculo unificado para Dashboard, Asignaturas e Indicadores).
   // Mide el tiempo REAL trabajado en la asignatura fusionando los ratos que se solapan:
@@ -1643,9 +1672,43 @@ function infoFrente(a, esVideo){
   return {
     iniciado:true,
     fechaMs: primerInicio,
+    ultimoFin: ultimoFin,
     diasTranscurridos: diasHabilesEntre(ymd, new Date(ultimoFin)),
     diasProduccion: totalMs/60000/MIN_JORNADA
   };
+}
+
+// ════════════════════════════════════════════
+// REPORTE "TIEMPOS" — cuánto tarda cada persona en cada frente (diseño/video)
+// ════════════════════════════════════════════
+const OBJETIVO_DIAS_FRENTE = { diseno: 3, video: 1 }; // días hábiles de 8h, según lo acordado
+function calcularFilasTiempos(){
+  const filas = [];
+  STATE.asignaturas.forEach(a=>{
+    if(a.tipo!=='celula') return;
+    [{esVideo:false, key:'diseno', persona:a.celula?(CELULA_CFG[a.celula]?.label||a.celula):null},
+     {esVideo:true,  key:'video',  persona:a.videoPersona||null}
+    ].forEach(({esVideo, key, persona})=>{
+      if(!persona) return; // no tiene a nadie asignado en ese frente, nada que mostrar
+      const info = infoFrente(a, esVideo);
+      if(!info.iniciado) return; // aún no arranca ese frente, no hay tiempo que medir
+      const completo = esVideo ? videoCompletoAsig(a) : disenoCompletoAsig(a);
+      const objetivo = OBJETIVO_DIAS_FRENTE[key];
+      const finParaTranscurridos = completo ? new Date(info.ultimoFin) : new Date();
+      const ymdInicio = (()=>{ const d=new Date(info.fechaMs); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+      const diasTranscurridos = diasHabilesEntre(ymdInicio, finParaTranscurridos);
+      const fechaEsperada = sumarDiasHabiles(info.fechaMs, objetivo);
+      const sobreObjetivo = info.diasProduccion > objetivo;
+      filas.push({
+        asigId: a.id, asigNombre: a.nombre, prog: a.prog,
+        persona, frente: key, esVideo,
+        inicioMs: info.fechaMs,
+        diasTranscurridos, diasProduccion: info.diasProduccion,
+        objetivo, fechaEsperada, completo, sobreObjetivo
+      });
+    });
+  });
+  return filas;
 }
 
 function diasDesde(fecha){
@@ -1727,6 +1790,7 @@ function renderPage(id){
   else if(id==='personas') renderPersonas();
   else if(id==='indicadores') renderIndicadores();
   else if(id==='horarios-view') renderHorariosView();
+  else if(id==='tiempos') renderTiempos();
   else if(id==='celula') renderCelula();
   else if(id==='celulas-dir') renderCelulasDir();
 }
@@ -2559,6 +2623,7 @@ async function enviarEmailCompletada(asig){
     if(!fechaEnvio || !String(fechaEnvio).includes('T')) fechaEnvio = new Date().toISOString();
     const url = API
       +'?accion=enviarEmailAsignaturaCompletada'
+      +'&id='+encodeURIComponent(asig.id||'')
       +'&nombre='+encodeURIComponent(asig.nombre||'')
       +'&programa='+encodeURIComponent(asig.prog||'')
       +'&link='+encodeURIComponent(asig.link||'')
@@ -4424,58 +4489,29 @@ function renderIndicadores(){
       </div>
     </div>
 
-    <div class="grid2">
-      <!-- Asignaturas en riesgo o retrasadas -->
-      <div class="card">
-        <div class="card-head"><span class="card-title">⚠️ Cumplimiento de plazos</span></div>
-        <div style="padding:16px">
-          ${asigFiltradas.length===0?'<div class="empty-state"><div class="empty-txt">Sin asignaturas</div></div>':
-            asigFiltradas.map(a=>{
-              const dias=diasAsig(a);
-              const df=a.df||4;
-              const pct=Math.min(Math.round(dias/df*100),150);
-              const color=a.status==='Completada'?'var(--ok)':pct>=100?'var(--danger)':pct>=75?'var(--warn)':'#818cf8';
-              const label=a.status==='Completada'?'✅ Completada':pct>=100?'⚠️ Retrasada':pct>=75?'🔶 En límite':'🟢 A tiempo';
-              return `<div style="margin-bottom:14px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                  <span style="font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%">${a.nombre.length>30?a.nombre.substring(0,28)+'...':a.nombre}</span>
-                  <span style="font-size:11px;color:${color};font-weight:600">${label}</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px">
-                  <div style="flex:1;height:7px;background:var(--border2);border-radius:4px;overflow:hidden">
-                    <div style="height:100%;width:${Math.min(pct,100)}%;background:${color};border-radius:4px;transition:width .4s"></div>
-                  </div>
-                  <span style="font-size:11px;color:var(--muted);white-space:nowrap">${dias.toFixed(1)}d / ${df}d</span>
-                </div>
-              </div>`;
-            }).join('')
-          }
-        </div>
-      </div>
+    <!-- Carga por persona esta semana -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">👤 Carga por persona (últimos 7 días)</span></div>
+      <div style="padding:16px">
+        ${cargaArr.length===0?'<div class="empty-state"><div class="empty-txt">Sin actividad esta semana</div></div>':
+          cargaArr.map(([persona,mins])=>{
+            const pct=Math.round(mins/maxCarga*100);
+            const horas=(mins/60).toFixed(1);
+            const color=mins>2400?'var(--danger)':mins>1200?'var(--warn)':'var(--ok)';
+            return `<div style="margin-bottom:12px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                <span style="font-size:12px;font-weight:600">${persona}</span>
+                <span style="font-size:12px;font-weight:700;color:${color}">${horas}h</span>
+              </div>
+              <div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width .4s"></div>
 
-      <!-- Carga por persona esta semana -->
-      <div class="card">
-        <div class="card-head"><span class="card-title">👤 Carga por persona (últimos 7 días)</span></div>
-        <div style="padding:16px">
-          ${cargaArr.length===0?'<div class="empty-state"><div class="empty-txt">Sin actividad esta semana</div></div>':
-            cargaArr.map(([persona,mins])=>{
-              const pct=Math.round(mins/maxCarga*100);
-              const horas=(mins/60).toFixed(1);
-              const color=mins>2400?'var(--danger)':mins>1200?'var(--warn)':'var(--ok)';
-              return `<div style="margin-bottom:12px">
-                <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                  <span style="font-size:12px;font-weight:600">${persona}</span>
-                  <span style="font-size:12px;font-weight:700;color:${color}">${horas}h</span>
-                </div>
-                <div style="height:6px;background:var(--border2);border-radius:3px;overflow:hidden">
-                  <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width .4s"></div>
                 </div>
               </div>`;
             }).join('')
           }
         </div>
       </div>
-    </div>
 
     <div class="grid2" style="margin-top:20px">
       <!-- Horas por tipo de entregable -->
@@ -4542,6 +4578,55 @@ function renderIndicadores(){
           y:{grid:{color:'rgba(15,23,42,.05)'},ticks:{color:'#64748b',font:{size:11}},title:{display:true,text:'Horas',color:'#64748b',font:{size:11}},beginAtZero:true}}}
     });
   }
+}
+
+function renderTiempos(){
+  const el = document.getElementById('tiempos-content');
+  if(!el) return;
+  const filas = calcularFilasTiempos();
+  if(!filas.length){
+    el.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">⏱️</div><div class="empty-txt">Todavía no hay ningún frente de diseño o video arrancado</div></div></div>';
+    return;
+  }
+  const fmtFechaHora = ms => new Date(ms).toLocaleString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const activas = filas.filter(f=>!f.completo).sort((a,b)=> (b.sobreObjetivo-a.sobreObjetivo) || (b.diasProduccion-a.diasProduccion));
+  const completadas = filas.filter(f=>f.completo).sort((a,b)=> b.inicioMs-a.inicioMs);
+
+  const filaHTML = f => {
+    const frenteCfg = f.esVideo ? {icon:'🎬', label:'Video', color:'#2563eb'} : {icon:'🎨', label:'Diseño', color:'#ea6c1a'};
+    const estadoTxt = f.completo
+      ? (f.sobreObjetivo ? `⚠️ Terminó sobre el objetivo (+${(f.diasProduccion-f.objetivo).toFixed(1)}d)` : '✅ Terminó en plazo')
+      : (f.sobreObjetivo ? `🔴 Sobre el objetivo (+${(f.diasProduccion-f.objetivo).toFixed(1)}d)` : '🟢 En plazo');
+    const estadoColor = f.sobreObjetivo ? 'var(--danger)' : 'var(--ok)';
+    return `<tr>
+      <td style="font-weight:600">${f.persona}</td>
+      <td>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div></td>
+      <td><span class="role-pill" style="background:${frenteCfg.color}18;color:${frenteCfg.color};font-size:11px;padding:3px 10px">${frenteCfg.icon} ${frenteCfg.label}</span></td>
+      <td style="font-size:12px">${fmtFechaHora(f.inicioMs)}</td>
+      <td style="text-align:center">${f.diasTranscurridos}d</td>
+      <td style="text-align:center;font-weight:700">${f.diasProduccion.toFixed(2)}d</td>
+      <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
+      <td style="font-size:12px">${fmtFechaHora(f.fechaEsperada.getTime())}</td>
+      <td style="color:${estadoColor};font-weight:600;font-size:12px">${estadoTxt}</td>
+    </tr>`;
+  };
+
+  const tabla = (titulo, icono, lista, vacioTxt) => `
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-head"><span class="card-title">${icono} ${titulo}</span><span class="badge badge-muted">${lista.length}</span></div>
+      ${lista.length ? `<div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>Persona</th><th>Asignatura</th><th>Frente</th><th>Inicio</th>
+          <th>Días transcurridos</th><th>Producción real</th><th>Objetivo</th>
+          <th>Fecha esperada término</th><th>Estado</th>
+        </tr></thead>
+        <tbody>${lista.map(filaHTML).join('')}</tbody>
+      </table></div>` : `<div class="empty-state"><div class="empty-txt">${vacioTxt}</div></div>`}
+    </div>`;
+
+  el.innerHTML =
+    tabla('Frentes activos ahora mismo', '🔴', activas, 'Nada activo en este momento') +
+    tabla('Historial de frentes completados', '📗', completadas, 'Todavía no hay ninguno completado');
 }
 
 let _primerCargaHecha = false;
