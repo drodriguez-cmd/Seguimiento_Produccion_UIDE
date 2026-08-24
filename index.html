@@ -2137,6 +2137,10 @@ function obtenerSiguienteEnCola(){
     const pa = prioOrder[a.prioridad||'media'];
     const pb = prioOrder[b.prioridad||'media'];
     if(pa !== pb) return pa - pb;
+    // Dentro del mismo nivel de prioridad: la que lanza más pronto va primero
+    if(a.fechaLimite && b.fechaLimite && a.fechaLimite!==b.fechaLimite) return a.fechaLimite < b.fechaLimite ? -1 : 1;
+    if(a.fechaLimite && !b.fechaLimite) return -1;
+    if(!a.fechaLimite && b.fechaLimite) return 1;
     return new Date(a.inicio) - new Date(b.inicio);
   });
   return enEspera[0] || null;
@@ -2224,6 +2228,12 @@ function ordenarPorPrioridad(lista){
   return [...lista].sort((a,b)=>{
     const pa = PRIORIDAD_RANK[a.prioridad||'media'], pb = PRIORIDAD_RANK[b.prioridad||'media'];
     if(pa!==pb) return pa-pb;
+    // Dentro del mismo nivel de prioridad: la que lanza más pronto va primero
+    // (antes desempataba por fecha de REGISTRO, no de lanzamiento — eso es lo que
+    // dejaba colar materias de octubre/noviembre antes que unas de septiembre).
+    if(a.fechaLimite && b.fechaLimite && a.fechaLimite!==b.fechaLimite) return a.fechaLimite < b.fechaLimite ? -1 : 1;
+    if(a.fechaLimite && !b.fechaLimite) return -1;
+    if(!a.fechaLimite && b.fechaLimite) return 1;
     return new Date(a.inicio)-new Date(b.inicio);
   });
 }
