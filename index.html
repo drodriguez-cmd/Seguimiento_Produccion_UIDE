@@ -3463,8 +3463,11 @@ function renderAsignaturas(filtro){
         </div>
         ${a.tipo==='celula' ? renderCelulaBodyInlineSafe(a) : ''}
         <div id="unit-${a.id}-sesiones" class="card-body" style="display:none">
-          ${sesA.length?`<table><thead><tr><th>Persona</th><th>Rol</th><th>Tarea</th><th>Clase</th><th>Tiempo</th></tr></thead><tbody>`+
-          sesA.map(s=>`<tr><td>${s.persona}</td><td><span class="role-pill ${ROL_CFG[s.rol]?.rp||''}" style="font-size:10px;padding:2px 8px">${rolIcon(s.rol)} ${rolLabel(s.rol)}</span></td><td>${s.tarea}</td><td>${s.unidad||'—'}</td><td style="font-weight:600;color:var(--video)">${minsToHoras(s.mins)}</td></tr>`).join('')+
+          ${sesA.length?`<table><thead><tr><th>Persona</th><th>Rol</th><th>Tarea</th><th>Clase</th><th>Inicio</th><th>Fin</th><th>Tiempo</th></tr></thead><tbody>`+
+          sesA.map(s=>{
+            const fmtFH = ms => ms ? new Date(ms).toLocaleString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+            return `<tr><td>${s.persona}</td><td><span class="role-pill ${ROL_CFG[s.rol]?.rp||''}" style="font-size:10px;padding:2px 8px">${rolIcon(s.rol)} ${rolLabel(s.rol)}</span></td><td>${s.tarea}</td><td>${s.unidad||'—'}</td><td style="font-size:12px;color:var(--muted)">${fmtFH(s.inicio)}</td><td style="font-size:12px;color:var(--muted)">${fmtFH(s.fin)}</td><td style="font-weight:600;color:var(--video)">${minsToHoras(s.mins)}</td></tr>`;
+          }).join('')+
           `</tbody></table>`:`<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-txt">Sin sesiones registradas</div></div>`}
         </div>
       </div>
