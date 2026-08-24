@@ -2248,6 +2248,69 @@ function calcularPrioridadPorFecha(asig){
 // libre la tome, en vez de quedar colgada esperando a alguien que no va a trabajar.
 // Lo que YA está en producción real (con trabajo empezado) NO se toca.
 // La prioridad (y si era manual) se conserva exactamente igual — solo cambia célula y status.
+// ════════════════════════════════════════════
+// REORDENAR RESERVAS + COLA POR PRIORIDAD REAL
+// ════════════════════════════════════════════
+// Las prioridades pueden cambiar con el tiempo (por la fecha de lanzamiento), pero una
+// reserva ya asignada a alguien NUNCA se revisaba de nuevo — solo se repartían las
+// células que quedaban totalmente libres. Esto junta TODAS las reservas que aún no han
+// arrancado de verdad + todo lo que sigue esperando célula, las ordena juntas por
+// prioridad real, y reparte los mismos cupos de reserva a quien de verdad sea más
+// urgente ahora — para que un lanzamiento lejano no le gane el puesto a uno próximo.
+// Nunca toca nada que ya tenga sesiones/timers reales (eso ya es trabajo en curso).
+function reordenarReservasPorPrioridad(){
+  const reservas = STATE.asignaturas.filter(a=>
+    a.tipo==='celula' && a.celula && a.status==='En espera' && !arrancoAsig(a)
+  );
+  if(!reservas.length) return; // sin reservas movibles, nada que reordenar
+
+  const enColaSinCelula = STATE.asignaturas.filter(a=>
+    a.tipo==='celula' && !a.celula && (a.status==='En espera'||a.status==='En producción')
+  );
+
+  const cuposOriginales = reservas.map(a=>({asigId:a.id, celulaId:a.celula}));
+  const slots = cuposOriginales.map(c=>c.celulaId);
+  const pool = ordenarPorPrioridad([...reservas, ...enColaSinCelula]);
+
+  reservas.forEach(a=>{ a.celula=''; }); // soltar temporalmente para repartir de cero
+
+  slots.forEach((celulaId, i)=>{
+    const asig = pool[i];
+    if(!asig) return;
+    asig.celula = celulaId;
+    if(!asig.tareasCelula) asig.tareasCelula = iniciarTareasCelula(celulaId);
+    if(!asig.videoPersona) asig.videoPersona = avanzarTurnoVideo();
+  });
+  pool.slice(slots.length).forEach(a=>{ a.celula=''; }); // el resto queda sin célula (cola)
+
+  // ¿hubo algún cambio real respecto a como estaba?
+  const cambios = [];
+  cuposOriginales.forEach(({asigId, celulaId})=>{
+    const antes = STATE.asignaturas.find(a=>a.id===asigId);
+    if(antes && antes.celula !== celulaId){
+      cambios.push(`"${antes.nombre}" ya no es reserva de ${CELULA_CFG[celulaId]?.label||celulaId}`);
+    }
+  });
+  slots.forEach((celulaId, i)=>{
+    const nuevo = pool[i];
+    if(nuevo && cuposOriginales[i].celulaId !== celulaId){} // celulaId siempre es el mismo cupo, no cambia
+  });
+
+  if(cambios.length>0){
+    pool.forEach(asig=>{
+      sheetActualizar('Asignaturas',
+        ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
+        [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
+      );
+    });
+    guardarEstadoLocal();
+    renderAsignaturas();
+    if(typeof renderCelulasDir==='function') renderCelulasDir();
+    toast(`🔄 Reservas reordenadas por prioridad real: ${cambios.length} cambio${cambios.length!==1?'s':''}`);
+    console.log('[REORDENAR RESERVAS]', cambios);
+  }
+}
+
 function liberarAsignaturasDePausados(){
   let huboCambios = false;
   STATE.asignaturas.forEach(asig=>{
@@ -5071,6 +5134,8 @@ async function cargarDesdeSheets(){
     if(equipoVideoActivoCambio()) rebalancearVideoEquipo();
     // Recalcular prioridad por fecha límite (respeta las que ya fueron cambiadas a mano)
     recalcularPrioridadesAutomaticas();
+    // Reordenar reservas ya asignadas si algo más urgente quedó esperando en la cola
+    reordenarReservasPorPrioridad();
     // Tras sincronizar, reevaluar la cola por si quedó algo pendiente de asignar
     intentarAutoAsignar();
   }catch(e){
