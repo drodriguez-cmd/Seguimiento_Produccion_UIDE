@@ -269,6 +269,9 @@ textarea{resize:vertical;min-height:70px}
     <button class="nav-item" onclick="goPage('asignaturas',this)">
       <span class="dot" style="background:#818cf8"></span> Asignaturas
     </button>
+    <button class="nav-item" onclick="goPage('tiempos',this)">
+      <span class="dot" style="background:#e11d48"></span> ⏱️ Tiempos
+    </button>
 
     <div class="nav-section">Registro</div>
     <button class="nav-item" onclick="goPage('nueva',this)">
@@ -287,12 +290,6 @@ textarea{resize:vertical;min-height:70px}
     </button>
     <button class="nav-item" onclick="goPage('indicadores',this)">
       <span class="dot" style="background:var(--coord)"></span> Indicadores
-    </button>
-    <button class="nav-item" onclick="goPage('horarios-view',this)">
-      <span class="dot" style="background:var(--warn)"></span> ⏰ Horarios
-    </button>
-    <button class="nav-item" onclick="goPage('tiempos',this)">
-      <span class="dot" style="background:#e11d48"></span> ⏱️ Tiempos
     </button>
   </nav>
 
@@ -458,7 +455,7 @@ textarea{resize:vertical;min-height:70px}
           <div class="fg" style="margin-bottom:14px">
             <label>Fecha en que debería entrar a producción (opcional)</label>
             <input type="date" id="n-fecha-entrada">
-            <small style="color:var(--muted);display:block;margin-top:4px">Según tu planeación (tus 15 días supuestos). Si ya pasó o es hoy, la prioridad sube a Alta directo.</small>
+            <small style="color:var(--muted);display:block;margin-top:4px">Según tu planeación (tus 15 días supuestos). Solo informativa — ya NO mueve la prioridad automática (esa la maneja solo la fecha de lanzamiento).</small>
           </div>
           <div class="fg" style="margin-bottom:14px">
             <label>Fecha de lanzamiento (opcional)</label>
@@ -1839,9 +1836,9 @@ function crearAsignatura(){
   if(esCelula){
     asig.videoPersona = avanzarTurnoVideo();
   }
-  // Si puso alguna fecha (lanzamiento o entrada), calculamos la prioridad real de una vez
+  // Si puso fecha de lanzamiento, calculamos la prioridad real de una vez
   // (no la que quedó seleccionada por defecto en el formulario) — así ya nace correcta.
-  if(asig.fechaLimite || asig.fechaDeberiaEntrar){
+  if(asig.fechaLimite){
     const p = calcularPrioridadPorFecha(asig);
     if(p) asig.prioridad = p;
   }
@@ -2231,21 +2228,16 @@ function ordenarPorPrioridad(lista){
   });
 }
 
+// Solo la fecha de lanzamiento mueve la prioridad automática — es la que siempre se
+// conoce con certeza (viene del cronograma real). "Fecha debía entrar" se quitó del
+// cálculo porque, al no llenarse con la misma disciplina, generaba falsas urgencias
+// (asignaturas con lanzamiento lejano saltando a Alta por delante de otras con
+// lanzamiento mucho más próximo). El dato sigue guardado por si se usa manualmente.
 function calcularPrioridadPorFecha(asig){
+  if(!asig.fechaLimite) return null;
   const diasNecesarios = asig.df || 4;
-  const rank = {alta:0, media:1, baja:2};
-  const candidatos = [];
-
-  if(asig.fechaLimite){
-    const diasRestantes = diasHabilesEntre(today(), asig.fechaLimite);
-    candidatos.push(diasRestantes <= diasNecesarios ? 'alta' : diasRestantes <= diasNecesarios*2 ? 'media' : 'baja');
-  }
-  if(asig.fechaDeberiaEntrar){
-    const diasHastaEntrada = diasHabilesEntre(today(), asig.fechaDeberiaEntrar);
-    candidatos.push(diasHastaEntrada <= 0 ? 'alta' : diasHastaEntrada <= diasNecesarios ? 'media' : 'baja');
-  }
-  if(!candidatos.length) return null;
-  return candidatos.sort((a,b)=>rank[a]-rank[b])[0]; // la más urgente de las que existan
+  const diasRestantes = diasHabilesEntre(today(), asig.fechaLimite);
+  return diasRestantes <= diasNecesarios ? 'alta' : diasRestantes <= diasNecesarios*2 ? 'media' : 'baja';
 }
 
 // ════════════════════════════════════════════
@@ -2335,7 +2327,7 @@ function recalcularPrioridadesAutomaticas(){
   STATE.asignaturas.forEach(asig=>{
     if(asig.status==='Completada') return;
     if(asig.prioridadManual) return; // respeta el cambio manual, siempre
-    if(!asig.fechaLimite && !asig.fechaDeberiaEntrar) return;
+    if(!asig.fechaLimite) return;
     const nueva = calcularPrioridadPorFecha(asig);
     if(nueva && nueva !== asig.prioridad){
       asig.prioridad = nueva;
@@ -3378,7 +3370,7 @@ function renderAsignaturas(filtro){
             <option value="media" ${(a.prioridad||'media')==='media'?'selected':''}>🟡 Media</option>
             <option value="baja" ${a.prioridad==='baja'?'selected':''}>🟢 Baja</option>
           </select>
-          ${(a.fechaLimite||a.fechaDeberiaEntrar)?`<span style="font-size:9px;color:var(--muted)" title="${a.prioridadManual?'La cambiaste a mano — ya no se recalcula sola':'Se recalcula sola según fecha de lanzamiento / debía entrar'}">${a.prioridadManual?'✋ Manual':'🤖 Auto'}</span>`:''}
+          ${a.fechaLimite?`<span style="font-size:9px;color:var(--muted)" title="${a.prioridadManual?'La cambiaste a mano — ya no se recalcula sola':'Se recalcula sola según la fecha de lanzamiento'}">${a.prioridadManual?'✋ Manual':'🤖 Auto'}</span>`:''}
           ${(a.status==='En espera'||a.status==='En producción'||a.status==='Pausada')?`
           <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-top:6px">
             <select id="asigncel-${a.id}" onclick="event.stopPropagation()" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:white;max-width:150px">
