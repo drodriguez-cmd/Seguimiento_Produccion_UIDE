@@ -1686,6 +1686,7 @@ function calcularFilasTiempos(){
   const filas = [];
   STATE.asignaturas.forEach(a=>{
     if(a.tipo!=='celula') return;
+    if(a.status==='Pausada') return; // no aporta comparar contra un reloj que no está corriendo
     [{esVideo:false, key:'diseno', persona:a.celula?(CELULA_CFG[a.celula]?.label||a.celula):null},
      {esVideo:true,  key:'video',  persona:a.videoPersona||null}
     ].forEach(({esVideo, key, persona})=>{
@@ -1699,12 +1700,15 @@ function calcularFilasTiempos(){
       const diasTranscurridos = diasHabilesEntre(ymdInicio, finParaTranscurridos);
       const fechaEsperada = sumarDiasHabiles(info.fechaMs, objetivo);
       const sobreObjetivo = info.diasProduccion > objetivo;
+      // La fecha vencida es la señal MÁS fuerte: si ya pasó el calendario y no está
+      // completo, es atraso real sin importar cuántas horas de trabajo lleve acumuladas.
+      const fechaVencida = !completo && Date.now() > fechaEsperada.getTime();
       filas.push({
         asigId: a.id, asigNombre: a.nombre, prog: a.prog,
         persona, frente: key, esVideo,
         inicioMs: info.fechaMs,
         diasTranscurridos, diasProduccion: info.diasProduccion,
-        objetivo, fechaEsperada, completo, sobreObjetivo,
+        objetivo, fechaEsperada, completo, sobreObjetivo, fechaVencida,
         prioridad: a.prioridad||'media', fechaLimite: a.fechaLimite||''
       });
     });
@@ -4593,15 +4597,16 @@ function renderTiempos(){
     return;
   }
   const fmtFechaHora = ms => new Date(ms).toLocaleString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const activas = filas.filter(f=>!f.completo).sort((a,b)=> (b.sobreObjetivo-a.sobreObjetivo) || (b.diasProduccion-a.diasProduccion));
+  const activas = filas.filter(f=>!f.completo).sort((a,b)=> (b.fechaVencida-a.fechaVencida) || (b.sobreObjetivo-a.sobreObjetivo) || (b.diasProduccion-a.diasProduccion));
   const completadas = filas.filter(f=>f.completo).sort((a,b)=> b.inicioMs-a.inicioMs);
 
   const filaHTML = f => {
     const frenteCfg = f.esVideo ? {icon:'🎬', label:'Video', color:'#2563eb'} : {icon:'🎨', label:'Diseño', color:'#ea6c1a'};
     const estadoTxt = f.completo
       ? (f.sobreObjetivo ? `⚠️ Terminó sobre el objetivo (+${(f.diasProduccion-f.objetivo).toFixed(1)}d)` : '✅ Terminó en plazo')
-      : (f.sobreObjetivo ? `🔴 Sobre el objetivo (+${(f.diasProduccion-f.objetivo).toFixed(1)}d)` : '🟢 En plazo');
-    const estadoColor = f.sobreObjetivo ? 'var(--danger)' : 'var(--ok)';
+      : (f.fechaVencida ? '🔴 Atrasada (venció la fecha esperada)'
+         : f.sobreObjetivo ? '🟠 Sobre las horas objetivo' : '🟢 En plazo');
+    const estadoColor = (f.fechaVencida || f.sobreObjetivo) ? 'var(--danger)' : 'var(--ok)';
     const PCOL={alta:'#ef4444',media:'#f59e0b',baja:'#22c55e'};
     return `<tr>
       <td style="font-weight:600">${f.persona}</td>
