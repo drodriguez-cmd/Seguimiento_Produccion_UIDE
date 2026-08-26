@@ -2901,6 +2901,22 @@ function iniciarTimer(){
   
   if(!asigId||!rol||!tarea){ toast('Completa todos los campos'); return; }
   const persona=nombreInput||ROL_CFG[rol]?.label||rol;
+
+  // Aviso de seguridad: si el sistema ya reasignó esta asignatura (por prioridad o por
+  // liberación) a alguien más desde la última vez que esta pantalla se refrescó, avisar
+  // ANTES de arrancar el timer — para no duplicar trabajo por una vista desactualizada.
+  if(esCelula){
+    const esRolVideo = rol==='video';
+    const duenoActual = esRolVideo ? (asig.videoPersona||'') : (CELULA_CFG[asig.celula]?.disenador||asig.celula||'');
+    if(duenoActual){
+      const nombrePersonaLimpio = persona.toLowerCase().trim();
+      const nombreDuenoLimpio = duenoActual.toLowerCase().trim();
+      const coincide = nombrePersonaLimpio && (nombreDuenoLimpio.includes(nombrePersonaLimpio) || nombrePersonaLimpio.includes(nombreDuenoLimpio.split(' ')[0]));
+      if(!coincide){
+        if(!confirm(`⚠️ Según el dashboard, "${asig.nombre}" está asignada ahora mismo a ${duenoActual}, no a ${persona}.\n\nEsto puede pasar si la pantalla no está actualizada y el sistema ya la reasignó. Refresca la página (Ctrl+Shift+R) para confirmar antes de continuar.\n\n¿De todas formas quieres iniciar el timer?`)) return;
+      }
+    }
+  }
   const id=uid();
   const nuevoTimer={id,asigId,asigNombre:asig.nombre,rol,persona,tarea,unidad,inicio:Date.now(),elapsed:0,running:true};
   STATE.timers[id]=nuevoTimer;
@@ -5219,8 +5235,17 @@ async function cargarDesdeSheets(){
     recalcularPrioridadesAutomaticas();
     // Limpiar reservas duplicadas (dato dañado por un hueco ya corregido) antes de reordenar
     limpiarReservasDuplicadas();
-    // Reordenar reservas ya asignadas si algo más urgente quedó esperando en la cola
-    reordenarReservasPorPrioridad();
+    // Reordenar reservas ya asignadas si algo más urgente quedó esperando en la cola —
+    // MÁXIMO una vez al día (por navegador). Como todo el equipo tiene el dashboard
+    // abierto a la vez, correr esto en cada sincronización (cada 15 min, en cada refresco)
+    // hacía que las reservas "parpadearan" entre personas — cada navegador con su propia
+    // foto de los datos pisaba el reordenamiento del otro. Una vez al día es suficiente
+    // para corregir casos reales sin generar ese vaivén confuso para el equipo.
+    const hoyReorden = today();
+    if(localStorage.getItem('ultimoReordenReservas') !== hoyReorden){
+      reordenarReservasPorPrioridad();
+      localStorage.setItem('ultimoReordenReservas', hoyReorden);
+    }
     // Tras sincronizar, reevaluar la cola por si quedó algo pendiente de asignar
     intentarAutoAsignar();
   }catch(e){
