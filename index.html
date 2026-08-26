@@ -2496,10 +2496,17 @@ async function asignarCelulaManual(asigId, celulaId){
   const activa  = STATE.asignaturas.find(a=>a.celula===celulaId && a.tipo==='celula' && a.status==='En producción' && a.id!==asigId);
   const reserva = STATE.asignaturas.find(a=>a.celula===celulaId && a.tipo==='celula' && a.status==='En espera'    && a.id!==asigId);
 
-  // Decidir el rol: célula sin activa → entra como ACTIVA · célula con activa → entra como RESERVA
+  // Decidir el rol: célula sin activa NI reserva → entra como ACTIVA · con activa → RESERVA
   let nuevoStatus;
-  if(!activa){
+  if(!activa && !reserva){
     nuevoStatus = 'En producción';
+  } else if(!activa && reserva){
+    // No tiene nada activo ahora mismo, pero SÍ tiene una reserva sin arrancar — no se le
+    // puede meter algo nuevo como "activa" encima, porque quedaría con dos cosas a la vez
+    // (una activa recién asignada + su reserva de antes sin tocar). Debe arrancar o liberar
+    // esa reserva primero.
+    toast(`⛔ ${CELULA_CFG[celulaId].label} todavía tiene pendiente su reserva "${reserva.nombre}" sin arrancar. Debe iniciarla o liberarla antes de asignarle algo nuevo.`);
+    return;
   } else {
     if(reserva){
       // Ya tiene su cupo completo (1 activa + 1 reserva) — no se permite una tercera,
@@ -2508,7 +2515,15 @@ async function asignarCelulaManual(asigId, celulaId){
       toast(`⛔ ${CELULA_CFG[celulaId].label} ya tiene su cupo lleno (activa: "${activa.nombre}" · reserva: "${reserva.nombre}"). Debe liberarse una antes de asignar otra.`);
       return;
     } else {
-      if(!confirm(`${CELULA_CFG[celulaId].label} ya tiene "${activa.nombre}" en producción.\n¿Poner "${asig.nombre}" como su RESERVA? (queda en espera y arranca cuando esa termine)`)) return;
+      // Mismo umbral que usa el sistema automático (PRE_ASIGN_PCT): no se deja poner
+      // una reserva a mano si la activa actual todavía no llegó al 60% — así el manual
+      // no se salta la regla que sí respeta el automático.
+      const pctActiva = progAsig(activa);
+      if(pctActiva < PRE_ASIGN_PCT){
+        toast(`⛔ "${activa.nombre}" (la activa de ${CELULA_CFG[celulaId].label}) solo va en ${pctActiva}% — hay que esperar a que llegue al ${PRE_ASIGN_PCT}% antes de poder ponerle una reserva.`);
+        return;
+      }
+      if(!confirm(`${CELULA_CFG[celulaId].label} ya tiene "${activa.nombre}" en producción (${pctActiva}%).\n¿Poner "${asig.nombre}" como su RESERVA? (queda en espera y arranca cuando esa termine)`)) return;
     }
     nuevoStatus = 'En espera';
   }
