@@ -4939,6 +4939,7 @@ async function cargarDesdeSheets(){
         const local=STATE.asignaturas.find(a=>a.id===sa.id);
         if(local){
           local.status=sa.status;
+          local.nombre=sa.nombre||local.nombre; // el Sheet manda — antes un cambio de nombre nunca se reflejaba solo
           local.obs=sa.obs;
           local.df=sa.df;
           local.prioridad=sa.prioridad||local.prioridad||'media';
