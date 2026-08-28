@@ -821,6 +821,7 @@ textarea{resize:vertical;min-height:70px}
 <script>
 
 
+
 // ══════════════════════════════════════
 // GOOGLE SHEETS API — JSONP (sin CORS)
 // ══════════════════════════════════════
@@ -2773,9 +2774,6 @@ async function enviarEmailCompletada(asig){
     if(!asig) return;
     if(!asig.link){ console.log('ℹ️ Sin link de curso — no se envía email para: '+asig.nombre); return; }
     if(yaSeEnvioEmail(asig.id)){ console.log('ℹ️ Email ya enviado para: '+asig.nombre); return; }
-    // Marcar ANTES de esperar la respuesta: el GET ya dispara el envío en el servidor,
-    // así evitamos reenvíos duplicados en cada sync de 30s aunque el callback no confirme.
-    marcarEmailEnviado(asig.id, asig.nombre);
     // Garantizar fecha COMPLETA (con hora). Si viene vacía o sin hora, usar el momento actual.
     let fechaEnvio = asig.fechaCompletado;
     if(!fechaEnvio || !String(fechaEnvio).includes('T')) fechaEnvio = new Date().toISOString();
@@ -2788,11 +2786,18 @@ async function enviarEmailCompletada(asig){
       +'&fecha='+encodeURIComponent(fechaEnvio);
     const r = await jsonp(url);
     if(r && r.ok){
+      // Solo marcamos "enviado" DESPUÉS de confirmar que de verdad se mandó (o que ya
+      // estaba enviado). Antes se marcaba ANTES de esperar la respuesta — eso dejaba el
+      // Sheet diciendo "enviado" aunque la llamada real fallara, se trabara o se
+      // perdiera, sin que nadie se enterara hasta revisar Gmail manualmente.
+      marcarEmailEnviadoLocal(asig.id);
       console.log('✅ Email de entrega enviado y confirmado para: '+asig.nombre);
+      toast('📧 Correo de entrega enviado');
     } else {
-      console.log('ℹ️ Email disparado (sin confirmación del callback) para: '+asig.nombre, r);
+      // No marcamos nada — así la próxima vez que se revise esta asignatura, el sistema
+      // puede reintentar el envío en vez de quedar "fantasma" como enviado sin estarlo.
+      console.log('⚠️ El envío NO se confirmó para: '+asig.nombre+' — se reintentará más adelante', r);
     }
-    toast('📧 Correo de entrega enviado');
   } catch(e){ console.log('Email error:', e); }
 }
 
@@ -5284,20 +5289,15 @@ function yaSeEnvioEmail(asigId){
   return enviados[asigId] === true;
 }
 
-function marcarEmailEnviado(asigId, nombre){
-  // Caché local
+// Solo actualiza el caché de ESTE navegador (para no reintentar en la misma sesión).
+// NO escribe al Sheet — eso ya lo hace el backend, y únicamente después de confirmar
+// que el correo de verdad se envió (ver enviarEmailAsignaturaCompletada en Apps Script).
+function marcarEmailEnviadoLocal(asigId){
   const enviados = JSON.parse(localStorage.getItem('emailsEnviados') || '{}');
   enviados[asigId] = true;
   localStorage.setItem('emailsEnviados', JSON.stringify(enviados));
-  // Registro global compartido (evita reenvíos desde otros equipos)
   if(!STATE.emailsEnviados) STATE.emailsEnviados = [];
-  if(!STATE.emailsEnviados.includes(asigId)){
-    STATE.emailsEnviados.push(asigId);
-    sheetGuardar('Emails_Enviados',
-      ['ID','Nombre','Fecha Envio'],
-      [asigId, nombre||'', new Date().toLocaleString('es-CO')]
-    );
-  }
+  if(!STATE.emailsEnviados.includes(asigId)) STATE.emailsEnviados.push(asigId);
 }
 
 // Update local timer displays every 2 seconds
@@ -5337,6 +5337,7 @@ setInterval(async ()=>{
     }
   } catch(e){}
 }, 30000);
+
 
 
 </script>
