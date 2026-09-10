@@ -822,6 +822,7 @@ textarea{resize:vertical;min-height:70px}
 
 
 
+
 // ══════════════════════════════════════
 // GOOGLE SHEETS API — JSONP (sin CORS)
 // ══════════════════════════════════════
@@ -1996,6 +1997,7 @@ const CELULA_CFG = {
   David:     { label: 'David Bolaños',   color: '#0891b2', icon: '🔵', lider: 'David Bolaños',   disenador: 'David Bolaños' },
   Juliana:   { label: 'Juliana Zarate',  color: '#16a34a', icon: '🟢', lider: 'Juliana Zarate',  disenador: 'Juliana Zarate' },
   Melissa:   { label: 'Melissa Pantoja', color: '#ea6c1a', icon: '🟠', lider: 'Melissa Pantoja', disenador: 'Melissa Pantoja' },
+  Julieth:   { label: 'Julieth Pantoja', color: '#db2777', icon: '🔴', lider: 'Julieth Pantoja', disenador: 'Julieth Pantoja' },
   GabrielV:  { label: 'Gabriel Villarejo', color: '#0d9488', icon: '🟢', lider: 'Gabriel Villarejo', disenador: 'Gabriel Villarejo', disponibleDesde: '2026-07-27' },
   FabianP:   { label: 'Fabián Patiño',   color: '#ca8a04', icon: '🟡', lider: 'Fabián Patiño',   disenador: 'Fabián Patiño' },
   Alejandra: { label: 'Alejandra Gonzales', color: '#f43f5e', icon: '🌸', lider: 'Alejandra Gonzales', disenador: 'Alejandra Gonzales' },
@@ -2004,12 +2006,10 @@ const CELULA_CFG = {
   Gabriel:   { label: 'Célula Gabriel',  color: '#0891b2', icon: '🔵', lider: 'Gabriel Villarejo', disenador: 'Leidy Gonzales' },
   Fabian:    { label: 'Célula Fabián',   color: '#ea6c1a', icon: '🟠', lider: 'Fabián Patiño',    disenador: 'Julieth Pantoja' },
   Melisa:    { label: 'Célula Melisa',   color: '#16a34a', icon: '🟢', lider: 'Melisa Pantoja',   disenador: 'Juliana Zarate' },
-  // Julieth Pantoja salió del equipo (28/08/2026) — se deja solo para mostrar su historial ya registrado
-  Julieth:   { label: 'Julieth Pantoja', color: '#db2777', icon: '🔴', lider: 'Julieth Pantoja', disenador: 'Julieth Pantoja' },
 };
 // Unidades de diseño ACTIVAS para asignar (modelo por persona). El video va aparte (JuanDiego).
-// Las legacy (Gabriel/Fabian/Melisa/Julieth) NO se asignan; solo existen para mostrar lo que ya está en producción.
-const UNIDADES_DISENO = ['Sofia','David','Juliana','Melissa','GabrielV','FabianP','Alejandra'];
+// Las legacy (Gabriel/Fabian/Melisa) NO se asignan; solo existen para mostrar lo que ya está en producción.
+const UNIDADES_DISENO = ['Sofia','David','Juliana','Melissa','Julieth','GabrielV','FabianP','Alejandra'];
 
 // ════════════════════════════════════════════
 // LÍDERES DE CÉLULA — emails para notificaciones
@@ -2272,7 +2272,7 @@ function calcularPrioridadPorFecha(asig){
 // Nunca toca nada que ya tenga sesiones/timers reales (eso ya es trabajo en curso).
 function reordenarReservasPorPrioridad(){
   const reservas = STATE.asignaturas.filter(a=>
-    a.tipo==='celula' && a.celula && a.status==='En espera' && !arrancoAsig(a)
+    a.tipo==='celula' && a.celula && a.status==='En espera' && !infoFrente(a, false).iniciado
   );
   if(!reservas.length) return; // sin reservas movibles, nada que reordenar
 
@@ -2362,15 +2362,16 @@ function limpiarReservasDuplicadas(){
       a.celula===celulaId && a.tipo==='celula' && a.status==='En producción' && !disenoCompletoAsig(a)
     );
     if(activasSinDisenoCompleto.length > 1){
-      // Preferimos la que ya tiene trabajo real empezado; si ninguna, la más prioritaria
-      const conTrabajo = activasSinDisenoCompleto.filter(a=>arrancoAsig(a));
+      // Preferimos la que ya tiene trabajo real de DISEÑO empezado (no cuenta el video de
+      // esa misma asignatura); si ninguna, la más prioritaria
+      const conTrabajo = activasSinDisenoCompleto.filter(a=>infoFrente(a, false).iniciado);
       const candidatas = conTrabajo.length ? conTrabajo : activasSinDisenoCompleto;
       const ordenadas = ordenarPorPrioridad(candidatas);
       const seQueda = ordenadas[0];
       activasSinDisenoCompleto.filter(a=>a.id!==seQueda.id).forEach(asig=>{
-        // Si esta otra YA tiene trabajo real empezado, no la tocamos (sería perder datos
-        // reales) — solo avisamos para que se revise a mano.
-        if(arrancoAsig(asig)){
+        // Si esta otra YA tiene trabajo real de diseño empezado, no la tocamos (sería
+        // perder datos reales) — solo avisamos para que se revise a mano.
+        if(infoFrente(asig, false).iniciado){
           toast(`⚠️ ${CELULA_CFG[celulaId]?.label} tiene DOS activas con trabajo real ("${seQueda.nombre}" y "${asig.nombre}") — revisa a mano cuál es la correcta`);
           return;
         }
@@ -2398,7 +2399,11 @@ function liberarAsignaturasDePausados(){
     if(asig.tipo!=='celula' || !asig.celula) return;
     if(asig.status==='Completada' || asig.status==='Pausada') return;
     if(celulaActiva(asig.celula)) return; // la persona sigue activa, no tocar
-    if(arrancoAsig(asig)) return; // ya tiene trabajo real empezado, no se le quita
+    // OJO: revisamos solo SU frente (diseño), no la asignatura completa — si el video ya
+    // arrancó pero el diseño de esta persona nunca empezó, sí se debe liberar su cupo.
+    // Antes esto usaba arrancoAsig(asig) (cualquier sesión, diseño O video), y por eso una
+    // asignatura con video ya empezado nunca soltaba el cupo de diseño de alguien pausado.
+    if(infoFrente(asig, false).iniciado) return; // su diseño ya tiene trabajo real, no se le quita
 
     const celulaAnterior = CELULA_CFG[asig.celula]?.label || asig.celula;
     asig.celula = '';
@@ -5338,6 +5343,7 @@ setInterval(async ()=>{
     }
   } catch(e){}
 }, 30000);
+
 
 
 
