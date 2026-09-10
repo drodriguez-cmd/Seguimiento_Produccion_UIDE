@@ -1692,7 +1692,11 @@ function calcularFilasTiempos(){
       if(!persona) return; // no tiene a nadie asignado en ese frente, nada que mostrar
       const info = infoFrente(a, esVideo);
       if(!info.iniciado) return; // aún no arranca ese frente, no hay tiempo que medir
-      const completo = esVideo ? videoCompletoAsig(a) : disenoCompletoAsig(a);
+      // Si la asignatura ya quedó "Completada" en general (ej. el correo de entrega ya
+      // salió), la damos por completa aquí también — antes esto solo miraba el detalle
+      // fino de entregables marcados uno por uno, y podía quedar "atrasada" en esta
+      // página aunque ya estuviera cerrada de verdad.
+      const completo = a.status==='Completada' || (esVideo ? videoCompletoAsig(a) : disenoCompletoAsig(a));
       const objetivo = OBJETIVO_DIAS_FRENTE[key];
       const finParaTranscurridos = completo ? new Date(info.ultimoFin) : new Date();
       const ymdInicio = (()=>{ const d=new Date(info.fechaMs); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
