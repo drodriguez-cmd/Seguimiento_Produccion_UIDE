@@ -823,6 +823,7 @@ textarea{resize:vertical;min-height:70px}
 
 
 
+
 // ══════════════════════════════════════
 // GOOGLE SHEETS API — JSONP (sin CORS)
 // ══════════════════════════════════════
@@ -3027,6 +3028,16 @@ function pausarTimer(id){
 }
 
 function completarTimer(id,nota='',minsManual=null){
+  // Blindaje anti-duplicados: si este MISMO timer ya se completó antes (desde este
+  // navegador o desde otro, guardado en el Sheet), no volver a mandar la sesión. Sin
+  // esto, dos pestañas/dispositivos completando el mismo timer casi al mismo tiempo (o
+  // un doble clic accidental sobre un timer remoto) generaban la misma sesión repetida
+  // varias veces en el Sheet — mismo contenido, mismas horas, filas de más.
+  const yaCompletadosGuard = JSON.parse(localStorage.getItem('timersCompletadosGuard') || '{}');
+  if(yaCompletadosGuard[id]){
+    toast('Este timer ya se había completado — no se vuelve a registrar');
+    return;
+  }
   let t=STATE.timers[id];
   if(!t){
     const r=(STATE.timersSheets||[]).find(x=>x.id===id);
@@ -3040,6 +3051,11 @@ function completarTimer(id,nota='',minsManual=null){
         elapsed:r.running?(Date.now()-r.inicio):(r.minutosAcumulados||0)*60000, running:r.running };
     STATE.timers[id]=t;
   }
+  // Marcamos ESTE timer como completado de una vez (antes de armar/enviar la sesión),
+  // para que si otra pestaña/dispositivo intenta completarlo casi al mismo tiempo,
+  // encuentre la marca y se detenga en el chequeo de arriba.
+  yaCompletadosGuard[id] = true;
+  localStorage.setItem('timersCompletadosGuard', JSON.stringify(yaCompletadosGuard));
   clearInterval(STATE.intervals[id]);
   const elapsed=t.running?Date.now()-t.inicio:t.elapsed;
   const mins=minsManual!==null ? minsManual : Math.round(elapsed/60000);
@@ -5347,6 +5363,7 @@ setInterval(async ()=>{
     }
   } catch(e){}
 }, 30000);
+
 
 
 
