@@ -285,6 +285,9 @@ textarea{resize:vertical;min-height:70px}
     </button>
 
     <div class="nav-section">Análisis</div>
+    <button class="nav-item" onclick="goPage('operacion',this)">
+      <span class="dot" style="background:#7c3aed"></span> 📊 Operación
+    </button>
     <button class="nav-item" onclick="goPage('roles',this)">
       <span class="dot" style="background:var(--disgrafico)"></span> Por rol
     </button>
@@ -716,6 +719,15 @@ textarea{resize:vertical;min-height:70px}
   </div>
   <div id="filtro-horarios-wrap"></div>
   <div id="horarios-view-content"></div>
+</div>
+
+<!-- ─── OPERACIÓN ─── -->
+<div class="page" id="page-operacion">
+  <div class="page-header">
+    <h1>📊 Operación</h1>
+    <p>Qué se entregó, qué debe salir cada semana y si el equipo alcanza a cumplirlo</p>
+  </div>
+  <div id="operacion-content"></div>
 </div>
 
 <!-- ─── CRONOGRAMA ─── -->
@@ -1814,6 +1826,7 @@ function renderPage(id){
   else if(id==='horarios-view') renderHorariosView();
   else if(id==='tiempos') renderTiempos();
   else if(id==='cronograma'){ renderCronograma(); cargarCronograma(false); }
+  else if(id==='operacion'){ renderOperacion(); cargarCronograma(false); }
   else if(id==='celula') renderCelula();
   else if(id==='celulas-dir') renderCelulasDir();
 }
@@ -4969,6 +4982,7 @@ async function cargarCronograma(forzar){
   }catch(e){ _cronoError = 'Error leyendo el cronograma: '+e; _cronoFilas = null; }
   _cronoCargando = false;
   renderCronograma();
+  if(document.getElementById('page-operacion') && document.getElementById('page-operacion').classList.contains('active')) renderOperacion();
 }
 function cronoSetMes(ym){ _cronoMes = ym; renderCronograma(); }
 
@@ -5110,6 +5124,192 @@ function renderCronograma(){
       <thead><tr><th>Asignatura</th><th>Programa</th><th>Se lanza</th><th>Debía ingresar</th><th>Ingresó</th><th>Puntualidad</th><th>Entrega límite</th><th>Estado</th></tr></thead>
       <tbody>${filas.map(filaHTML).join('')}</tbody></table></div></div>
     <div style="font-size:11px;color:var(--muted)">“Ingresó” es la fecha de ingreso a fábrica que registras en el dashboard. “Debía ingresar” y “Entrega límite” salen de la franja verde del cronograma. Las ingresadas antes de tiempo solo se marcan como anticipadas.</div>`;
+}
+
+// ════════════════════════════════════════════
+// OPERACIÓN — semanas (real vs plan), qué debe salir y radar de capacidad
+// ════════════════════════════════════════════
+const OP_PLAN_DESDE = '2026-09-07'; // el cronograma sembrado cubre completas las entregas desde esta semana
+const OP_DISENO_DIAS = 3, OP_VIDEO_DIAS = 1; // objetivo fijo acordado (jornadas de 8 h)
+let _opSem = '';
+const _opFestMem = {};
+function _opFest(y){ return _opFestMem[y] || (_opFestMem[y] = festivosColombia(y)); }
+function _opAddDias(ymd, n){
+  const p=ymd.split('-').map(Number), d=new Date(Date.UTC(p[0],p[1]-1,p[2]+n));
+  return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');
+}
+function _opDow(ymd){ const p=ymd.split('-').map(Number); return new Date(Date.UTC(p[0],p[1]-1,p[2])).getUTCDay(); }
+function _opEsHabil(ymd){ const w=_opDow(ymd); return w!==0 && w!==6 && !_opFest(+ymd.slice(0,4)).has(ymd); }
+function _opLunes(ymd){ return _opAddDias(ymd, -((_opDow(ymd)+6)%7)); }
+// Si la fecha límite cae en fin de semana o festivo, cuenta el último día hábil anterior.
+function _opHabilAnterior(ymd){ let d=ymd; while(!_opEsHabil(d)) d=_opAddDias(d,-1); return d; }
+function _opHabilesEntre(a,b){ if(!a||!b||b<a) return 0; let n=0,d=a; while(d<=b){ if(_opEsHabil(d)) n++; d=_opAddDias(d,1); } return n; }
+function _opFrac(a, esVideo){
+  if(!a || !a.assets) return 0;
+  let total=0, done=0;
+  if(!esVideo){
+    ['u1','u2','u3'].forEach(u=>['html','genially','infografia','imagenes'].forEach(k=>{ total++; if(a.assets[u] && a.assets[u][k]) done++; }));
+  } else {
+    ['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'].forEach(k=>{ total++; if(a.assets.global && a.assets.global[k]) done++; });
+  }
+  return total ? done/total : 0;
+}
+// Una fila por materia del cronograma, cruzada con el dashboard, con su trabajo pendiente.
+function _opFilas(hoy){
+  return _cronoItems(hoy).map(r=>{
+    const e1a = r.f.e1 ? _opHabilAnterior(r.f.e1) : '';
+    const entregada = r.estado==='entregada';
+    const cerrada = entregada || r.estado==='entregada_excel';
+    return Object.assign({}, r, {
+      e1a, sem: e1a ? _opLunes(e1a) : '', entregada,
+      fechaEnt: entregada && r.m && r.m.fechaCompletado ? _cYMD(r.m.fechaCompletado) : '',
+      faltaD: cerrada ? 0 : OP_DISENO_DIAS*(1-_opFrac(r.m,false)),
+      faltaV: cerrada ? 0 : OP_VIDEO_DIAS*(1-_opFrac(r.m,true))
+    });
+  });
+}
+function _opRiesgo(r, hoy){
+  if(r.estado==='entregada'){
+    const d = r.fechaEnt && r.e1a ? _cDiff(r.e1a, r.fechaEnt) : null;
+    return { k:'ok', txt: d==null ? 'Entregada' : d<=0 ? 'Entregada a tiempo' : 'Entregada '+d+' d tarde' };
+  }
+  if(r.estado==='entregada_excel') return { k:'ok', txt:'Entregada (según Excel)' };
+  if(r.estado==='pausada') return { k:'gris', txt:'Pausada' };
+  if(r.e1a && hoy>r.e1a) return { k:'rojo', txt:'Vencida hace '+_cDiff(r.e1a,hoy)+' d' };
+  if(r.estado==='no_ingresada'){
+    if(r.f.e0 && hoy>r.f.e0) return { k:'rojo', txt:'No ha ingresado ('+_cDiff(r.f.e0,hoy)+' d de atraso)' };
+    return { k:'gris', txt:'Aún no le toca' };
+  }
+  const falta = Math.max(r.faltaD, r.faltaV), quedan = _opHabilesEntre(hoy, r.e1a);
+  const f1 = Math.round(falta*10)/10;
+  if(falta>quedan) return { k:'rojo', txt:'No alcanza: faltan '+f1+' d, quedan '+quedan };
+  if(falta>quedan*0.7) return { k:'ambar', txt:'Justa: faltan '+f1+' d, quedan '+quedan };
+  return { k:'verde', txt:'Va bien: faltan '+f1+' d, quedan '+quedan };
+}
+function _opEntregadasSemana(lunes){
+  const dom=_opAddDias(lunes,6);
+  return STATE.asignaturas.filter(a=>a.status==='Completada' && a.fechaCompletado)
+    .map(a=>_cYMD(a.fechaCompletado)).filter(d=>d>=lunes && d<=dom).length;
+}
+// Cumplimiento del plan de una semana: de lo que debía salir, cuánto salió a más tardar ese domingo.
+function _opCumplimiento(filas, lunes){
+  const dom=_opAddDias(lunes,6);
+  const plan=filas.filter(r=>r.sem===lunes && r.estado!=='entregada_excel');
+  const ok=plan.filter(r=>r.entregada && (!r.fechaEnt || r.fechaEnt<=dom)).length;
+  return { plan:plan.length, ok };
+}
+// Trabajo pendiente que vence, contra lo que el equipo activo alcanza a producir desde hoy.
+function _opRadar(filas, hoy){
+  const Pd=UNIDADES_DISENO.filter(celulaActiva).length, Pv=VIDEO_PERSONAS.filter(celulaActiva).length;
+  const horizonte=_opAddDias(hoy,7*12);
+  const pend=filas.filter(r=>r.estado!=='entregada' && r.estado!=='entregada_excel' && r.estado!=='pausada' && r.e1a)
+    .map(r=>({ due: r.e1a<hoy ? hoy : r.e1a, d:r.faltaD, v:r.faltaV }))
+    .filter(p=>p.due<=horizonte).sort((a,b)=>a.due<b.due?-1:a.due>b.due?1:0);
+  const dias=[]; for(let d=hoy; d<=horizonte; d=_opAddDias(d,1)) if(_opEsHabil(d)) dias.push(d);
+  const labels=[], demD=[], capD=[], demV=[], capV=[], nMat=[];
+  let i=0, accD=0, accV=0, n=0;
+  dias.forEach((d,k)=>{
+    while(i<pend.length && pend[i].due<=d){ accD+=pend[i].d; accV+=pend[i].v; n++; i++; }
+    labels.push(d); demD.push(accD); demV.push(accV); nMat.push(n);
+    capD.push(Pd*(k+1)); capV.push(Pv*(k+1));
+  });
+  const alarmas=(dem,cap,P)=>{
+    const porSem=new Map();
+    dias.forEach((d,k)=>{
+      const deficit=dem[k]-cap[k];
+      const esVencimiento = k===0 ? dem[0]>0 : dem[k]>dem[k-1];
+      if(deficit>0.5 && esVencimiento){
+        const s=_opLunes(d), prev=porSem.get(s);
+        if(!prev || deficit>=prev.deficit) porSem.set(s,{ fecha:d, deficit, mat:nMat[k], demanda:dem[k], capacidad:cap[k], extra:Math.max(1,Math.ceil(dem[k]/(k+1)-P)) });
+      }
+    });
+    return [...porSem.values()].sort((a,b)=>a.fecha<b.fecha?-1:1);
+  };
+  return { Pd, Pv, labels, demD, capD, demV, capV, alarmasD:alarmas(demD,capD,Pd), alarmasV:alarmas(demV,capV,Pv) };
+}
+function opSemMover(n){ _opSem=_opAddDias(_opSem||_opLunes(_ymdLocal(new Date())), 7*n); renderOperacion(); }
+function opSemHoy(){ _opSem=_opLunes(_ymdLocal(new Date())); renderOperacion(); }
+
+function renderOperacion(){
+  const el=document.getElementById('operacion-content'); if(!el) return;
+  const card=(inner)=>`<div class="card"><div style="padding:24px">${inner}</div></div>`;
+  if(_cronoCargando && !_cronoFilas){ el.innerHTML=card('<div style="text-align:center;color:var(--muted)">⏳ Leyendo el cronograma…</div>'); return; }
+  if(_cronoError){ el.innerHTML=card(`<div style="color:var(--danger);margin-bottom:12px">${_cEsc(_cronoError)}</div><button class="btn btn-sm" onclick="cargarCronograma(true)">↻ Reintentar</button>`); return; }
+  if(!_cronoFilas || !_cronoFilas.length){
+    el.innerHTML=card('<div style="font-weight:600;margin-bottom:6px">Esta página necesita la pestaña "Cronograma"</div><div style="color:var(--muted);font-size:13px">Impórtala al Google Sheet (la explicación está en la página Cronograma) y vuelve aquí.</div>'); return;
+  }
+  const hoy=_ymdLocal(new Date());
+  if(!_opSem) _opSem=_opLunes(hoy);
+  const W=_opSem, viernes=_opAddDias(W,4), prevW=_opAddDias(W,-7);
+  const filas=_opFilas(hoy);
+  const semFilas=filas.filter(r=>r.sem===W).map(r=>Object.assign({}, r, { riesgo:_opRiesgo(r,hoy) }));
+  const rank={ rojo:0, ambar:1, gris:2, verde:3, ok:4 };
+  semFilas.sort((a,b)=>rank[a.riesgo.k]-rank[b.riesgo.k] || a.f.materia.localeCompare(b.f.materia));
+  const nRojo=semFilas.filter(r=>r.riesgo.k==='rojo').length, nAmbar=semFilas.filter(r=>r.riesgo.k==='ambar').length;
+  const nEnt=semFilas.filter(r=>r.estado==='entregada'||r.estado==='entregada_excel').length;
+  const entPrev=_opEntregadasSemana(prevW), cumPrev=_opCumplimiento(filas, prevW), entW=_opEntregadasSemana(W);
+  const radar=_opRadar(filas, hoy);
+  const primera=radar.alarmasD[0];
+
+  const dot={ rojo:'#d03b3b', ambar:'#fab219', verde:'#0ca30c', gris:'#9ca3af', ok:'#0ca30c' };
+  const filaHTML=r=>`<tr>
+    <td style="font-weight:600">${_cEsc(r.f.materia)}<div style="font-size:11px;color:var(--muted);font-weight:400">${_cEsc(r.f.prog)}</div></td>
+    <td>${_cFmt(r.e1a)}</td><td>${_cFmt(r.f.lanz)}</td>
+    <td>${_cEstadoBadge(r)}<div style="font-size:11px;color:var(--muted);margin-top:3px">${_cPersona(r)}</div></td>
+    <td style="font-size:12px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${dot[r.riesgo.k]};margin-right:6px"></span>${_cEsc(r.riesgo.txt)}</td></tr>`;
+  const alarmaHTML=(a,tipo)=>`<div style="display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--border);font-size:13px;line-height:1.5"><span style="font-size:16px">🔴</span><span><b>${_cFmt(a.fecha)}.</b> Hasta esa fecha vencen ${a.mat} materias (${Math.round(a.demanda)} días de ${tipo}). Con el equipo activo alcanzan ${Math.round(a.capacidad)}. Faltan ${Math.round(a.deficit)} días, unas ${a.extra} personas más, o mover fechas.</span></div>`;
+  const alarmasTxt=radar.alarmasD.slice(0,4).map(a=>alarmaHTML(a,'diseño')).join('') + radar.alarmasV.slice(0,2).map(a=>alarmaHTML(a,'video')).join('');
+  const tile=(t,v,s,c)=>`<div class="card" style="flex:1;min-width:150px"><div style="padding:14px 16px"><div style="font-size:11px;color:var(--muted);font-weight:600">${t}</div><div style="font-size:26px;font-weight:800;color:${c};margin-top:2px">${v}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${s}</div></div></div>`;
+
+  el.innerHTML=`
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px">
+      <button class="btn btn-sm" onclick="opSemMover(-1)">◀ Semana anterior</button>
+      <div style="font-size:15px;font-weight:700;padding:0 8px">Semana del ${_cFmt(W)} al ${_cFmt(viernes)}</div>
+      <button class="btn btn-sm" onclick="opSemMover(1)">Semana siguiente ▶</button>
+      <button class="btn btn-sm" style="margin-left:auto" onclick="opSemHoy()">Ir a esta semana</button>
+      <button class="btn btn-sm" onclick="cargarCronograma(true)">↻ Recargar</button></div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px">
+      ${tile('Semana anterior · entregadas', entPrev, cumPrev.plan ? `Del plan de esa semana: ${cumPrev.ok} de ${cumPrev.plan} (${Math.round(100*cumPrev.ok/cumPrev.plan)}%)` : 'Sin plan registrado esa semana', '#2a78d6')}
+      ${tile('Esta semana · deben salir', semFilas.length, `${nEnt} ya entregadas del plan · ${entW} completadas en la semana`, '#374151')}
+      ${tile('En riesgo en esta semana', nRojo+nAmbar, `${nRojo} no alcanzan · ${nAmbar} justas`, nRojo?'#b91c1c':nAmbar?'#b45309':'#15803d')}
+      ${tile('Primera fecha sin capacidad', primera?_cFmt(primera.fecha):'Sin déficit', `${radar.Pd} diseñadores y ${radar.Pv} editores activos`, primera?'#b91c1c':'#15803d')}
+    </div>
+    <div class="card" style="margin-bottom:20px"><div class="card-head"><span class="card-title">Entregas por semana</span><span style="font-size:11px;color:var(--muted)">Barras: materias entregadas · Línea: lo que el cronograma esperaba (desde la semana del ${_cFmt(OP_PLAN_DESDE)})</span></div>
+      <div style="padding:14px 20px"><div style="position:relative;height:260px"><canvas id="op-chart-entregas"></canvas></div></div></div>
+    <div style="font-size:15px;font-weight:700;margin:0 0 10px">Materias que deben salir esta semana <span style="font-weight:400;color:var(--muted);font-size:12px">· fecha límite de entrega del cronograma</span></div>
+    <div class="card" style="margin-bottom:20px">${semFilas.length ? `<div style="overflow-x:auto"><table>
+      <thead><tr><th>Asignatura</th><th>Entrega límite</th><th>Se lanza</th><th>Estado</th><th>Riesgo</th></tr></thead>
+      <tbody>${semFilas.map(filaHTML).join('')}</tbody></table></div>` : '<div style="padding:24px;text-align:center;color:var(--muted)">No hay entregas planeadas esta semana.</div>'}</div>
+    <div class="card" style="margin-bottom:20px"><div class="card-head"><span class="card-title">Radar de capacidad</span><span style="font-size:11px;color:var(--muted)">Trabajo pendiente que vence, acumulado, contra lo que el equipo activo alcanza a producir desde hoy</span></div>
+      <div style="padding:14px 20px"><div style="position:relative;height:280px"><canvas id="op-chart-capacidad"></canvas></div>
+      ${alarmasTxt || '<div style="padding:10px 0;font-size:13px;color:#15803d">✅ Con el equipo activo y el avance actual, se alcanza a cumplir todo lo que viene en las próximas 12 semanas.</div>'}</div></div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.6">Supuestos: cada asignatura necesita ${OP_DISENO_DIAS} días de diseño y ${OP_VIDEO_DIAS} de video (jornadas de 8 h), menos el avance real de sus entregables; cada persona activa produce 1 día por día hábil; las fechas límite que caen en fin de semana o festivo cuentan el último día hábil anterior; lo vencido y no entregado cuenta como si venciera hoy; el cronograma se compara con el dashboard por nombre.</div>`;
+
+  // Gráficas
+  if(typeof Chart==='undefined') return;
+  window.myCharts=window.myCharts||{};
+  ['opEntregas','opCapacidad'].forEach(k=>{ if(window.myCharts[k]){ try{ window.myCharts[k].destroy(); }catch(e){} } });
+  const semanas=[]; for(let k=-8;k<=4;k++) semanas.push(_opAddDias(W,7*k));
+  const lunesHoy=_opLunes(hoy), planDesde=_opLunes(OP_PLAN_DESDE);
+  const real=semanas.map(s=>s<=lunesHoy ? _opEntregadasSemana(s) : null);
+  const plan=semanas.map(s=>s>=planDesde ? filas.filter(r=>r.sem===s).length : null);
+  const etiqueta=s=>{ const p=s.split('-'); return p[2]+'/'+p[1]; };
+  window.myCharts.opEntregas=new Chart(document.getElementById('op-chart-entregas').getContext('2d'),{
+    type:'bar',
+    data:{ labels:semanas.map(etiqueta), datasets:[
+      { type:'bar', label:'Entregadas', data:real, backgroundColor:semanas.map(s=>s===W?'#0f4c8a':'#2a78d6'), borderRadius:4, maxBarThickness:26 },
+      { type:'line', label:'Plan (fecha límite)', data:plan, borderColor:'#eb6834', backgroundColor:'#eb6834', borderWidth:2, pointRadius:3, tension:0, spanGaps:false }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }, title:{ display:true, text:'Materias' } }, x:{ title:{ display:true, text:'Semana (lunes)' } } } }
+  });
+  window.myCharts.opCapacidad=new Chart(document.getElementById('op-chart-capacidad').getContext('2d'),{
+    type:'line',
+    data:{ labels:radar.labels.map(etiqueta), datasets:[
+      { label:'Demanda acumulada (días de diseño)', data:radar.demD.map(v=>Math.round(v*10)/10), borderColor:'#eb6834', backgroundColor:'#eb6834', borderWidth:2, pointRadius:0, stepped:true },
+      { label:'Capacidad acumulada ('+radar.Pd+' diseñadores)', data:radar.capD, borderColor:'#2a78d6', backgroundColor:'#2a78d6', borderWidth:2, pointRadius:0 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{ position:'bottom' } }, scales:{ y:{ beginAtZero:true, title:{ display:true, text:'Días de diseño' } }, x:{ ticks:{ maxTicksLimit:12 } } } }
+  });
 }
 
 function renderTiempos(){
