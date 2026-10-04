@@ -272,6 +272,9 @@ textarea{resize:vertical;min-height:70px}
     <button class="nav-item" onclick="goPage('tiempos',this)">
       <span class="dot" style="background:#e11d48"></span> ⏱️ Tiempos
     </button>
+    <button class="nav-item" onclick="goPage('cronograma',this)">
+      <span class="dot" style="background:#0891b2"></span> 📅 Cronograma
+    </button>
 
     <div class="nav-section">Registro</div>
     <button class="nav-item" onclick="goPage('nueva',this)">
@@ -449,7 +452,7 @@ textarea{resize:vertical;min-height:70px}
             </select>
           </div>
           <div class="fgrow2">
-            <div class="fg"><label>Fecha inicio producción</label><input type="date" id="n-inicio"></div>
+            <div class="fg"><label>Fecha de ingreso a fábrica</label><input type="date" id="n-inicio"><small style="color:var(--muted);display:block;margin-top:4px">El día que te llegó la asignatura (si la dejas vacía se usa hoy).</small></div>
             <div class="fg"><label>DF estimado (días)</label><input type="number" id="n-df" placeholder="4" min="1" max="60" value="4"></div>
           </div>
           <div class="fg" style="margin-bottom:14px">
@@ -715,6 +718,15 @@ textarea{resize:vertical;min-height:70px}
   <div id="horarios-view-content"></div>
 </div>
 
+<!-- ─── CRONOGRAMA ─── -->
+<div class="page" id="page-cronograma">
+  <div class="page-header">
+    <h1>📅 Cronograma</h1>
+    <p>Lo que se lanza cada mes contra lo que ya ingresó a fábrica — con alertas de lo que debió llegar y no ha llegado</p>
+  </div>
+  <div id="cronograma-content"></div>
+</div>
+
 <!-- ─── TIEMPOS ─── -->
 <div class="page" id="page-tiempos">
   <div class="page-header">
@@ -819,6 +831,7 @@ textarea{resize:vertical;min-height:70px}
 <div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg"></span></div>
 
 <script>
+
 
 
 
@@ -1800,6 +1813,7 @@ function renderPage(id){
   else if(id==='indicadores') renderIndicadores();
   else if(id==='horarios-view') renderHorariosView();
   else if(id==='tiempos') renderTiempos();
+  else if(id==='cronograma'){ renderCronograma(); cargarCronograma(false); }
   else if(id==='celula') renderCelula();
   else if(id==='celulas-dir') renderCelulasDir();
 }
@@ -4788,6 +4802,316 @@ function renderIndicadores(){
   }
 }
 
+// ════════════════════════════════════════════
+// CRONOGRAMA — plan (pestaña "Cronograma") vs realidad (Asignaturas del dashboard)
+// ════════════════════════════════════════════
+const CRONO_DESDE = '2026-10'; // primer mes que se muestra (YYYY-MM)
+
+const _cNormMem = new Map();
+function _cNorm(s){
+  s = String(s==null?'':s);
+  let r = _cNormMem.get(s);
+  if(r===undefined){
+    r = s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+    if(_cNormMem.size>5000) _cNormMem.clear();
+    _cNormMem.set(s,r);
+  }
+  return r;
+}
+function _cLev(a,b){
+  const m=a.length, n=b.length; if(!m||!n) return 0;
+  let prev=new Array(n+1), cur=new Array(n+1);
+  for(let j=0;j<=n;j++) prev[j]=j;
+  for(let i=1;i<=m;i++){
+    cur[0]=i;
+    for(let j=1;j<=n;j++){
+      const c = a[i-1]===b[j-1] ? 0 : 1;
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+c);
+    }
+    const t=prev; prev=cur; cur=t;
+  }
+  return 1 - prev[n]/Math.max(m,n);
+}
+const _cTokMem = new Map();
+function _cTokens(s){
+  const n=_cNorm(s);
+  let r=_cTokMem.get(n);
+  if(!r){ r=new Set(n.split(' ').filter(t=>t.length>2)); if(_cTokMem.size>5000) _cTokMem.clear(); _cTokMem.set(n,r); }
+  return r;
+}
+function _cJac(a,b){
+  const ta=_cTokens(a), tb=_cTokens(b); if(!ta.size||!tb.size) return 0;
+  let inter=0; ta.forEach(t=>{ if(tb.has(t)) inter++; });
+  return inter/(ta.size+tb.size-inter);
+}
+const _C_STOP = new Set(['de','del','la','las','el','los','y','e','en','con','para','por','a','al','un','una','o','u','mencion']);
+// Cada palabra que una materia tiene y la otra no, debe parecerse (typo) a alguna palabra distinta de la otra.
+// Así "publico" vs "privado" o "Naturales" vs "Sociales" NO se confunden, pero "Urbaniso" vs "Urbanismo" sí.
+function _cMismasPalabras(na, nb){
+  const A=na.split(' ').filter(t=>t&&!_C_STOP.has(t)), B=nb.split(' ').filter(t=>t&&!_C_STOP.has(t));
+  const restoA=A.filter(t=>!B.includes(t)), restoB=B.filter(t=>!A.includes(t));
+  const ok=(t,otros)=> t.length>3 && otros.some(o=>o.length>3 && _cLev(t,o)>=0.75);
+  return restoA.every(t=>ok(t,restoB)) && restoB.every(t=>ok(t,restoA));
+}
+// Parecido entre dos nombres de materia (0 a 1). Tolera tildes, mayúsculas y pequeños errores de tipeo.
+function _cSim(a,b){
+  const na=_cNorm(a), nb=_cNorm(b);
+  if(!na||!nb) return 0;
+  if(na===nb) return 1;
+  const mx=Math.max(na.length,nb.length);
+  const lev = (Math.abs(na.length-nb.length)/mx > 0.35) ? 0 : _cLev(na,nb); // largos muy distintos: no pueden parecerse por tipeo
+  const sc=Math.max(lev, _cJac(na,nb)*0.9);
+  if(sc>=0.65 && !_cMismasPalabras(na,nb)) return Math.min(sc,0.6);
+  return sc;
+}
+
+const _ymdLocal = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+// Fecha a 'YYYY-MM-DD' desde lo que venga del Sheet (texto, ISO con hora, o d/m/aaaa)
+function _cYMD(v){
+  if(v===null||v===undefined||v==='') return '';
+  if(v instanceof Date) return isNaN(v) ? '' : _ymdLocal(v);
+  const s=String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if(/^\d{4}-\d{2}-\d{2}T/.test(s)){ const d=new Date(s); return isNaN(d)?'':_ymdLocal(d); }
+  const m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  return '';
+}
+function _cDiff(a,b){ // días de a a b (b - a), ambos 'YYYY-MM-DD'
+  if(!a||!b) return null;
+  const [y1,m1,d1]=a.split('-').map(Number), [y2,m2,d2]=b.split('-').map(Number);
+  return Math.round((Date.UTC(y2,m2-1,d2)-Date.UTC(y1,m1-1,d1))/86400000);
+}
+
+// Busca en el dashboard la asignatura que corresponde a una fila del cronograma.
+// 1) Si la fila trae "ID Asignatura" escrito a mano, manda ese. 2) Si no, por nombre (tolerante).
+function _cEmparejar(f, asignaturas){
+  if(f.idAsig){
+    const x=asignaturas.find(a=>a.id===f.idAsig);
+    if(x) return { m:x, score:1, pista:null };
+  }
+  let mejor=null, mejorScore=0, segundo=null;
+  asignaturas.forEach(a=>{
+    const sc=_cSim(f.materia, a.nombre);
+    // Desempate: parecido entre programas (suave, nunca bloquea)
+    const sc2 = sc + (sc>=0.85 ? _cJac(f.prog||'', a.prog||'')*0.01 : 0);
+    if(sc2>mejorScore){ segundo=mejor; mejor=a; mejorScore=sc2; }
+  });
+  if(mejor && mejorScore>=0.85) return { m:mejor, score:mejorScore, pista:null };
+  if(mejor && mejorScore>=0.65) return { m:null, score:mejorScore, pista:mejor };
+  return { m:null, score:mejorScore, pista:null };
+}
+
+// Estado de una fila del cronograma frente a lo que hay en el dashboard.
+// categoriaFn = categoriaAsig del dashboard (se inyecta para poder probar aparte).
+function _cClasificar(f, emp, hoy, categoriaFn){
+  const m=emp.m;
+  const r={ f, m, pista:emp.pista, estado:'', ingreso:'', punt:'', diasPunt:null, alerta:'', diasAtraso:null, mes:(f.lanz||'').slice(0,7) };
+  if(m){
+    const cat=categoriaFn(m);
+    r.estado = cat==='Completada' ? 'entregada' : cat==='En producción' ? 'produccion' : cat==='Pausada' ? 'pausada' : 'cola';
+    r.ingreso = _cYMD(m.inicio);
+    if(r.ingreso && f.e0){
+      const d=_cDiff(f.e0, r.ingreso); // + = ingresó después de lo debido
+      if(d<=0){ r.punt='a_tiempo'; r.diasPunt=-d; } else { r.punt='tarde'; r.diasPunt=d; }
+    }
+  } else if(f.estado){
+    r.estado='entregada_excel';            // el Excel ya la marca como recibida/cargada
+  } else {
+    r.estado='no_ingresada';
+    if(f.e0 && hoy>f.e0){ r.alerta='sin_ingresar'; r.diasAtraso=_cDiff(f.e0, hoy); }
+  }
+  if(r.estado!=='entregada' && r.estado!=='entregada_excel' && f.e1 && hoy>f.e1 && !r.alerta){
+    r.alerta='entrega_vencida'; r.diasAtraso=_cDiff(f.e1, hoy);
+  }
+  return r;
+}
+const _cCerrada = r => r.estado==='entregada' || r.estado==='entregada_excel';
+
+
+// ── Lectura de la pestaña "Cronograma" y dibujo de la página ──
+let _cronoFilas = null, _cronoMes = '', _cronoCargando = false, _cronoError = '';
+const _cEsc = s => String(s==null?'':s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+const _cFmt = ymd => { if(!ymd) return '—'; const p=ymd.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+function _cMesLabel(ym){
+  const p=ym.split('-').map(Number);
+  const t=new Date(p[0],p[1]-1,1).toLocaleDateString('es-CO',{month:'long',year:'numeric'});
+  return t.charAt(0).toUpperCase()+t.slice(1);
+}
+
+async function cargarCronograma(forzar){
+  if(_cronoCargando) return;
+  if(_cronoFilas && !forzar) return;
+  _cronoCargando = true; _cronoError = '';
+  renderCronograma();
+  try{
+    const r = await jsonp(API+'?accion=leer&hoja=Cronograma');
+    if(r && r.ok===false){
+      _cronoError = 'No se pudo leer el Sheet (tardó demasiado o no hubo conexión). Intenta de nuevo.';
+      _cronoFilas = null;
+    } else {
+      const filas = (r && r.filas) || [];
+      if(filas.length < 2){ _cronoFilas = []; }
+      else {
+        const h = filas[0].map(x=>_cNorm(x));
+        const ix = n => h.indexOf(_cNorm(n));
+        const iID=ix('ID'), iPr=ix('Programa'), iMa=ix('Materia'), iLa=ix('Lanzamiento'),
+              iE0=ix('Debia ingresar'), iE1=ix('Entrega limite'), iAu=ix('Autor / IA'),
+              iEs=ix('Estado Excel'), iIA=ix('ID Asignatura');
+        const g = (r,i) => i>=0 ? r[i] : '';
+        _cronoFilas = filas.slice(1).filter(r=>g(r,iMa)).map(r=>({
+          id:String(g(r,iID)||''), prog:String(g(r,iPr)||''), materia:String(g(r,iMa)||'').trim(),
+          lanz:_cYMD(g(r,iLa)), e0:_cYMD(g(r,iE0)), e1:_cYMD(g(r,iE1)),
+          autor:String(g(r,iAu)||''), estado:String(g(r,iEs)||'').trim(), idAsig:String(g(r,iIA)||'').trim()
+        })).filter(f=>f.lanz);
+      }
+    }
+  }catch(e){ _cronoError = 'Error leyendo el cronograma: '+e; _cronoFilas = null; }
+  _cronoCargando = false;
+  renderCronograma();
+}
+function cronoSetMes(ym){ _cronoMes = ym; renderCronograma(); }
+
+let _cronoEmpMem = { firma:'', filas:null, map:new Map() };
+function _cronoItems(hoy){
+  // El emparejamiento por nombre es lo costoso: se recalcula solo si cambió la lista de asignaturas o las filas del cronograma.
+  const firma = STATE.asignaturas.map(a=>a.id+'|'+a.nombre).join('~');
+  if(_cronoEmpMem.firma!==firma || _cronoEmpMem.filas!==_cronoFilas){
+    _cronoEmpMem = { firma, filas:_cronoFilas, map:new Map() };
+  }
+  const porId = new Map(STATE.asignaturas.map(a=>[a.id,a]));
+  return (_cronoFilas||[])
+    .filter(f=>f.lanz.slice(0,7) >= CRONO_DESDE)
+    .map(f=>{
+      let e=_cronoEmpMem.map.get(f);
+      if(!e){
+        const x=_cEmparejar(f, STATE.asignaturas);
+        e={ mId:x.m?x.m.id:null, pId:x.pista?x.pista.id:null, score:x.score };
+        _cronoEmpMem.map.set(f,e);
+      }
+      return _cClasificar(f, { m:e.mId?porId.get(e.mId):null, score:e.score, pista:e.pId?porId.get(e.pId):null }, hoy, categoriaAsig);
+    });
+}
+
+function _cEstadoBadge(r){
+  const b=(txt,bg,col)=>`<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:${bg};color:${col};white-space:nowrap">${txt}</span>`;
+  if(r.estado==='entregada') return b('✅ Entregada','rgba(22,163,74,.12)','#15803d');
+  if(r.estado==='entregada_excel') return b('✅ Entregada (según Excel)','rgba(22,163,74,.08)','#4d7c5a');
+  if(r.estado==='produccion') return b('🔨 En producción','rgba(217,119,6,.12)','#b45309');
+  if(r.estado==='cola') return b(r.m && r.m.celula ? '⏳ Por iniciar' : '⏳ En cola','rgba(99,102,241,.12)','#4f46e5');
+  if(r.estado==='pausada') return b('⏸ Pausada','rgba(107,114,128,.14)','#4b5563');
+  if(r.alerta==='sin_ingresar') return b('🔴 No ha ingresado','rgba(239,68,68,.12)','#b91c1c');
+  return b('⚪ Aún no le toca','rgba(107,114,128,.10)','#6b7280');
+}
+function _cPuntual(r){
+  if(!r.punt) return '<span style="color:var(--muted)">—</span>';
+  if(r.punt==='a_tiempo') return r.diasPunt>0
+    ? `<span style="color:#15803d;font-weight:600">🟢 Anticipada ${r.diasPunt} d</span>`
+    : `<span style="color:#15803d;font-weight:600">🟢 A tiempo</span>`;
+  return `<span style="color:#c2410c;font-weight:600">🟠 Tarde ${r.diasPunt} d</span>`;
+}
+function _cPersona(r){
+  if(!r.m) return '';
+  const d = r.m.celula ? (CELULA_CFG[r.m.celula]?.label||r.m.celula) : '';
+  const v = r.m.videoPersona || '';
+  return [d?('🎨 '+_cEsc(d)):'', v?('🎬 '+_cEsc(v)):''].filter(Boolean).join(' · ');
+}
+
+function renderCronograma(){
+  const el = document.getElementById('cronograma-content'); if(!el) return;
+  const card = (inner)=>`<div class="card"><div style="padding:24px">${inner}</div></div>`;
+  if(_cronoCargando && !_cronoFilas){ el.innerHTML = card('<div style="text-align:center;color:var(--muted)">⏳ Leyendo el cronograma…</div>'); return; }
+  if(_cronoError){
+    el.innerHTML = card(`<div style="color:var(--danger);margin-bottom:12px">${_cEsc(_cronoError)}</div><button class="btn btn-sm" onclick="cargarCronograma(true)">↻ Reintentar</button>`); return;
+  }
+  if(!_cronoFilas || !_cronoFilas.length){
+    el.innerHTML = card(`<div style="font-weight:600;margin-bottom:8px">Todavía no existe la pestaña "Cronograma" en tu Google Sheet (o está vacía)</div>
+      <ol style="color:var(--muted);font-size:13px;line-height:1.7;margin:0 0 14px 18px">
+        <li>Abre el Google Sheet del dashboard → Archivo → Importar → Subir <b>Cronograma_para_dashboard.xlsx</b>.</li>
+        <li>Elige <b>"Insertar hoja(s) nueva(s)"</b> (no reemplaces nada).</li>
+        <li>Vuelve aquí y dale a "Recargar".</li>
+      </ol><button class="btn btn-sm" onclick="cargarCronograma(true)">↻ Recargar</button>`);
+    return;
+  }
+
+  const hoy = _ymdLocal(new Date());
+  const items = _cronoItems(hoy);
+  // Meses visibles: desde CRONO_DESDE y solo mientras tengan algo pendiente
+  const porMes = {};
+  items.forEach(r=>{ (porMes[r.mes] = porMes[r.mes] || []).push(r); });
+  const meses = Object.keys(porMes).sort().filter(m=>!porMes[m].every(_cCerrada));
+  if(!meses.length){
+    el.innerHTML = card('<div style="text-align:center;font-weight:600">🎉 Todo el cronograma desde '+_cMesLabel(CRONO_DESDE)+' está entregado</div>'); return;
+  }
+  if(!meses.includes(_cronoMes)) _cronoMes = meses.includes(hoy.slice(0,7)) ? hoy.slice(0,7) : meses[0];
+
+  // Alertas: no han ingresado y ya debieron (de todos los meses visibles)
+  const sinIngresar = items.filter(r=>meses.includes(r.mes) && r.alerta==='sin_ingresar')
+    .sort((a,b)=>b.diasAtraso-a.diasAtraso);
+
+  const chips = meses.map(m=>{
+    const pend = porMes[m].filter(r=>!_cCerrada(r)).length;
+    const alerta = porMes[m].some(r=>r.alerta==='sin_ingresar');
+    const sel = m===_cronoMes;
+    return `<button onclick="cronoSetMes('${m}')" style="padding:8px 14px;border-radius:99px;border:1px solid ${sel?'var(--accent,#e8336d)':'var(--border)'};background:${sel?'rgba(232,51,109,.10)':'var(--bg2,#fff)'};color:${sel?'#be185d':'inherit'};font-size:12px;font-weight:600;cursor:pointer">${_cMesLabel(m)} <span style="opacity:.7">· ${pend} pend.</span>${alerta?' 🔴':''}</button>`;
+  }).join('');
+
+  const alertaHTML = sinIngresar.length ? `
+    <div class="card" style="margin-bottom:20px;border-left:4px solid #ef4444">
+      <div class="card-head"><span class="card-title">🚨 Debieron ingresar y no han ingresado</span><span class="badge badge-muted">${sinIngresar.length}</span></div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Asignatura</th><th>Programa</th><th>Debía ingresar</th><th>Atraso</th><th>Se lanza</th></tr></thead>
+        <tbody>${sinIngresar.slice(0,15).map(r=>`<tr>
+          <td style="font-weight:600">${_cEsc(r.f.materia)}</td>
+          <td style="font-size:12px;color:var(--muted)">${_cEsc(r.f.prog)}</td>
+          <td>${_cFmt(r.f.e0)}</td>
+          <td style="color:#b91c1c;font-weight:700">${r.diasAtraso} d</td>
+          <td>${_cFmt(r.f.lanz)}</td></tr>`).join('')}</tbody>
+      </table></div>
+      ${sinIngresar.length>15?`<div style="padding:10px 20px;font-size:12px;color:var(--muted)">… y ${sinIngresar.length-15} más (míralas en su mes)</div>`:''}
+    </div>` : `<div class="card" style="margin-bottom:20px;border-left:4px solid #16a34a"><div style="padding:14px 20px;font-size:13px">✅ Nada pendiente de ingreso: todo lo que ya debía entrar, entró.</div></div>`;
+
+  const mes = porMes[_cronoMes];
+  const cuenta = f => mes.filter(f).length;
+  const tiles = [
+    ['Lanzan este mes', mes.length, '#374151'],
+    ['✅ Entregadas', cuenta(_cCerrada), '#15803d'],
+    ['🔨 En producción', cuenta(r=>r.estado==='produccion'), '#b45309'],
+    ['⏳ En cola', cuenta(r=>r.estado==='cola'||r.estado==='pausada'), '#4f46e5'],
+    ['🔴 No ingresadas', cuenta(r=>r.estado==='no_ingresada'), '#b91c1c']
+  ].map(t=>`<div class="card" style="flex:1;min-width:130px"><div style="padding:14px 16px"><div style="font-size:11px;color:var(--muted);font-weight:600">${t[0]}</div><div style="font-size:26px;font-weight:800;color:${t[2]};margin-top:2px">${t[1]}</div></div></div>`).join('');
+  const nAtras = cuenta(r=>r.alerta==='sin_ingresar');
+
+  const rank = r => r.alerta==='sin_ingresar'?0 : r.alerta==='entrega_vencida'?1 : r.estado==='no_ingresada'?2 : r.estado==='cola'?3 : r.estado==='pausada'?4 : r.estado==='produccion'?5 : r.estado==='entregada'?6 : 7;
+  const filas = [...mes].sort((a,b)=> rank(a)-rank(b) || (b.diasAtraso||0)-(a.diasAtraso||0) || a.f.lanz.localeCompare(b.f.lanz) || a.f.materia.localeCompare(b.f.materia));
+
+  const filaHTML = r=>{
+    const fondo = r.alerta==='sin_ingresar' ? 'background:rgba(239,68,68,.05)' : '';
+    const pista = r.pista ? `<div style="font-size:11px;color:#a16207;margin-top:2px">¿Será “${_cEsc(r.pista.nombre)}”? Si lo es, escribe su ID en la pestaña Cronograma.</div>` : '';
+    const venc = r.alerta==='entrega_vencida' ? `<div style="font-size:11px;color:#b91c1c;margin-top:2px">⚠ Entrega vencida hace ${r.diasAtraso} d</div>` : '';
+    return `<tr style="${fondo}">
+      <td style="font-weight:600">${_cEsc(r.f.materia)}${pista}</td>
+      <td style="font-size:12px;color:var(--muted)">${_cEsc(r.f.prog)}</td>
+      <td>${_cFmt(r.f.lanz)}</td>
+      <td>${_cFmt(r.f.e0)}</td>
+      <td>${r.ingreso?_cFmt(r.ingreso):'<span style="color:var(--muted)">—</span>'}</td>
+      <td>${_cPuntual(r)}</td>
+      <td>${_cFmt(r.f.e1)}${venc}</td>
+      <td>${_cEstadoBadge(r)}<div style="font-size:11px;color:var(--muted);margin-top:3px">${_cPersona(r)}</div></td></tr>`;
+  };
+
+  el.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px">${chips}
+      <button class="btn btn-sm" style="margin-left:auto" onclick="cargarCronograma(true)">↻ Recargar cronograma</button></div>
+    ${alertaHTML}
+    <div style="font-size:15px;font-weight:700;margin:0 0 10px">${_cMesLabel(_cronoMes)} <span style="font-weight:400;color:var(--muted);font-size:12px">· asignaturas que los estudiantes deben tener este mes${nAtras?` · <b style="color:#b91c1c">${nAtras} sin ingresar y atrasada${nAtras!==1?'s':''}</b>`:''}</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px">${tiles}</div>
+    <div class="card" style="margin-bottom:20px"><div style="overflow-x:auto"><table>
+      <thead><tr><th>Asignatura</th><th>Programa</th><th>Se lanza</th><th>Debía ingresar</th><th>Ingresó</th><th>Puntualidad</th><th>Entrega límite</th><th>Estado</th></tr></thead>
+      <tbody>${filas.map(filaHTML).join('')}</tbody></table></div></div>
+    <div style="font-size:11px;color:var(--muted)">“Ingresó” es la fecha de ingreso a fábrica que registras en el dashboard. “Debía ingresar” y “Entrega límite” salen de la franja verde del cronograma. Las ingresadas antes de tiempo solo se marcan como anticipadas.</div>`;
+}
+
 function renderTiempos(){
   const el = document.getElementById('tiempos-content');
   if(!el) return;
@@ -5363,6 +5687,7 @@ setInterval(async ()=>{
     }
   } catch(e){}
 }, 30000);
+
 
 
 
