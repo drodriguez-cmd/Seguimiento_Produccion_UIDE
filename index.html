@@ -910,6 +910,7 @@ async function borrarDatosAsignatura(nombre, id){
   // Sesiones y Timers SOLO guardan el nombre de la asignatura → van por nombre
   const r1 = await sheetBorrar('Sesiones', 1, nombre);       // col 1 = Asignatura
   const r3 = await sheetBorrar('Timers_Activos', 5, nombre); // col 5 = Asignatura
+  if(id) await sheetBorrar('Revisiones', 1, id);              // col 1 = ID Asignatura (la revisión también vuelve a cero)
   console.log('🗑 Borrado en Sheet para "'+nombre+'":',
     'Sesiones='+(r1&&r1.borradas||0),
     'Entregables='+(r2&&r2.borradas||0),
@@ -1352,11 +1353,103 @@ const TAREA_ASSET_MAP = {
   'Video C3':             { unitKey:'global', assetKey:'video_c3' },
 };
 
-function autoMarcarEntregable(asigId, tarea, silencioso=false, unidad=''){
-  // Combinar tarea + unidad si aplica (ej: "HTML" + "C1" → "HTML C1")
+
+// ═══ CIERRE DE UNA ASIGNATURA: banner + revisión de calidad (decisión del equipo, oct 2026) ═══
+// Antes de marcarse Completada (y de que salga el correo a UIDE), la asignatura necesita:
+//   1) el BANNER: se completa solo con el timer "Creación de banner" (o una sesión pasada de esa tarea);
+//   2) la REVISIÓN DE CALIDAD: lista de 6 puntos, todos obligatorios, que marca cualquiera del equipo.
+// La revisión se guarda en la pestaña "Revisiones" del Sheet (se crea sola), una fila por punto.
+const REVISION_ITEMS = [
+  ['imagenes','Imágenes completas y de esta materia'],
+  ['video','Título del video igual al de la clase, sin logo de Synthesia y con el enlace abierto'],
+  ['genially','Cada Genially corresponde a la materia y a la semana'],
+  ['banner','Banner cargado con los nombres de maestría y de materia vigentes'],
+  ['nombres','Nombres de infografías y de temas sin errores'],
+  ['html','HTML con su estructura completa']
+];
+const ENC_REVISIONES = ['ID','ID Asignatura','Item','Estado','Revisor','Fecha'];
+const _bannerCache = { firma:'', ids:new Set(), noms:new Set() };
+function _bannerIdx(){
+  // La "firma" mira cuántas sesiones hay y cuáles son la primera y la última: si el conjunto cambia
+  // (se agrega una, se reinicia una asignatura o se recarga del Sheet) la memoria se rehace.
+  const ss=STATE.sesiones, n=ss.length, firma=n+'|'+(n?ss[0].id:'')+'|'+(n?ss[n-1].id:'');
+  if(_bannerCache.firma!==firma){
+    _bannerCache.ids=new Set(); _bannerCache.noms=new Set();
+    ss.forEach(x=>{ if(/banner/i.test(x.tarea||'')){ if(x.asigId) _bannerCache.ids.add(x.asigId); if(x.asigNombre) _bannerCache.noms.add(x.asigNombre); } });
+    _bannerCache.firma=firma;
+  }
+  return _bannerCache;
+}
+function bannerHechoAsig(a){ const c=_bannerIdx(); return c.ids.has(a.id) || c.noms.has(a.nombre); }
+function revisionAsig(a){
+  const rv=a.revision||{}, hechos=REVISION_ITEMS.filter(([k])=>rv[k] && rv[k].ok).length;
+  return { hechos, total:REVISION_ITEMS.length, completa:hechos===REVISION_ITEMS.length };
+}
+function cierreCompletoAsig(a){ return bannerHechoAsig(a) && revisionAsig(a).completa; }
+function faltaCierreTexto(a){
+  const f=[]; if(!bannerHechoAsig(a)) f.push('banner (timer "Creación de banner")');
+  const r=revisionAsig(a); if(!r.completa) f.push('revisión de calidad '+r.hechos+'/'+r.total);
+  return f.join(' y ');
+}
+async function cargarRevisiones(){
+  const r = await jsonp(API+'?hoja='+encodeURIComponent('Revisiones'));
+  // Si la lectura falló, se conserva lo local (una lista vacía por error borraría revisiones ya hechas)
+  if(!r || r.ok===false || !Array.isArray(r.filas)) return false;
+  const mapa={};
+  r.filas.slice(1).forEach(f=>{
+    const id=String(f[1]||''), item=String(f[2]||''); if(!id||!item) return;
+    (mapa[id]=mapa[id]||{})[item]={ ok:String(f[3]||'').toLowerCase().includes('complet'), revisor:String(f[4]||''), fecha:String(f[5]||'') };
+  });
+  STATE.asignaturas.forEach(a=>{ a.revision = mapa[a.id] || {}; });
+  return true;
+}
+function setRevisor(v){ localStorage.setItem('revisorNombre', v||''); }
+function toggleRevision(asigId, item, el){
+  const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
+  const revisor=localStorage.getItem('revisorNombre')||'';
+  if(!revisor){ toast('Primero elige quién revisa (arriba de la lista)'); return; }
+  a.revision=a.revision||{};
+  const nuevo=!(a.revision[item] && a.revision[item].ok), fecha=new Date().toISOString();
+  a.revision[item]={ ok:nuevo, revisor:nuevo?revisor:'', fecha:nuevo?fecha:'' };
+  guardarEstadoLocal();
+  sheetActualizar('Revisiones', ENC_REVISIONES, [asigId+'|'+item, asigId, item, nuevo?'Completado':'Pendiente', nuevo?revisor:'', nuevo?fecha:'']);
+  if(el){ // se actualiza ahí mismo, sin cerrar la tarjeta
+    el.classList.toggle('done',nuevo);
+    const chk=el.querySelector('input[type=checkbox]'); if(chk) chk.checked=nuevo;
+    const info=el.querySelector('.rev-info'); if(info) info.textContent = nuevo ? ('✓ '+revisor+' · '+fmtFecha(fecha)) : '';
+    const cnt=document.getElementById('rev-count-'+asigId); if(cnt) cnt.textContent=revisionAsig(a).hechos+'/'+REVISION_ITEMS.length;
+  }
+  if(nuevo) verificarAutoCompletado(asigId);
+}
+function _revisoresPosibles(){
+  const nombres=[...UNIDADES_DISENO.filter(celulaActiva).map(id=>CELULA_CFG[id]?.label||id), ...VIDEO_PERSONAS];
+  const actual=localStorage.getItem('revisorNombre')||''; if(actual && !nombres.includes(actual)) nombres.push(actual);
+  return nombres;
+}
+// Los entregables solo vivían como filas del Sheet; las que se descartaron por el fallo de duplicados
+// (o que solo están en el navegador de quien las marcó) se reconstruyen desde las SESIONES, que sí se guardaron.
+function reconstruirEntregablesDesdeSesiones(){
+  const porId=new Map(STATE.asignaturas.map(a=>[a.id,a])), porNombre=new Map(STATE.asignaturas.map(a=>[a.nombre,a]));
+  let cambio=false;
+  STATE.sesiones.forEach(x=>{
+    const a=porId.get(x.asigId) || porNombre.get(x.asigNombre); if(!a || !a.assets) return;
+    const m=_mapaEntregable(x.tarea, x.unidad); if(!m || !a.assets[m.unitKey]) return;
+    if(!a.assets[m.unitKey][m.assetKey]){ a.assets[m.unitKey][m.assetKey]=true; cambio=true; }
+  });
+  return cambio;
+}
+
+// Qué entregable marca una tarea (combina tarea + clase si aplica, ej: "HTML" + "C1" → "HTML C1")
+function _mapaEntregable(tarea, unidad){
   const tareaKey = (unidad && TAREAS_CON_CLASE.includes(tarea)) ? tarea+' '+unidad : tarea;
   // Intentar primero la key combinada, luego la tarea directa (para sesiones históricas con nombre completo)
-  const map = TAREA_ASSET_MAP[tareaKey] || TAREA_ASSET_MAP[tarea];
+  return TAREA_ASSET_MAP[tareaKey] || TAREA_ASSET_MAP[tarea] || null;
+}
+function autoMarcarEntregable(asigId, tarea, silencioso=false, unidad=''){
+  // El banner no es un entregable con casilla: cuenta por tener su sesión (timer de banner terminado).
+  // Solo hay que reevaluar si con eso ya se puede cerrar la asignatura.
+  if(/banner/i.test(tarea||'')){ if(!silencioso) verificarAutoCompletado(asigId); return; }
+  const map = _mapaEntregable(tarea, unidad);
   if(!map) return; // tarea de proceso, no marca nada
   const asig = STATE.asignaturas.find(a=>a.id===asigId);
   if(!asig) return;
@@ -2994,6 +3087,12 @@ function verificarAutoCompletado(asigId){
                globalKeys.every(k=> asig.assets.global[k]);
   }
 
+  // Compuerta de cierre: con todo el avance, aún faltan el banner y la revisión de calidad
+  if(completa && !cierreCompletoAsig(asig)){
+    completa = false;
+    const kAviso='avisoCierre_'+asig.id+'_'+_ymdLocal(new Date());
+    if(!localStorage.getItem(kAviso)){ localStorage.setItem(kAviso,'1'); toast('"'+asig.nombre+'" tiene todo el avance; falta para cerrarla: '+faltaCierreTexto(asig)); }
+  }
   if(completa){
     asig.status = 'Completada';
     asig.fechaCompletado = new Date().toISOString();
@@ -3728,6 +3827,7 @@ function renderAsignaturas(filtro){
           <span class="badge ${stBadgeDisplay}">${statusDisplay}</span>
           ${alertaHTML}
           ${esVencida(a)?`<span title="Pasó el tope de fábrica: lanzamiento menos ${TOPE_HABILES} días hábiles (lo que necesita la carga en Canvas). Va primero en la cola." style="font-size:10px;font-weight:700;color:#b91c1c;background:rgba(239,68,68,.12);padding:2px 8px;border-radius:99px">VENCIDA · tope ${fmtFecha(fechaTopeFabrica(a.fechaLimite))}</span>`:''}
+          ${(a.status!=='Completada' && progAsig(a)===100 && !cierreCompletoAsig(a))?`<span title="Todo el avance está listo; falta para cerrarla: ${faltaCierreTexto(a)}" style="font-size:10px;font-weight:700;color:#b45309;background:rgba(217,119,6,.14);padding:2px 8px;border-radius:99px">FALTA CIERRE</span>`:''}
           <select onclick="event.stopPropagation()" onchange="event.stopPropagation();cambiarPrioridad('${a.id}',this.value)" style="font-size:10px;color:${priColor2};font-weight:600;border:1px solid var(--border2);border-radius:4px;padding:2px 4px;background:white">
             <option value="alta" ${a.prioridad==='alta'?'selected':''}>🔴 Alta</option>
             <option value="media" ${(a.prioridad||'media')==='media'?'selected':''}>🟡 Media</option>
@@ -3751,6 +3851,7 @@ function renderAsignaturas(filtro){
             <button class="utab" onclick="showUnit('${a.id}','u2',this)">Clase 2</button>
             <button class="utab" onclick="showUnit('${a.id}','u3',this)">Clase 3</button>
             <button class="utab" onclick="showUnit('${a.id}','global',this)">Videos globales</button>
+            <button class="utab" onclick="showUnit('${a.id}','cierre',this)">Cierre</button>
             <button class="utab" onclick="showUnit('${a.id}','equipo',this)">${a.tipo==='celula'?'👥 Equipo':'Equipo'}</button>
 
             <button class="utab" onclick="showUnit('${a.id}','sesiones',this)">Sesiones</button>
@@ -3767,6 +3868,28 @@ function renderAsignaturas(filtro){
         <div id="unit-${a.id}-u3" class="form-section" style="display:none">
           <div class="ind-title" style="margin-bottom:8px">Entregables Clase 3</div>
           <div class="assets-grid">${mkAssets('u3','u3')}</div>
+        </div>
+        <div id="unit-${a.id}-cierre" class="form-section" style="display:none">
+          <div class="ind-title" style="margin-bottom:6px">Cierre de la asignatura</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Con el banner y la revisión de calidad completa, la asignatura se cierra sola y sale el correo a UIDE.</div>
+          <div class="asset-chk${bannerHechoAsig(a)?' done':''}" style="cursor:default;margin-bottom:14px">
+            <input type="checkbox" ${bannerHechoAsig(a)?'checked':''} disabled style="cursor:default;opacity:.7">
+            <span>Banner <span style="font-size:11px;color:var(--muted)">(se completa con el timer “Creación de banner”)</span></span>
+          </div>
+          <div class="ind-title" style="margin:0 0 8px">Revisión de calidad <span id="rev-count-${a.id}">${revisionAsig(a).hechos}/${REVISION_ITEMS.length}</span></div>
+          <div style="font-size:12px;margin-bottom:8px">Revisa:
+            <select onclick="event.stopPropagation()" onchange="setRevisor(this.value)" style="font-size:12px;padding:4px 8px;margin-left:6px">
+              <option value="">Elige quién revisa…</option>
+              ${_revisoresPosibles().map(n=>`<option value="${n}" ${localStorage.getItem('revisorNombre')===n?'selected':''}>${n}</option>`).join('')}
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${REVISION_ITEMS.map(([k,lbl])=>{ const r=(a.revision||{})[k]||{}; const ok=!!r.ok;
+              return `<div class="asset-chk${ok?' done':''}" onclick="event.stopPropagation();toggleRevision('${a.id}','${k}',this)">
+                <input type="checkbox" ${ok?'checked':''} style="pointer-events:none">
+                <span>${lbl}<div class="rev-info" style="font-size:10px;color:var(--ok)">${ok?('✓ '+(r.revisor||'')+' · '+fmtFecha(r.fecha)):''}</div></span>
+              </div>`; }).join('')}
+          </div>
         </div>
         <div id="unit-${a.id}-global" class="form-section" style="display:none">
           <div class="ind-title" style="margin-bottom:8px">Videos globales de la asignatura</div>
@@ -3842,7 +3965,7 @@ function toggleAsigBody(id){
 }
 
 function showUnit(asigId, unit, el){
-  ['u1','u2','u3','global','equipo','sesiones','celula-flujo','celula-lider','celula-diseno','celula-video'].forEach(u=>{
+  ['u1','u2','u3','global','cierre','equipo','sesiones','celula-flujo','celula-lider','celula-diseno','celula-video'].forEach(u=>{
     const d=document.getElementById(`unit-${asigId}-${u}`);
     if(d) d.style.display=u===unit?'block':'none';
   });
@@ -3904,6 +4027,7 @@ async function cambiarStatus(id){
     asig.fechaInicioProduccion = '';
     asig.fechaCompletado = '';
     asig.tareasCelula = null;
+    asig.revision = {};
     delete asig._preAsignado;
     guardarEstadoLocal();
     setSyncStatus('sync');
@@ -6034,7 +6158,7 @@ async function cargarDesdeSheets(){
           // Crear fila para Entregables
           const fechaCompleta = new Date(fin).toLocaleString('es-CO');
           
-          sheetActualizar('Entregables',
+          sheetGuardar('Entregables',
             ['ID Asignatura','Nombre','Unidad','Entregable','Estado','Fecha'],
             [asig.id, asig.nombre, unidadEntregable, tareaComp, 'Completado', fechaCompleta]
           );
@@ -6052,6 +6176,10 @@ async function cargarDesdeSheets(){
       });
     }
 
+    // Entregables que no llegaron al Sheet (fallo de duplicados): se reconstruyen desde las sesiones
+    try{ if(reconstruirEntregablesDesdeSesiones()) actualizado = true; }catch(e){ console.log('[ENTREGABLES] reconstrucción:', e); }
+    // Revisiones de calidad (pestaña "Revisiones")
+    try{ await cargarRevisiones(); }catch(e){ console.log('[REVISIONES] error:', e); }
     if(actualizado){
       // Check all asignaturas for auto-completion (catches ones completed before this feature)
       let alguienCompletado = false;
@@ -6062,6 +6190,7 @@ async function cargarDesdeSheets(){
           // de correos cargó bien (para poder enviar sin riesgo de duplicar). Si vino floja, la
           // dejamos En producción y se completará —con correo— en la próxima sincronización buena.
           if(!emailsCargoOk) return;
+          if(!cierreCompletoAsig(a)) return; // falta banner o revisión de calidad
           a.status='Completada';
           // Sellar siempre la fecha/hora real del cierre (no conservar una vieja/sin hora)
           a.fechaCompletado = new Date().toISOString();
