@@ -456,7 +456,7 @@ textarea{resize:vertical;min-height:70px}
           <div class="fg" style="margin-bottom:14px">
             <label>Fecha de lanzamiento (obligatoria)</label>
             <input type="date" id="n-fecha-limite">
-            <small style="color:var(--muted);display:block;margin-top:4px">Cuando el estudiante la ve. Es obligatoria: de ella sale la prioridad (comparando cuánto falta contra el DF estimado) — lo que pase después de que entreguen no es problema de fábrica.</small>
+            <small style="color:var(--muted);display:block;margin-top:4px">Cuando el estudiante la ve. Es obligatoria: el tope de fábrica es esta fecha menos 10 días hábiles (lo que necesita Canvas). Pasado el tope, la asignatura queda Vencida y va primero en la cola; antes, de ella sale la prioridad.</small>
           </div>
           <div class="fg" style="margin-bottom:14px"><label>Modo de ingreso</label>
             <select id="n-modo-ingreso" onchange="onModoIngresoChange()">
@@ -1059,7 +1059,7 @@ function renderCelulasDir(){
       ? (completadasV.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasV.length).toFixed(1)
       : null;
     const colaTxt = enCola.length>0
-      ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>PRIORIDAD_EMOJI[a.prioridad||'media']+' '+a.nombre).join(' · ')}</div>`
+      ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>prioMarca(a)+' '+a.nombre).join(' · ')}</div>`
       : '';
     const esperandoDisenoTxt = esperandoDiseno.length>0
       ? `<div style="font-size:11px;color:#a855f7;margin-top:2px;font-weight:500">✅🎨 Video listo, esperando diseño: ${esperandoDiseno.map(a=>a.nombre).join(' · ')}</div>`
@@ -1073,7 +1073,7 @@ function renderCelulasDir(){
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">🎬 ${persona}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${asigs.length} activa${asigs.length!==1?'s':''} · ${enCola.length} en cola</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigs.map(a=>PRIORIDAD_EMOJI[a.prioridad||'media']+' '+a.nombre).join(' · ')||'Sin asignaturas activas'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigs.map(a=>prioMarca(a)+' '+a.nombre).join(' · ')||'Sin asignaturas activas'}</div>
         ${colaTxt}
         ${esperandoDisenoTxt}
       </div>
@@ -1093,7 +1093,7 @@ function renderCelulasDir(){
       <div style="display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border)">
         <div style="width:22px;height:22px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted);flex-shrink:0">${i+1}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${PRIORIDAD_EMOJI[a.prioridad||'media']} ${a.nombre}</div>
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${prioMarca(a)} ${a.nombre}</div>
           <div style="font-size:11px;color:var(--muted)">${a.prog} · DF: ${a.df||3}d</div>
         </div>
         <div style="font-size:10px;padding:2px 9px;border-radius:99px;background:#eef2ff;color:#6366f1;font-weight:600">${a.prog.split(' ')[0]}</div>
@@ -2151,17 +2151,7 @@ function obtenerSiguienteEnCola(){
   //  - 'En producción'  → ya arrancaron por VIDEO (independiente) pero les falta la célula de diseño
   const enEspera = STATE.asignaturas.filter(a=>
     (a.status==='En espera' || a.status==='En producción') && a.tipo==='celula' && !a.celula
-  ).sort((a,b)=>{
-    const prioOrder = {alta:0, media:1, baja:2};
-    const pa = prioOrder[a.prioridad||'media'];
-    const pb = prioOrder[b.prioridad||'media'];
-    if(pa !== pb) return pa - pb;
-    // Dentro del mismo nivel de prioridad: la que lanza más pronto va primero
-    if(a.fechaLimite && b.fechaLimite && a.fechaLimite!==b.fechaLimite) return a.fechaLimite < b.fechaLimite ? -1 : 1;
-    if(a.fechaLimite && !b.fechaLimite) return -1;
-    if(!a.fechaLimite && b.fechaLimite) return 1;
-    return new Date(a.inicio) - new Date(b.inicio);
-  });
+  ).sort(compararPorUrgencia);
   return enEspera[0] || null;
 }
 
@@ -2243,18 +2233,56 @@ function cambiarPrioridad(asigId, valor){
 // Se usa tanto para diseño como para video, así el "por dónde sigo" es siempre el mismo criterio.
 const PRIORIDAD_RANK = {alta:0, media:1, baja:2};
 const PRIORIDAD_EMOJI = {alta:'🔴', media:'🟡', baja:'🟢'};
-function ordenarPorPrioridad(lista){
-  return [...lista].sort((a,b)=>{
-    const pa = PRIORIDAD_RANK[a.prioridad||'media'], pb = PRIORIDAD_RANK[b.prioridad||'media'];
+
+// ═══ TOPE DE FÁBRICA Y ASIGNATURAS "VENCIDAS" (decisión de Derly, oct 2026) ═══
+// Después de fábrica, la asignatura se carga en Canvas (el plan le da 15 días calendario ≈ 10 hábiles).
+// Por eso el tope de fábrica es el LANZAMIENTO MENOS 10 DÍAS HÁBILES. Pasado el tope la asignatura queda
+// "Vencida" y va por delante de Alta/Media/Baja en la cola, aunque su prioridad sea manual.
+const TOPE_HABILES = 10;
+const _topeFestMem = {};
+function _topeEsHabil(ymd){
+  const p=ymd.split('-').map(Number), w=new Date(Date.UTC(p[0],p[1]-1,p[2])).getUTCDay();
+  if(w===0||w===6) return false;
+  const f=_topeFestMem[p[0]]||(_topeFestMem[p[0]]=festivosColombia(p[0]));
+  return !f.has(ymd);
+}
+function _topeSumarDias(ymd,n){
+  const p=ymd.split('-').map(Number), d=new Date(Date.UTC(p[0],p[1]-1,p[2]+n));
+  return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');
+}
+// Días hábiles en [a, b): a inclusive, b exclusivo (0 si b <= a)
+function _habilesDesdeHasta(a,b){ let n=0,d=a; while(d<b){ if(_topeEsHabil(d)) n++; d=_topeSumarDias(d,1); } return n; }
+// Fecha tope de fábrica: se retrocede TOPE_HABILES días hábiles desde el lanzamiento
+function fechaTopeFabrica(fechaLanzamiento){
+  if(!fechaLanzamiento) return '';
+  let d=String(fechaLanzamiento).slice(0,10), n=0;
+  while(n<TOPE_HABILES){ d=_topeSumarDias(d,-1); if(_topeEsHabil(d)) n++; }
+  return d;
+}
+function esVencida(asig, hoy){
+  if(!asig || !asig.fechaLimite || asig.status==='Completada') return false;
+  return (hoy||_ymdLocal(new Date())) > fechaTopeFabrica(asig.fechaLimite);
+}
+// Orden de la cola: 1) vencidas, 2) prioridad, 3) lanzamiento más próximo, 4) la que llegó primero
+function compararPorUrgencia(a,b){
+  const hoy=_ymdLocal(new Date());
+  const va=esVencida(a,hoy)?0:1, vb=esVencida(b,hoy)?0:1;
+  if(va!==vb) return va-vb;
+  if(va===1){ // ninguna vencida: manda la prioridad. Entre las vencidas NO se mira la prioridad guardada: solo lanzamiento y llegada.
+    const pa=PRIORIDAD_RANK[a.prioridad||'media'], pb=PRIORIDAD_RANK[b.prioridad||'media'];
     if(pa!==pb) return pa-pb;
-    // Dentro del mismo nivel de prioridad: la que lanza más pronto va primero
-    // (antes desempataba por fecha de REGISTRO, no de lanzamiento — eso es lo que
-    // dejaba colar materias de octubre/noviembre antes que unas de septiembre).
-    if(a.fechaLimite && b.fechaLimite && a.fechaLimite!==b.fechaLimite) return a.fechaLimite < b.fechaLimite ? -1 : 1;
-    if(a.fechaLimite && !b.fechaLimite) return -1;
-    if(!a.fechaLimite && b.fechaLimite) return 1;
-    return new Date(a.inicio)-new Date(b.inicio);
-  });
+  }
+  if(a.fechaLimite && b.fechaLimite && a.fechaLimite!==b.fechaLimite) return a.fechaLimite < b.fechaLimite ? -1 : 1;
+  if(a.fechaLimite && !b.fechaLimite) return -1;
+  if(!a.fechaLimite && b.fechaLimite) return 1;
+  return new Date(a.inicio)-new Date(b.inicio);
+}
+function prioMarca(a){ return esVencida(a) ? '🚨' : PRIORIDAD_EMOJI[a.prioridad||'media']; }
+// ═══ FIN TOPE ═══
+
+function ordenarPorPrioridad(lista){
+  // Vencidas primero; luego prioridad; luego lanzamiento más próximo; luego la que llegó primero.
+  return [...lista].sort(compararPorUrgencia);
 }
 
 // Solo la fecha de lanzamiento mueve la prioridad automática — es la que siempre se
@@ -2264,9 +2292,11 @@ function ordenarPorPrioridad(lista){
 // lanzamiento mucho más próximo). El dato sigue guardado por si se usa manualmente.
 function calcularPrioridadPorFecha(asig){
   if(!asig.fechaLimite) return null;
+  const hoy=_ymdLocal(new Date()), tope=fechaTopeFabrica(asig.fechaLimite);
+  if(hoy>tope) return 'alta';                      // vencida: ya pasó el tope de fábrica
   const diasNecesarios = asig.df || 4;
-  const diasRestantes = diasHabilesEntre(today(), asig.fechaLimite);
-  return diasRestantes <= diasNecesarios ? 'alta' : diasRestantes <= diasNecesarios*2 ? 'media' : 'baja';
+  const restantes = _habilesDesdeHasta(hoy, tope);   // días hábiles que quedan hasta el tope
+  return restantes <= diasNecesarios ? 'alta' : restantes <= diasNecesarios*2 ? 'media' : 'baja';
 }
 
 // ════════════════════════════════════════════
@@ -2490,6 +2520,8 @@ function rebalancearVideoEquipo(){
 
 function recalcularPrioridadesAutomaticas(){
   let huboCambios = false;
+  const ENC = ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'];
+  const pendientes = [];
   STATE.asignaturas.forEach(asig=>{
     if(asig.status==='Completada') return;
     if(asig.prioridadManual) return; // respeta el cambio manual, siempre
@@ -2498,16 +2530,16 @@ function recalcularPrioridadesAutomaticas(){
     if(nueva && nueva !== asig.prioridad){
       asig.prioridad = nueva;
       huboCambios = true;
-      sheetActualizar('Asignaturas',
-        ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
-        [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad, asig.fechaLimite||'', 'No', asig.fechaDeberiaEntrar||'']
-      );
+      pendientes.push([asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad, asig.fechaLimite||'', 'No', asig.fechaDeberiaEntrar||'']);
     }
   });
   if(huboCambios){
     guardarEstadoLocal();
     renderAsignaturas();
     if(typeof renderCelulasDir==='function') renderCelulasDir();
+    // Al Sheet de UNA EN UNA: un cambio de regla puede mover decenas de prioridades a la vez, y mandarlas
+    // todas juntas choca con el límite de ejecuciones simultáneas de Apps Script (timeouts y filas perdidas).
+    (async()=>{ for(const fila of pendientes){ await sheetActualizar('Asignaturas', ENC, fila); } })();
   }
 }
 
@@ -3589,6 +3621,7 @@ function renderAsignaturas(filtro){
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
           <span class="badge ${stBadgeDisplay}">${statusDisplay}</span>
           ${alertaHTML}
+          ${esVencida(a)?`<span title="Pasó el tope de fábrica: lanzamiento menos ${TOPE_HABILES} días hábiles (lo que necesita la carga en Canvas). Va primero en la cola." style="font-size:10px;font-weight:700;color:#b91c1c;background:rgba(239,68,68,.12);padding:2px 8px;border-radius:99px">VENCIDA · tope ${fmtFecha(fechaTopeFabrica(a.fechaLimite))}</span>`:''}
           <select onclick="event.stopPropagation()" onchange="event.stopPropagation();cambiarPrioridad('${a.id}',this.value)" style="font-size:10px;color:${priColor2};font-weight:600;border:1px solid var(--border2);border-radius:4px;padding:2px 4px;background:white">
             <option value="alta" ${a.prioridad==='alta'?'selected':''}>🔴 Alta</option>
             <option value="media" ${(a.prioridad||'media')==='media'?'selected':''}>🟡 Media</option>
