@@ -270,10 +270,13 @@ textarea{resize:vertical;min-height:70px}
       <span class="dot" style="background:#818cf8"></span> Asignaturas
     </button>
     <button class="nav-item" onclick="goPage('tiempos',this)">
-      <span class="dot" style="background:#e11d48"></span> ⏱️ Tiempos
+      <span class="dot" style="background:#e11d48"></span> Tiempos
     </button>
     <button class="nav-item" onclick="goPage('cronograma',this)">
-      <span class="dot" style="background:#0891b2"></span> 📅 Cronograma
+      <span class="dot" style="background:#0891b2"></span> Cronograma
+    </button>
+    <button class="nav-item" onclick="goPage('operacion',this)">
+      <span class="dot" style="background:#7c3aed"></span> Operación
     </button>
 
     <div class="nav-section">Registro</div>
@@ -284,19 +287,6 @@ textarea{resize:vertical;min-height:70px}
       <span class="dot" style="background:var(--warn)"></span> Timers en vivo
     </button>
 
-    <div class="nav-section">Análisis</div>
-    <button class="nav-item" onclick="goPage('operacion',this)">
-      <span class="dot" style="background:#7c3aed"></span> 📊 Operación
-    </button>
-    <button class="nav-item" onclick="goPage('roles',this)">
-      <span class="dot" style="background:var(--disgrafico)"></span> Por rol
-    </button>
-    <button class="nav-item" onclick="goPage('personas',this)">
-      <span class="dot" style="background:var(--video)"></span> Por persona
-    </button>
-    <button class="nav-item" onclick="goPage('indicadores',this)">
-      <span class="dot" style="background:var(--coord)"></span> Indicadores
-    </button>
   </nav>
 
 
@@ -464,16 +454,9 @@ textarea{resize:vertical;min-height:70px}
             <small style="color:var(--muted);display:block;margin-top:4px">Según tu planeación (tus 15 días supuestos). Solo informativa — ya NO mueve la prioridad automática (esa la maneja solo la fecha de lanzamiento).</small>
           </div>
           <div class="fg" style="margin-bottom:14px">
-            <label>Fecha de lanzamiento (opcional)</label>
+            <label>Fecha de lanzamiento (obligatoria)</label>
             <input type="date" id="n-fecha-limite">
-            <small style="color:var(--muted);display:block;margin-top:4px">Cuando el estudiante la ve. Esta es la que manda la prioridad (comparando cuánto falta contra el DF estimado) — lo que pase después de que entreguen no es problema de fábrica.</small>
-          </div>
-          <div class="fg" style="margin-bottom:14px"><label>Prioridad</label>
-            <select id="n-prioridad">
-              <option value="alta">🔴 Alta</option>
-              <option value="media" selected>🟡 Media</option>
-              <option value="baja">🟢 Baja</option>
-            </select>
+            <small style="color:var(--muted);display:block;margin-top:4px">Cuando el estudiante la ve. Es obligatoria: de ella sale la prioridad (comparando cuánto falta contra el DF estimado) — lo que pase después de que entreguen no es problema de fábrica.</small>
           </div>
           <div class="fg" style="margin-bottom:14px"><label>Modo de ingreso</label>
             <select id="n-modo-ingreso" onchange="onModoIngresoChange()">
@@ -493,13 +476,6 @@ textarea{resize:vertical;min-height:70px}
                 <option value="Alejandra">Alejandra Gonzales</option>
               </select>
             </div>
-          </div>
-          <div class="divider">Roles del equipo</div>
-          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-            <div class="ind-block" style="padding:10px 14px;display:flex;align-items:center;gap:10px"><span>🟢</span><div><div style="font-size:12px;font-weight:600;color:var(--calidad)">Calidad</div><div style="font-size:11px;color:var(--muted)">Carpetas Drive · Revisión general</div></div></div>
-            <div class="ind-block" style="padding:10px 14px;display:flex;align-items:center;gap:10px"><span>🟠</span><div><div style="font-size:12px;font-weight:600;color:var(--disgrafico)">Diseño</div><div style="font-size:11px;color:var(--muted)">Guión Genially · Infografías · Geniallys · Banner · Imágenes · HTML</div></div></div>
-            <div class="ind-block" style="padding:10px 14px;display:flex;align-items:center;gap:10px"><span>🔵</span><div><div style="font-size:12px;font-weight:600;color:var(--video)">Editor de video</div><div style="font-size:11px;color:var(--muted)">5 Videos + RDA</div></div></div>
-            <div class="ind-block" style="padding:10px 14px;display:flex;align-items:center;gap:10px"><span>🟣</span><div><div style="font-size:12px;font-weight:600;color:var(--coord)">Coordinación</div><div style="font-size:11px;color:var(--muted)">Creación HTML · Estructura instruccional</div></div></div>
           </div>
           <div class="fg"><label>Observaciones</label><textarea id="n-obs" placeholder="Notas iniciales..."></textarea></div>
           <div class="fg"><label>Link del curso</label><input type="url" id="n-link" placeholder="https://..." style="padding:10px;border:1px solid var(--border2);border-radius:8px;font-size:13px;width:100%;box-sizing:border-box"></div>
@@ -560,7 +536,6 @@ textarea{resize:vertical;min-height:70px}
             <select id="t-ubicacion" onchange="guardarUbicacion()">
               <option value="">Seleccionar ubicación...</option>
               <option value="Colombia">Colombia (UTC-5)</option>
-              <option value="París">París (UTC+1)</option>
               <option value="Canarias">Canarias (UTC+0)</option>
             </select>
             <small style="color:var(--muted);display:block;margin-top:4px">Se usará para convertir tus registros a hora Colombia</small>
@@ -570,15 +545,13 @@ textarea{resize:vertical;min-height:70px}
               <option value="">Seleccionar rol...</option>
               <option value="disenador">🟠 Diseño</option>
               <option value="video">🔵 Editor de video</option>
-              <option value="coord">🟣 Coordinación</option>
             </select>
           </div>
           <!-- Célula rol selector — shown only for célula asignaturas -->
           <div class="fg" id="t-celula-rol-wrap" style="display:none"><label>Tu rol en la asignatura</label>
             <select id="t-celula-rol" onchange="updateTareaOptsCelula()">
               <option value="">Seleccionar rol...</option>
-              <option value="lider">👑 Líder</option>
-              <option value="diseno">🎨 Diseñador</option>
+              <option value="diseno">🎨 Diseño</option>
               <option value="video_celula">🎬 Editor de video</option>
             </select>
           </div>
@@ -626,11 +599,8 @@ textarea{resize:vertical;min-height:70px}
         <div class="fg"><label>Rol</label>
           <select id="m-rol" onchange="updateManualTareas()">
             <option value="">Seleccionar...</option>
-            <option value="calidad">🟢 Calidad</option>
-            <option value="disenador">🟠 Diseñador A</option>
-            <option value="disenador">🟠 Diseñador B</option>
+            <option value="disenador">🟠 Diseño</option>
             <option value="video">🔵 Editor de video</option>
-            <option value="coord">🟣 Coordinación</option>
           </select>
         </div>
         <div class="fg"><label>Nombre de la persona</label>
@@ -724,7 +694,7 @@ textarea{resize:vertical;min-height:70px}
 <!-- ─── OPERACIÓN ─── -->
 <div class="page" id="page-operacion">
   <div class="page-header">
-    <h1>📊 Operación</h1>
+    <h1>Operación</h1>
     <p>Qué se entregó, qué debe salir cada semana y si el equipo alcanza a cumplirlo</p>
   </div>
   <div id="operacion-content"></div>
@@ -733,7 +703,7 @@ textarea{resize:vertical;min-height:70px}
 <!-- ─── CRONOGRAMA ─── -->
 <div class="page" id="page-cronograma">
   <div class="page-header">
-    <h1>📅 Cronograma</h1>
+    <h1>Cronograma</h1>
     <p>Lo que se lanza cada mes contra lo que ya ingresó a fábrica — con alertas de lo que debió llegar y no ha llegado</p>
   </div>
   <div id="cronograma-content"></div>
@@ -742,7 +712,7 @@ textarea{resize:vertical;min-height:70px}
 <!-- ─── TIEMPOS ─── -->
 <div class="page" id="page-tiempos">
   <div class="page-header">
-    <h1>⏱️ Tiempos</h1>
+    <h1>Tiempos</h1>
     <p>Cuánto está tardando cada persona en diseño (objetivo: 3 días) y video (objetivo: 1 día) — jornadas de 8h laborales</p>
   </div>
   <div id="tiempos-content"></div>
@@ -1342,12 +1312,12 @@ const ROL_CFG = {
 const TAREAS_ROL = {
   calidad:     ['Generación de imágenes','Revisión HTML','Revisión infografías','Revisión Geniallys','Revisión videos','Revisión estructura general','Finalización de estructura Canvas'],
   disenador:   ['Creación de Guión Genially','Infografía','Genially','Creación de banner','Generación de imágenes','HTML'],
-  video:       ['Video Intro','Video Profesor','Geniallys RDA','Video','Generación de imágenes','Revisión Calidad'],
+  video:       ['Video Intro','Video Profesor','Geniallys RDA','Video','Generación de imágenes'],
   coord:       ['HTML']
 };
 
 const TAREAS_CELULA = {
-  lider:  ['Creación de Guión Genially','Infografía','Genially','Creación de banner','Generación de imágenes','HTML','Revisión estructura general'],
+  lider:  ['Creación de Guión Genially','Infografía','Genially','Creación de banner','Generación de imágenes','HTML'],
   diseno: ['Creación de Guión Genially','Infografía','Genially','Creación de banner','Generación de imágenes','HTML'],
   video:  ['Video Intro','Video Profesor','Geniallys RDA','Video','Generación de imágenes']
 };
@@ -1464,7 +1434,8 @@ function guardarUbicacion(){
 }
 
 function obtenerUbicacion(){
-  const ubicacion = localStorage.getItem('userUbicacion') || 'Colombia';
+  let ubicacion = localStorage.getItem('userUbicacion') || 'Colombia';
+  if(ubicacion==='París'){ ubicacion='Colombia'; localStorage.setItem('userUbicacion',ubicacion); } // París ya no es una opción
   const sel = document.getElementById('t-ubicacion');
   if(sel) sel.value = ubicacion;
   return ubicacion;
@@ -1859,6 +1830,7 @@ function crearAsignatura(){
   const fechaLimite=document.getElementById('n-fecha-limite')?.value||'';
   const fechaDeberiaEntrar=document.getElementById('n-fecha-entrada')?.value||'';
   if(!nombre||!prog){ toast('Completa nombre y programa'); return; }
+  if(!fechaLimite){ toast('Falta la fecha de lanzamiento: es obligatoria porque de ella sale la prioridad'); document.getElementById('n-fecha-limite')?.focus(); return; }
   const esCelula = true; // en el modelo por persona, toda asignatura nueva es de diseño
   const modoIngreso = document.getElementById('n-modo-ingreso')?.value || 'espera';
   const celulaId = (esCelula && modoIngreso==='directo') ? (document.getElementById('n-celula')?.value||'') : '';
@@ -5220,7 +5192,7 @@ function _opRadar(filas, hoy){
   const Pd=UNIDADES_DISENO.filter(celulaActiva).length, Pv=VIDEO_PERSONAS.filter(celulaActiva).length;
   const horizonte=_opAddDias(hoy,7*12);
   const pend=filas.filter(r=>r.estado!=='entregada' && r.estado!=='entregada_excel' && r.estado!=='pausada' && r.e1a)
-    .map(r=>({ due: r.e1a<hoy ? hoy : r.e1a, d:r.faltaD, v:r.faltaV }))
+    .map(r=>({ due: r.e1a<hoy ? hoy : r.e1a, d:r.faltaD, v:r.faltaV, sin:r.estado==='no_ingresada' }))
     .filter(p=>p.due<=horizonte).sort((a,b)=>a.due<b.due?-1:a.due>b.due?1:0);
   const dias=[]; for(let d=hoy; d<=horizonte; d=_opAddDias(d,1)) if(_opEsHabil(d)) dias.push(d);
   const labels=[], demD=[], capD=[], demV=[], capV=[], nMat=[];
@@ -5242,7 +5214,29 @@ function _opRadar(filas, hoy){
     });
     return [...porSem.values()].sort((a,b)=>a.fecha<b.fecha?-1:1);
   };
-  return { Pd, Pv, labels, demD, capD, demV, capV, alarmasD:alarmas(demD,capD,Pd), alarmasV:alarmas(demV,capV,Pv) };
+  return { Pd, Pv, labels, demD, capD, demV, capV, alarmasD:alarmas(demD,capD,Pd), alarmasV:alarmas(demV,capV,Pv), pendientes:pend.length, sinEmparejar:pend.filter(p=>p.sin).length };
+}
+let _opAtras = 8, _opAdelante = 4;
+function opRango(v){ const p=String(v).split('-'); _opAtras=+p[0]||8; _opAdelante=+p[1]||4; renderOperacion(); }
+function opIrA(id){ const b=[...document.querySelectorAll('.nav-item')].find(x=>(x.getAttribute('onclick')||'').includes("goPage('"+id+"'")); goPage(id,b||null); }
+// Lo que SE ENTREGÓ en una semana (asignaturas completadas), con su fecha límite del plan si está en el cronograma.
+function _opEntregadasLista(filas, lunes){
+  const dom=_opAddDias(lunes,6), porId=new Map();
+  filas.forEach(r=>{ if(r.m) porId.set(r.m.id, r); });
+  return STATE.asignaturas.filter(a=>a.status==='Completada' && a.fechaCompletado)
+    .map(a=>({ a, fecha:_cYMD(a.fechaCompletado) }))
+    .filter(x=>x.fecha>=lunes && x.fecha<=dom)
+    .map(x=>{
+      const r=porId.get(x.a.id), limite=r?r.e1a:'';
+      return { nombre:x.a.nombre, prog:x.a.prog||'', fecha:x.fecha, limite, dias:limite?_cDiff(limite,x.fecha):null, enPlan:!!r };
+    })
+    .sort((p,q)=>p.fecha<q.fecha?-1:p.fecha>q.fecha?1:p.nombre.localeCompare(q.nombre));
+}
+function _opPuntual(x){
+  if(!x.enPlan || x.dias==null) return '<span style="color:var(--muted)">Fuera del cronograma</span>';
+  if(x.dias<0) return `<span style="color:#15803d;font-weight:600">${-x.dias} d antes</span>`;
+  if(x.dias===0) return '<span style="color:#15803d;font-weight:600">A tiempo</span>';
+  return `<span style="color:#c2410c;font-weight:600">Tarde ${x.dias} d</span>`;
 }
 function opSemMover(n){ _opSem=_opAddDias(_opSem||_opLunes(_ymdLocal(new Date())), 7*n); renderOperacion(); }
 function opSemHoy(){ _opSem=_opLunes(_ymdLocal(new Date())); renderOperacion(); }
@@ -5267,6 +5261,9 @@ function renderOperacion(){
   const entPrev=_opEntregadasSemana(prevW), cumPrev=_opCumplimiento(filas, prevW), entW=_opEntregadasSemana(W);
   const radar=_opRadar(filas, hoy);
   const primera=radar.alarmasD[0];
+  const lunesHoy0=_opLunes(hoy), rel = W<lunesHoy0 ? 'pasada' : W>lunesHoy0 ? 'futura' : 'actual';
+  const salio=_opEntregadasLista(filas, prevW);
+  const selR=v=>(_opAtras+'-'+_opAdelante)===v?'selected':'';
 
   const dot={ rojo:'#d03b3b', ambar:'#fab219', verde:'#0ca30c', gris:'#9ca3af', ok:'#0ca30c' };
   const filaHTML=r=>`<tr>
@@ -5281,24 +5278,33 @@ function renderOperacion(){
   el.innerHTML=`
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px">
       <button class="btn btn-sm" onclick="opSemMover(-1)">◀ Semana anterior</button>
-      <div style="font-size:15px;font-weight:700;padding:0 8px">Semana del ${_cFmt(W)} al ${_cFmt(viernes)}</div>
+      <div style="font-size:15px;font-weight:700;padding:0 8px">Semana del ${_cFmt(W)} al ${_cFmt(viernes)} <span style="font-weight:500;font-size:11px;color:var(--muted)">(${rel==='actual'?'semana actual':rel==='pasada'?'semana pasada':'semana futura'})</span></div>
       <button class="btn btn-sm" onclick="opSemMover(1)">Semana siguiente ▶</button>
-      <button class="btn btn-sm" style="margin-left:auto" onclick="opSemHoy()">Ir a esta semana</button>
+      <select class="btn btn-sm" style="margin-left:auto;padding:6px 10px" onchange="opRango(this.value)" aria-label="Rango del gráfico">
+        <option value="4-4" ${selR('4-4')}>Gráfico: 4 semanas atrás · 4 adelante</option>
+        <option value="8-4" ${selR('8-4')}>Gráfico: 8 semanas atrás · 4 adelante</option>
+        <option value="12-8" ${selR('12-8')}>Gráfico: 12 semanas atrás · 8 adelante</option></select>
+      <button class="btn btn-sm" onclick="opSemHoy()">Ir a esta semana</button>
       <button class="btn btn-sm" onclick="cargarCronograma(true)">↻ Recargar</button></div>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px">
-      ${tile('Semana anterior · entregadas', entPrev, cumPrev.plan ? `Del plan de esa semana: ${cumPrev.ok} de ${cumPrev.plan} (${Math.round(100*cumPrev.ok/cumPrev.plan)}%)` : 'Sin plan registrado esa semana', '#2a78d6')}
-      ${tile('Esta semana · deben salir', semFilas.length, `${nEnt} ya entregadas del plan · ${entW} completadas en la semana`, '#374151')}
-      ${tile('En riesgo en esta semana', nRojo+nAmbar, `${nRojo} no alcanzan · ${nAmbar} justas`, nRojo?'#b91c1c':nAmbar?'#b45309':'#15803d')}
+      ${tile('Semana anterior a la elegida · entregadas', entPrev, cumPrev.plan ? `Del plan de esa semana: ${cumPrev.ok} de ${cumPrev.plan} (${Math.round(100*cumPrev.ok/cumPrev.plan)}%)` : 'Sin plan registrado esa semana', '#2a78d6')}
+      ${tile('Semana elegida · deben salir', semFilas.length, `${nEnt} ya entregadas del plan · ${entW} completadas en la semana`, '#374151')}
+      ${tile('En riesgo en la semana elegida', nRojo+nAmbar, `${nRojo} no alcanzan · ${nAmbar} justas`, nRojo?'#b91c1c':nAmbar?'#b45309':'#15803d')}
       ${tile('Primera fecha sin capacidad', primera?_cFmt(primera.fecha):'Sin déficit', `${radar.Pd} diseñadores y ${radar.Pv} editores activos`, primera?'#b91c1c':'#15803d')}
     </div>
     <div class="card" style="margin-bottom:20px"><div class="card-head"><span class="card-title">Entregas por semana</span><span style="font-size:11px;color:var(--muted)">Barras: materias entregadas · Línea: lo que el cronograma esperaba (desde la semana del ${_cFmt(OP_PLAN_DESDE)})</span></div>
       <div style="padding:14px 20px"><div style="position:relative;height:260px"><canvas id="op-chart-entregas"></canvas></div></div></div>
-    <div style="font-size:15px;font-weight:700;margin:0 0 10px">Materias que deben salir esta semana <span style="font-weight:400;color:var(--muted);font-size:12px">· fecha límite de entrega del cronograma</span></div>
+    <div style="font-size:15px;font-weight:700;margin:0 0 10px">Salió la semana anterior <span style="font-weight:400;color:var(--muted);font-size:12px">· del ${_cFmt(prevW)} al ${_cFmt(_opAddDias(prevW,4))} · ${salio.length} asignatura${salio.length===1?'':'s'}</span></div>
+    <div class="card" style="margin-bottom:20px">${salio.length ? `<div style="overflow-x:auto"><table>
+      <thead><tr><th>Asignatura</th><th>Entregada el</th><th>Fecha límite del plan</th><th>Puntualidad</th></tr></thead>
+      <tbody>${salio.map(x=>`<tr><td style="font-weight:600">${_cEsc(x.nombre)}<div style="font-size:11px;color:var(--muted);font-weight:400">${_cEsc(x.prog)}</div></td><td>${_cFmt(x.fecha)}</td><td>${x.limite?_cFmt(x.limite):'—'}</td><td>${_opPuntual(x)}</td></tr>`).join('')}</tbody></table></div>` : '<div style="padding:24px;text-align:center;color:var(--muted)">No se entregó ninguna asignatura esa semana.</div>'}</div>
+    <div style="font-size:15px;font-weight:700;margin:0 0 10px">${rel==='pasada'?'Materias que debían salir esa semana':rel==='actual'?'Materias que deben salir esta semana':'Materias que deben salir esa semana'} <span style="font-weight:400;color:var(--muted);font-size:12px">· fecha límite de entrega del cronograma</span></div>
     <div class="card" style="margin-bottom:20px">${semFilas.length ? `<div style="overflow-x:auto"><table>
       <thead><tr><th>Asignatura</th><th>Entrega límite</th><th>Se lanza</th><th>Estado</th><th>Riesgo</th></tr></thead>
       <tbody>${semFilas.map(filaHTML).join('')}</tbody></table></div>` : '<div style="padding:24px;text-align:center;color:var(--muted)">No hay entregas planeadas esta semana.</div>'}</div>
     <div class="card" style="margin-bottom:20px"><div class="card-head"><span class="card-title">Radar de capacidad</span><span style="font-size:11px;color:var(--muted)">Trabajo pendiente que vence, acumulado, contra lo que el equipo activo alcanza a producir desde hoy</span></div>
       <div style="padding:14px 20px"><div style="position:relative;height:280px"><canvas id="op-chart-capacidad"></canvas></div>
+      <div style="font-size:12px;color:var(--muted);margin:10px 0 2px">El radar cuenta ${radar.pendientes} materias pendientes${radar.sinEmparejar?`; ${radar.sinEmparejar} de ellas no aparecen en el dashboard (todavía no ingresaron o su nombre no coincide), así que cuentan con su trabajo completo. <a href="#" onclick="opIrA('cronograma');return false" style="color:var(--accent,#e8336d)">Revísalas en Cronograma</a>.`:'.'}</div>
       ${alarmasTxt || '<div style="padding:10px 0;font-size:13px;color:#15803d">✅ Con el equipo activo y el avance actual, se alcanza a cumplir todo lo que viene en las próximas 12 semanas.</div>'}</div></div>
     <div style="font-size:11px;color:var(--muted);line-height:1.6">Supuestos: cada asignatura necesita ${OP_DISENO_DIAS} días de diseño y ${OP_VIDEO_DIAS} de video (jornadas de 8 h), menos el avance real de sus entregables; cada persona activa produce 1 día por día hábil; las fechas límite que caen en fin de semana o festivo cuentan el último día hábil anterior; lo vencido y no entregado cuenta como si venciera hoy; el cronograma se compara con el dashboard por nombre.</div>`;
 
@@ -5306,7 +5312,7 @@ function renderOperacion(){
   if(typeof Chart==='undefined') return;
   window.myCharts=window.myCharts||{};
   ['opEntregas','opCapacidad'].forEach(k=>{ if(window.myCharts[k]){ try{ window.myCharts[k].destroy(); }catch(e){} } });
-  const semanas=[]; for(let k=-8;k<=4;k++) semanas.push(_opAddDias(W,7*k));
+  const semanas=[]; for(let k=-_opAtras;k<=_opAdelante;k++) semanas.push(_opAddDias(W,7*k));
   const lunesHoy=_opLunes(hoy), planDesde=_opLunes(OP_PLAN_DESDE);
   const real=semanas.map(s=>s<=lunesHoy ? _opEntregadasSemana(s) : null);
   const plan=semanas.map(s=>s>=planDesde ? filas.filter(r=>r.sem===s).length : null);
