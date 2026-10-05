@@ -1408,6 +1408,19 @@ function autoMarcarEntregable(asigId, tarea, silencioso=false, unidad=''){
 // ══ HELPERS ══
 function uid(){ return 'id'+Date.now()+Math.random().toString(36).slice(2,6); }
 function fmtMs(ms){ const s=Math.floor(ms/1000); return `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+// Cada segundo solo se actualiza el TEXTO del reloj (antes se redibujaban páginas enteras, con
+// listas de 180 asignaturas y recorridos de ~3.800 sesiones, aunque la página no estuviera a la vista).
+let _ultimoRenderTimersPorTick = 0;
+function tickRelojes(){
+  document.querySelectorAll('[data-clock]').forEach(el=>{
+    const id=el.getAttribute('data-clock'); if(!id) return;
+    const t = STATE.timers[id] || (STATE.timersSheets||[]).find(x=>x.id===id);
+    if(t && t.running) el.textContent = fmtMs(Date.now()-t.inicio);
+  });
+  // Barras y porcentajes de la página Timers: refresco completo cada ~20 s, solo si esa página está a la vista.
+  const ap = document.querySelector('.page.active')?.id;
+  if(ap==='page-timers' && Date.now()-_ultimoRenderTimersPorTick>20000){ _ultimoRenderTimersPorTick=Date.now(); renderTimers(); }
+}
 function fmtDias(ms){ const h=ms/1000/3600; const d=h/8; return d<0.5?`${h.toFixed(1)}h`:`${d.toFixed(2)}d`; }
 function minsToStr(m){ const h=Math.floor(m/60); const mi=m%60; return h>0?`${h}h ${mi}m`:`${mi}m`; }
 
@@ -3000,7 +3013,7 @@ function iniciarTimer(){
     );
   }
   STATE.intervals[id]=setInterval(()=>{
-    if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; renderTimers(); renderDashboardTimers(); }
+    if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; tickRelojes(); }
   },1000);
   guardarEstadoLocal();
   toast('Timer iniciado: '+persona+' · '+tarea+(unidad?' · '+unidad:''));
@@ -3026,7 +3039,7 @@ function pausarTimer(id){
     STATE.timers[id]=t;
     if(t.running){
       STATE.intervals[id]=setInterval(()=>{
-        if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; renderTimers(); renderDashboardTimers(); }
+        if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; tickRelojes(); }
       },1000);
     }
   }
@@ -3041,7 +3054,7 @@ function pausarTimer(id){
   } else {
     t.inicio=Date.now()-t.elapsed; t.running=true;
     STATE.intervals[id]=setInterval(()=>{
-      if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; renderTimers(); renderDashboardTimers(); }
+      if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; tickRelojes(); }
     },1000);
     sheetActualizar('Timers_Activos',
       ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado','Minutos Acumulados'],
@@ -3211,10 +3224,14 @@ function renderTimers(){
   obtenerUbicacion();
   
   // Poblar datalist de búsqueda de asignaturas (buscador en vez de lista desplegable larga)
+  // Las listas de 180 asignaturas solo se reconstruyen si la lista cambió (antes, en cada dibujo; además
+  // reconstruirlas mientras la persona escribe en el buscador cerraba o parpadeaba las sugerencias).
+  const firmaAsig=STATE.asignaturas.map(a=>a.id+'|'+a.nombre).join('~');
   const dl=document.getElementById('t-asig-datalist');
-  if(dl){
+  if(dl && dl.dataset.firma!==firmaAsig){
     dl.innerHTML='';
     STATE.asignaturas.forEach(a=>{ const o=document.createElement('option'); o.value=a.nombre; dl.appendChild(o); });
+    dl.dataset.firma=firmaAsig;
   }
   // Si ya había una asignatura elegida (ej. al refrescar la lista mientras se llena el form),
   // mantener el texto visible sincronizado con el ID guardado en el campo oculto.
@@ -3226,7 +3243,7 @@ function renderTimers(){
   }
   // Populate sesiones filter too
   const selF=document.getElementById('filtro-timer-asig');
-  if(selF){ const curF=selF.value; selF.innerHTML='<option value="">Todas las asignaturas</option>'; STATE.asignaturas.forEach(a=>{ const o=document.createElement('option'); o.value=a.id; o.textContent=a.nombre; selF.appendChild(o); }); if(curF) selF.value=curF; }
+  if(selF && selF.dataset.firma!==firmaAsig){ const curF=selF.value; selF.innerHTML='<option value="">Todas las asignaturas</option>'; STATE.asignaturas.forEach(a=>{ const o=document.createElement('option'); o.value=a.id; o.textContent=a.nombre; selF.appendChild(o); }); if(curF) selF.value=curF; selF.dataset.firma=firmaAsig; }
 
   const localTimers=Object.values(STATE.timers);
   const remoteTimers=(STATE.timersSheets||[]).filter(r=>!STATE.timers[r.id]);
@@ -3283,7 +3300,7 @@ function renderTimers(){
           <div class="timer-asig">${t.tarea}${t.unidad?' · '+t.unidad:''} · ${t.asigNombre}</div>
           <div style="margin-top:5px"><span class="role-pill ${cfg.rp}" style="font-size:10px;padding:2px 10px">${cfg.icon} ${cfg.label}</span></div>
         </div>
-        <div class="timer-display">${fmtMs(elapsed)}</div>
+        <div class="timer-display" data-clock="${t.id}">${fmtMs(elapsed)}</div>
       </div>
       <div class="prog-track"><div class="prog-fill" style="width:${pct.toFixed(1)}%;background:${barCol}"></div></div>
       <div class="timer-stats"><span>⏱ ${fmtDias(elapsed)}</span><span>DF: ${dfEst} días (${dfEst*8}h)</span><span>${pct.toFixed(0)}% del estimado</span></div>
@@ -3337,7 +3354,7 @@ function renderDashboardTimers(){
         <div style="font-size:11px;color:${displayColor};font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.asigNombre}</div>
       </div>
       <div style="text-align:right;flex-shrink:0">
-        <div style="font-family:var(--fhead);font-size:15px;font-weight:700;color:${displayColor}">${isPausado?'⏸ Pausado':fmtMs(elapsed)}</div>
+        <div data-clock="${isPausado?'':t.id}" style="font-family:var(--fhead);font-size:15px;font-weight:700;color:${displayColor}">${isPausado?'⏸ Pausado':fmtMs(elapsed)}</div>
         <div style="font-size:10px;color:var(--muted)">${cfg.label||''}</div>
       </div>
     </div>`;
@@ -5688,6 +5705,9 @@ async function cargarDesdeSheets(){
       // Procesar timers COMPLETADOS de Sheets → convertir a sesiones + entregables
       const timersCompletados = filaTimers.slice(1)
         .filter(r=>String(r[7]||'').toLowerCase()==='completado');
+      const _claveSes = x => JSON.stringify([x.persona, x.asigNombre, x.tarea, x.unidad]);
+      const _sesIds = new Set(STATE.sesiones.map(x=>x.id));
+      const _sesClaves = new Set(STATE.sesiones.map(_claveSes));
       
       timersCompletados.forEach(r=>{
         const timerCompId = String(r[0]||'');
@@ -5703,14 +5723,15 @@ async function cargarDesdeSheets(){
         if(!asig || !asigNombreComp) return;
         
         // Buscar si ya existe en sesiones para no duplicar
-        const yaExiste = STATE.sesiones.some(s=>s.id===timerCompId || 
-          (s.persona===personaComp && s.asigNombre===asigNombreComp && s.tarea===tareaComp && s.unidad===unidadComp));
+        const claveComp = JSON.stringify([personaComp, asigNombreComp, tareaComp, unidadComp]);
+        const yaExiste = _sesIds.has(timerCompId) || _sesClaves.has(claveComp);
         
         if(!yaExiste){
           const inicio = parseFechaCol(inicioStr, personaComp);
           const fin = inicio > 0 ? inicio + 1800000 : Date.now();
           const mins = Math.round((fin - inicio) / 60000);
           
+          _sesIds.add(timerCompId); _sesClaves.add(claveComp);
           // 1. CREAR SESIÓN
           STATE.sesiones.push({
             id: timerCompId,
@@ -5853,7 +5874,7 @@ function marcarEmailEnviadoLocal(asigId){
 // Update local timer displays every 2 seconds
 setInterval(()=>{
   if(Object.keys(STATE.timers).length>0||(STATE.timersSheets&&STATE.timersSheets.length>0)){
-    renderDashboardTimers();
+    tickRelojes();
     (STATE.timersSheets||[]).forEach(t=>{
       const el=document.getElementById('remote-timer-'+t.id);
       if(el && t.estado==='Activo') el.textContent=fmtMs(Date.now()-t.inicio);
@@ -5862,9 +5883,21 @@ setInterval(()=>{
 },2000);
 
 // Auto-refresh remote timers from Sheets every 30 seconds
-setInterval(async ()=>{
+async function pollTimersRemotos(){
+  if(document.hidden) return; // pestaña oculta: no gastar lecturas del Sheet
   try {
-    const filaTimers = await sheetLeer('Timers_Activos');
+    // Lectura liviana: solo timers Activos/Pausados (si el Apps Script aún no la tiene, se usa la lectura completa de antes)
+    let filaTimers = null, liviana = false;
+    const rv = await jsonp(API+'?accion=leerTimersVivos');
+    if(rv && rv.ok===true && Array.isArray(rv.filas)){ filaTimers = rv.filas; liviana = true; }
+    else { filaTimers = await sheetLeer('Timers_Activos'); }
+    if(liviana && filaTimers.length <= 1){
+      // Lectura exitosa y sin timers vivos: limpiar la lista remota (si no, quedarían timers "fantasma")
+      STATE.timersSheets = [];
+      renderDashboardTimers();
+      if(document.querySelector('.page.active')?.id==='page-timers') renderTimers();
+      return;
+    }
     if(filaTimers && filaTimers.length > 1){
       STATE.timersSheets = filaTimers.slice(1)
         .filter(r=>['activo','pausado'].includes(String(r[7]||'').toLowerCase()))
@@ -5886,7 +5919,9 @@ setInterval(async ()=>{
       if(ap==='timers') renderTimers();
     }
   } catch(e){}
-}, 30000);
+}
+setInterval(pollTimersRemotos, 30000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) pollTimersRemotos(); });
 
 
 
