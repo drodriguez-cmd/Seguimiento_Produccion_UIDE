@@ -2331,10 +2331,22 @@ function reordenarReservasPorPrioridad(){
   const cuposOriginales = reservas.map(a=>({asigId:a.id, celulaId:a.celula}));
   const slots = cuposOriginales.map(c=>c.celulaId);
   const pool = ordenarPorPrioridad([...reservas, ...enColaSinCelula]);
+  const antesCelula = new Map(pool.map(a=>[a.id, a.celula||'']));
+
+  // Los cupos se ordenan por quién puede ARRANCAR primero. Antes iban en el orden del arreglo, y lo más
+  // urgente podía quedar en la reserva de alguien ocupado mientras otras personas estaban libres:
+  //   1) sin activa (libres para empezar ya): primero la que lleva más tiempo sin completar algo;
+  //   2) con activa: primero la MÁS adelantada (es la que termina antes).
+  // Se calcula antes de soltar las reservas, porque estadoCelula las mira.
+  const _ultimaCompletada = id => STATE.asignaturas.filter(x=>x.celula===id && x.status==='Completada')
+    .reduce((m,x)=>Math.max(m, new Date(x.fechaCompletado||0).getTime()||0), 0);
+  const _claveCupo = id => { const e=estadoCelula(id); return e.activa ? [1, -e.pct] : [0, _ultimaCompletada(id)]; };
+  const slotsOrdenados = slots.map((id,i)=>({ id, i, k:_claveCupo(id) }))
+    .sort((a,b)=> a.k[0]-b.k[0] || a.k[1]-b.k[1] || a.i-b.i).map(x=>x.id);
 
   reservas.forEach(a=>{ a.celula=''; }); // soltar temporalmente para repartir de cero
 
-  slots.forEach((celulaId, i)=>{
+  slotsOrdenados.forEach((celulaId, i)=>{
     const asig = pool[i];
     if(!asig) return;
     asig.celula = celulaId;
@@ -2357,12 +2369,13 @@ function reordenarReservasPorPrioridad(){
   });
 
   if(cambios.length>0){
-    pool.forEach(asig=>{
-      sheetActualizar('Asignaturas',
+    const cambiados = pool.filter(asig=> (antesCelula.get(asig.id)||'') !== (asig.celula||''));
+    (async()=>{ for(const asig of cambiados){
+      await sheetActualizar('Asignaturas',
         ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
         [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
       );
-    });
+    } })();
     guardarEstadoLocal();
     renderAsignaturas();
     if(typeof renderCelulasDir==='function') renderCelulasDir();
