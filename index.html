@@ -5187,35 +5187,6 @@ function _opCumplimiento(filas, lunes){
   const ok=plan.filter(r=>r.entregada && (!r.fechaEnt || r.fechaEnt<=dom)).length;
   return { plan:plan.length, ok };
 }
-// Trabajo pendiente que vence, contra lo que el equipo activo alcanza a producir desde hoy.
-function _opRadar(filas, hoy){
-  const Pd=UNIDADES_DISENO.filter(celulaActiva).length, Pv=VIDEO_PERSONAS.filter(celulaActiva).length;
-  const horizonte=_opAddDias(hoy,7*12);
-  const pend=filas.filter(r=>r.estado!=='entregada' && r.estado!=='entregada_excel' && r.estado!=='pausada' && r.e1a)
-    .map(r=>({ due: r.e1a<hoy ? hoy : r.e1a, d:r.faltaD, v:r.faltaV, sin:r.estado==='no_ingresada' }))
-    .filter(p=>p.due<=horizonte).sort((a,b)=>a.due<b.due?-1:a.due>b.due?1:0);
-  const dias=[]; for(let d=hoy; d<=horizonte; d=_opAddDias(d,1)) if(_opEsHabil(d)) dias.push(d);
-  const labels=[], demD=[], capD=[], demV=[], capV=[], nMat=[];
-  let i=0, accD=0, accV=0, n=0;
-  dias.forEach((d,k)=>{
-    while(i<pend.length && pend[i].due<=d){ accD+=pend[i].d; accV+=pend[i].v; n++; i++; }
-    labels.push(d); demD.push(accD); demV.push(accV); nMat.push(n);
-    capD.push(Pd*(k+1)); capV.push(Pv*(k+1));
-  });
-  const alarmas=(dem,cap,P)=>{
-    const porSem=new Map();
-    dias.forEach((d,k)=>{
-      const deficit=dem[k]-cap[k];
-      const esVencimiento = k===0 ? dem[0]>0 : dem[k]>dem[k-1];
-      if(deficit>0.5 && esVencimiento){
-        const s=_opLunes(d), prev=porSem.get(s);
-        if(!prev || deficit>=prev.deficit) porSem.set(s,{ fecha:d, deficit, mat:nMat[k], demanda:dem[k], capacidad:cap[k], extra:Math.max(1,Math.ceil(dem[k]/(k+1)-P)) });
-      }
-    });
-    return [...porSem.values()].sort((a,b)=>a.fecha<b.fecha?-1:1);
-  };
-  return { Pd, Pv, labels, demD, capD, demV, capV, alarmasD:alarmas(demD,capD,Pd), alarmasV:alarmas(demV,capV,Pv), pendientes:pend.length, sinEmparejar:pend.filter(p=>p.sin).length };
-}
 let _opAtras = 8, _opAdelante = 4;
 function opRango(v){ const p=String(v).split('-'); _opAtras=+p[0]||8; _opAdelante=+p[1]||4; renderOperacion(); }
 function opIrA(id){ const b=[...document.querySelectorAll('.nav-item')].find(x=>(x.getAttribute('onclick')||'').includes("goPage('"+id+"'")); goPage(id,b||null); }
@@ -5241,6 +5212,85 @@ function _opPuntual(x){
 function opSemMover(n){ _opSem=_opAddDias(_opSem||_opLunes(_ymdLocal(new Date())), 7*n); renderOperacion(); }
 function opSemHoy(){ _opSem=_opLunes(_ymdLocal(new Date())); renderOperacion(); }
 
+// ── CAPACIDAD POR MES (método de Derly): cada diseñador saca 5 ÷ 3 asignaturas por semana; el mes tiene 4 semanas.
+// Video es transversal: su día de trabajo cuenta DENTRO de los 3 días de producción.
+const OP_SEMANAS_MES = 4, OP_DIAS_SEMANA = 5;
+const OP_CAP_DISENO = OP_SEMANAS_MES*OP_DIAS_SEMANA/OP_DISENO_DIAS; // 6,67 asignaturas por diseñador al mes
+const OP_CAP_VIDEO  = OP_SEMANAS_MES*OP_DIAS_SEMANA/OP_VIDEO_DIAS;  // 20 asignaturas por editor al mes
+let _opPrestaD = 0, _opPrestaV = 0, _opColchon = 0.10;
+function opCfg(k, v){ if(k==='d') _opPrestaD=+v; else if(k==='v') _opPrestaV=+v; else if(k==='c') _opColchon=+v; renderOperacion(); }
+const _opNum = (x, d=1) => Number(x).toFixed(d).replace('.', ',');
+const _opMesCorto = ym => { const p=ym.split('-').map(Number); return ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][p[1]-1]+' '+p[0]; };
+const _opMesLargo = ym => { const p=ym.split('-').map(Number); return ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][p[1]-1]; };
+const _opMediana = a => { if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
+
+// Lanzamientos por mes (desde el mes actual, 6 meses) y equipo activo.
+function _opMeses(filas, hoy){
+  const Pd=UNIDADES_DISENO.filter(celulaActiva).length, Pv=VIDEO_PERSONAS.filter(celulaActiva).length;
+  const mes0=hoy.slice(0,7), porMes=new Map();
+  filas.forEach(r=>{
+    const m=r.f.lanz.slice(0,7); if(m<mes0) return;
+    const o=porMes.get(m)||{ lanz:0, entregadas:0 };
+    o.lanz++; if(r.estado==='entregada'||r.estado==='entregada_excel') o.entregadas++;
+    porMes.set(m,o);
+  });
+  const meses=[]; let [y,mm]=mes0.split('-').map(Number);
+  for(let k=0;k<6;k++){ const ym=y+'-'+String(mm).padStart(2,'0'); meses.push(Object.assign({ mes:ym }, porMes.get(ym)||{ lanz:0, entregadas:0 })); mm++; if(mm>12){ mm=1; y++; } }
+  return { Pd, Pv, meses };
+}
+function _opEvalMes(m, pd, pv, colchon){
+  const dem=m.lanz*(1+colchon), capD=pd*OP_CAP_DISENO, capV=pv*OP_CAP_VIDEO;
+  return { dem, capD, capV, necD:dem/OP_CAP_DISENO, necV:dem/OP_CAP_VIDEO, okD:capD>=dem, okV:capV>=dem, margenD:capD-dem, margenV:capV-dem };
+}
+// Cuántas personas se pueden prestar (diseño y video por separado) sin que falte capacidad en ningún mes.
+function _opMaxPrestable(datos, colchon){
+  const ms=datos.meses.filter(m=>m.lanz>0);
+  let d=0; while(d<datos.Pd && ms.every(m=>_opEvalMes(m,datos.Pd-(d+1),datos.Pv,colchon).okD)) d++;
+  let v=0; while(v<datos.Pv && ms.every(m=>_opEvalMes(m,datos.Pd,datos.Pv-(v+1),colchon).okV)) v++;
+  return { d, v };
+}
+// Asignaturas en producción y si, por su avance, alcanzan a salir en la semana elegida.
+function _opEnProduccion(filas, hoy, W){
+  const porId=new Map(); filas.forEach(r=>{ if(r.m) porId.set(r.m.id, r); });
+  const viernes=_opAddDias(W,4), disp=_opHabilesEntre(hoy>W?hoy:W, viernes);
+  return STATE.asignaturas.filter(a=>a.status!=='Completada' && categoriaAsig(a)==='En producción').map(a=>{
+    const fD=_opFrac(a,false), fV=_opFrac(a,true);
+    const falta=Math.max(OP_DISENO_DIAS*(1-fD), OP_VIDEO_DIAS*(1-fV));
+    const r=porId.get(a.id), limite=r?r.e1a:'';
+    const veredicto = falta<=disp*0.7 ? 'sale' : falta<=disp ? 'justa' : 'no';
+    const enRiesgo = veredicto==='no' && !!limite && limite<=viernes;
+    return { a, fD, fV, falta, disp, veredicto, limite, enRiesgo };
+  }).sort((p,q)=> (p.limite||'9999')<(q.limite||'9999')?-1:(p.limite||'9999')>(q.limite||'9999')?1:p.a.nombre.localeCompare(q.a.nombre));
+}
+// ¿Con cuánto tiempo llegan? Días hábiles entre que ingresa (dashboard) y su fecha límite del cronograma.
+function _opMargenLlegada(filas){
+  const o={ holgada:0, normal:0, justa:0, fuera:0, n:0, dias:[], plan:[] };
+  filas.forEach(r=>{
+    if(r.f.e0 && r.e1a) o.plan.push(_opHabilesEntre(r.f.e0, r.e1a));
+    if(!r.m || !r.ingreso || !r.e1a) return;
+    o.n++;
+    if(r.ingreso>r.e1a){ o.fuera++; return; }
+    const d=_opHabilesEntre(r.ingreso, r.e1a); o.dias.push(d);
+    if(d>=10) o.holgada++; else if(d>=6) o.normal++; else o.justa++;
+  });
+  o.mediana=_opMediana(o.dias); o.medianaPlan=_opMediana(o.plan);
+  return o;
+}
+// Tiempo real contra el objetivo (3 días diseño / 1 día video), mismas reglas de Tiempos, últimos 60 días.
+function _opTiemposReales(hoy){
+  const desde=_opAddDias(hoy,-60), r={ diseno:[], video:[] };
+  STATE.asignaturas.forEach(a=>{
+    if(a.tipo!=='celula' || a.status!=='Completada' || !a.fechaCompletado) return;
+    if(_cYMD(a.fechaCompletado)<desde) return;
+    [['diseno',false],['video',true]].forEach(([k,esV])=>{ const i=infoFrente(a,esV); if(i && i.iniciado) r[k].push({ trab:i.diasProduccion, punta:i.diasTranscurridos }); });
+  });
+  const res={};
+  [['diseno',OP_DISENO_DIAS],['video',OP_VIDEO_DIAS]].forEach(([k,obj])=>{
+    const a=r[k]; res[k]={ n:a.length, obj, medTrab:_opMediana(a.map(x=>x.trab)), medPunta:_opMediana(a.map(x=>x.punta)), cumple:a.filter(x=>x.trab<=obj).length };
+  });
+  return res;
+}
+
 function renderOperacion(){
   const el=document.getElementById('operacion-content'); if(!el) return;
   const card=(inner)=>`<div class="card"><div style="padding:24px">${inner}</div></div>`;
@@ -5252,28 +5302,90 @@ function renderOperacion(){
   const hoy=_ymdLocal(new Date());
   if(!_opSem) _opSem=_opLunes(hoy);
   const W=_opSem, viernes=_opAddDias(W,4), prevW=_opAddDias(W,-7);
+  const lunesHoy=_opLunes(hoy), rel = W<lunesHoy ? 'pasada' : W>lunesHoy ? 'futura' : 'actual';
   const filas=_opFilas(hoy);
-  const semFilas=filas.filter(r=>r.sem===W).map(r=>Object.assign({}, r, { riesgo:_opRiesgo(r,hoy) }));
-  const rank={ rojo:0, ambar:1, gris:2, verde:3, ok:4 };
-  semFilas.sort((a,b)=>rank[a.riesgo.k]-rank[b.riesgo.k] || a.f.materia.localeCompare(b.f.materia));
-  const nRojo=semFilas.filter(r=>r.riesgo.k==='rojo').length, nAmbar=semFilas.filter(r=>r.riesgo.k==='ambar').length;
-  const nEnt=semFilas.filter(r=>r.estado==='entregada'||r.estado==='entregada_excel').length;
-  const entPrev=_opEntregadasSemana(prevW), cumPrev=_opCumplimiento(filas, prevW), entW=_opEntregadasSemana(W);
-  const radar=_opRadar(filas, hoy);
-  const primera=radar.alarmasD[0];
-  const lunesHoy0=_opLunes(hoy), rel = W<lunesHoy0 ? 'pasada' : W>lunesHoy0 ? 'futura' : 'actual';
-  const salio=_opEntregadasLista(filas, prevW);
+  const salio=_opEntregadasLista(filas, prevW), cumPrev=_opCumplimiento(filas, prevW);
+  const datos=_opMeses(filas, hoy);
+  const pd=Math.max(0,datos.Pd-_opPrestaD), pv=Math.max(0,datos.Pv-_opPrestaV);
   const selR=v=>(_opAtras+'-'+_opAdelante)===v?'selected':'';
-
   const dot={ rojo:'#d03b3b', ambar:'#fab219', verde:'#0ca30c', gris:'#9ca3af', ok:'#0ca30c' };
-  const filaHTML=r=>`<tr>
-    <td style="font-weight:600">${_cEsc(r.f.materia)}<div style="font-size:11px;color:var(--muted);font-weight:400">${_cEsc(r.f.prog)}</div></td>
-    <td>${_cFmt(r.e1a)}</td><td>${_cFmt(r.f.lanz)}</td>
-    <td>${_cEstadoBadge(r)}<div style="font-size:11px;color:var(--muted);margin-top:3px">${_cPersona(r)}</div></td>
-    <td style="font-size:12px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${dot[r.riesgo.k]};margin-right:6px"></span>${_cEsc(r.riesgo.txt)}</td></tr>`;
-  const alarmaHTML=(a,tipo)=>`<div style="display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--border);font-size:13px;line-height:1.5"><span style="font-size:16px">🔴</span><span><b>${_cFmt(a.fecha)}.</b> Hasta esa fecha vencen ${a.mat} materias (${Math.round(a.demanda)} días de ${tipo}). Con el equipo activo alcanzan ${Math.round(a.capacidad)}. Faltan ${Math.round(a.deficit)} días, unas ${a.extra} personas más, o mover fechas.</span></div>`;
-  const alarmasTxt=radar.alarmasD.slice(0,4).map(a=>alarmaHTML(a,'diseño')).join('') + radar.alarmasV.slice(0,2).map(a=>alarmaHTML(a,'video')).join('');
   const tile=(t,v,s,c)=>`<div class="card" style="flex:1;min-width:150px"><div style="padding:14px 16px"><div style="font-size:11px;color:var(--muted);font-weight:600">${t}</div><div style="font-size:26px;font-weight:800;color:${c};margin-top:2px">${v}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${s}</div></div></div>`;
+  const chip=(txt,bg,col)=>`<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:${bg};color:${col};white-space:nowrap">${txt}</span>`;
+  const sinDatos=(txt)=>`<div style="padding:24px;text-align:center;color:var(--muted)">${txt}</div>`;
+
+  // ── Columna izquierda: lo que SALIÓ la semana anterior
+  const izqHTML = salio.length ? `<div style="overflow-x:auto"><table>
+      <thead><tr><th>Asignatura</th><th>Entregada el</th><th>Fecha límite del plan</th><th>Puntualidad</th></tr></thead>
+      <tbody>${salio.map(x=>`<tr><td style="font-weight:600">${_cEsc(x.nombre)}<div style="font-size:11px;color:var(--muted);font-weight:400">${_cEsc(x.prog)}</div></td><td>${_cFmt(x.fecha)}</td><td>${x.limite?_cFmt(x.limite):'—'}</td><td>${_opPuntual(x)}</td></tr>`).join('')}</tbody></table></div>`
+    : sinDatos('No se entregó ninguna asignatura esa semana.');
+
+  // ── Columna derecha: lo que DEBE salir en la semana elegida
+  let derTitulo, derSub, derHTML, derNum, derFoot='', nRiesgo=0;
+  const habilesSem=_opHabilesEntre(W, viernes);
+  const ritmo = (()=>{ const m=datos.meses.slice(0,3).filter(x=>x.lanz>0); return m.length ? m.reduce((s,x)=>s+x.lanz,0)/m.length/OP_SEMANAS_MES : null; })();
+  const capSem = datos.Pd*habilesSem/OP_DISENO_DIAS;
+  const nEspera = STATE.asignaturas.filter(a=>a.status!=='Completada' && a.status!=='Pausada' && ['Por iniciar','En cola'].includes(categoriaAsig(a))).length;
+  if(rel==='pasada'){
+    const plan=filas.filter(r=>r.sem===W).map(r=>Object.assign({}, r, { riesgo:_opRiesgo(r,hoy) }));
+    const rank={ rojo:0, ambar:1, gris:2, verde:3, ok:4 };
+    plan.sort((a,b)=>rank[a.riesgo.k]-rank[b.riesgo.k] || a.f.materia.localeCompare(b.f.materia));
+    derTitulo='Debían salir esa semana'; derSub='según la fecha límite del cronograma'; derNum=plan.length;
+    nRiesgo=plan.filter(r=>r.riesgo.k==='rojo').length;
+    derHTML = plan.length ? `<div style="overflow-x:auto"><table>
+      <thead><tr><th>Asignatura</th><th>Fecha límite</th><th>Estado</th><th>Resultado</th></tr></thead>
+      <tbody>${plan.map(r=>`<tr><td style="font-weight:600">${_cEsc(r.f.materia)}<div style="font-size:11px;color:var(--muted);font-weight:400">${_cEsc(r.f.prog)}</div></td><td>${_cFmt(r.e1a)}</td><td>${_cEstadoBadge(r)}</td><td style="font-size:12px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${dot[r.riesgo.k]};margin-right:6px"></span>${_cEsc(r.riesgo.txt)}</td></tr>`).join('')}</tbody></table></div>`
+      : sinDatos('No había entregas planeadas esa semana.');
+  } else {
+    const prod=_opEnProduccion(filas, hoy, W);
+    const nSale=prod.filter(p=>p.veredicto==='sale').length, nJusta=prod.filter(p=>p.veredicto==='justa').length;
+    nRiesgo=prod.filter(p=>p.enRiesgo).length;
+    derTitulo = rel==='actual' ? 'Deben salir esta semana' : 'Podrían estar listas a más tardar esa semana';
+    derSub='en producción, medido por avance de sus entregables'; derNum=nSale+nJusta;
+    derHTML = prod.length ? `<div style="overflow-x:auto"><table>
+      <thead><tr><th>Asignatura</th><th>Avance</th><th>Falta</th><th>Fecha límite del plan</th><th>¿Sale?</th></tr></thead>
+      <tbody>${prod.map(p=>{
+        const v = p.veredicto==='sale' ? chip('Sale','rgba(22,163,74,.12)','#15803d') : p.veredicto==='justa' ? chip('Justa','rgba(217,119,6,.12)','#b45309') : (p.enRiesgo ? chip('En riesgo','rgba(239,68,68,.12)','#b91c1c') : chip('No alcanza','rgba(107,114,128,.14)','#4b5563'));
+        return `<tr><td style="font-weight:600">${_cEsc(p.a.nombre)}<div style="font-size:11px;color:var(--muted);font-weight:400">${_cEsc(p.a.prog||'')}</div></td>
+          <td style="font-size:12px">Diseño ${Math.round(p.fD*100)}% · Video ${Math.round(p.fV*100)}%</td>
+          <td>${_opNum(p.falta)} d <span style="font-size:11px;color:var(--muted)">de ${p.disp} hábiles</span></td>
+          <td>${p.limite?_cFmt(p.limite):'—'}</td><td>${v}</td></tr>`; }).join('')}</tbody></table></div>`
+      : sinDatos('No hay asignaturas en producción ahora mismo.');
+    derFoot = `<div style="padding:12px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);line-height:1.6">
+      Capacidad de la semana: unas <b>${_opNum(capSem)}</b> asignaturas (${datos.Pd} diseñadores × ${habilesSem} días hábiles ÷ ${OP_DISENO_DIAS} días por asignatura).${ritmo!=null?` Ritmo que pide el cronograma: unas <b>${_opNum(ritmo)}</b> por semana.`:''}${nEspera?` Además, ${nEspera} esperan para arrancar.`:''}</div>`;
+  }
+
+  // ── Capacidad por mes
+  const evMes=datos.meses.map(m=>({ m, e:_opEvalMes(m,pd,pv,_opColchon) }));
+  const fallanD=evMes.filter(x=>x.m.lanz>0 && !x.e.okD), fallanV=evMes.filter(x=>x.m.lanz>0 && !x.e.okV);
+  const maxSin=_opMaxPrestable(datos,0), maxCon=_opMaxPrestable(datos,_opColchon);
+  const colTxt=Math.round(_opColchon*100)+'%';
+  const nombresMes=arr=>arr.map(x=>_opMesLargo(x.m.mes)).join(', ');
+  const hayPrestamo = _opPrestaD>0 || _opPrestaV>0;
+  const unoMenosD = datos.meses.filter(m=>m.lanz>0 && !_opEvalMes(m,Math.max(0,datos.Pd-1),datos.Pv,_opColchon).okD);
+  const unoMenosV = datos.meses.filter(m=>m.lanz>0 && !_opEvalMes(m,datos.Pd,Math.max(0,datos.Pv-1),_opColchon).okV);
+  const concl = `<div style="padding:12px 16px;border-radius:10px;background:var(--bg2,#f3f4f6);font-size:13px;line-height:1.7;margin-top:12px">
+    <div>${hayPrestamo?`Con <b>${pd} en diseño</b> y <b>${pv} en video</b> (colchón de ${colTxt}): `:`Con el equipo completo (<b>${datos.Pd} en diseño</b> y <b>${datos.Pv} en video</b>, colchón de ${colTxt}): `}${(!fallanD.length && !fallanV.length)?'<b style="color:#15803d">alcanza en todos los meses.</b>':`<b style="color:#b91c1c">NO alcanza</b> ${fallanD.length?`en diseño: ${nombresMes(fallanD)}`:''}${fallanD.length&&fallanV.length?'; ':''}${fallanV.length?`en video: ${nombresMes(fallanV)}`:''}.`}</div>
+    <div>Puedes prestar sin que falte en ningún mes: <b>sin colchón</b>, hasta ${maxSin.d} de diseño y ${maxSin.v} de video; <b>con colchón de ${colTxt}</b>, hasta ${maxCon.d} de diseño y ${maxCon.v} de video.</div>
+    ${(maxCon.d===0 && datos.Pd>0 && unoMenosD.length)?`<div style="color:var(--muted)">Si prestas 1 de diseño con colchón de ${colTxt}, quedaría justo en: ${unoMenosD.map(m=>_opMesLargo(m.mes)).join(', ')}.</div>`:''}
+    ${(maxCon.v===0 && datos.Pv>0 && unoMenosV.length)?`<div style="color:var(--muted)">Si prestas 1 de video con colchón de ${colTxt}, quedaría justo en: ${unoMenosV.map(m=>_opMesLargo(m.mes)).join(', ')}.</div>`:''}</div>`;
+  const opts=(n,sel)=>Array.from({length:n+1},(_,i)=>`<option value="${i}" ${i===sel?'selected':''}>${i}</option>`).join('');
+  const mesFila=({m,e})=>{
+    if(!m.lanz) return `<tr><td style="font-weight:600">${_opMesCorto(m.mes)}</td><td colspan="7" style="color:var(--muted)">Sin lanzamientos en el cronograma</td></tr>`;
+    const r=(ok,mar)=>ok ? chip('Sobran '+_opNum(mar),'rgba(22,163,74,.12)','#15803d') : chip('Faltan '+_opNum(-mar),'rgba(239,68,68,.12)','#b91c1c');
+    return `<tr><td style="font-weight:600">${_opMesCorto(m.mes)}</td><td>${m.lanz}</td><td>${m.entregadas}</td><td>${_opNum(e.dem)}</td>
+      <td>${_opNum(e.necD)} de ${pd}</td><td>${r(e.okD,e.margenD)}</td><td>${_opNum(e.necV)} de ${pv}</td><td>${r(e.okV,e.margenV)}</td></tr>`;
+  };
+  const mesActual=evMes[0], capOk = mesActual.m.lanz>0 ? mesActual.e.okD : true;
+
+  // ── ¿Con cuánto tiempo llegan? y tiempo real contra el objetivo
+  const mg=_opMargenLlegada(filas), pct=x=>mg.n?Math.round(100*x/mg.n):0;
+  const mgHTML = mg.n ? `<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px">
+      ${[['Holgadas','10 o más días hábiles',mg.holgada,'#15803d'],['Normales','6 a 9 días',mg.normal,'#2a78d6'],['Justas','menos de 6 días',mg.justa,'#b45309'],['Fuera de plazo','llegaron después de la fecha límite',mg.fuera,'#b91c1c']].map(c=>`<div style="padding:10px 12px;border-radius:10px;background:var(--bg2,#f3f4f6)"><div style="font-size:11px;color:var(--muted);font-weight:600">${c[0]}</div><div style="font-size:22px;font-weight:800;color:${c[3]}">${c[2]} <span style="font-size:12px;font-weight:600">${pct(c[2])}%</span></div><div style="font-size:10px;color:var(--muted)">${c[1]}</div></div>`).join('')}</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6">Mediana de ${mg.n} asignaturas que ya ingresaron: <b>${mg.mediana!=null?_opNum(mg.mediana,0):'—'}</b> días hábiles entre que llegan y su fecha límite (el plan les daba ${mg.medianaPlan!=null?_opNum(mg.medianaPlan,0):'—'}). ${(mg.justa+mg.fuera)/mg.n>=0.3?'Más de la tercera parte llega justa o tarde: conviene mantener el colchón en la capacidad.':'La mayoría llega con tiempo suficiente.'}</div>`
+    : sinDatos('Aún no hay asignaturas del cronograma ingresadas al dashboard.');
+  const tr=_opTiemposReales(hoy);
+  const trFila=(nom,x)=>x.n ? `<tr><td style="font-weight:600">${nom}</td><td>${x.n}</td><td>${_opNum(x.obj,0)} d</td><td>${_opNum(x.medTrab)} d</td><td>${x.medPunta!=null?_opNum(x.medPunta,0):'—'} d</td><td>${chip(Math.round(100*x.cumple/x.n)+'% cumple', x.cumple/x.n>=0.7?'rgba(22,163,74,.12)':'rgba(217,119,6,.12)', x.cumple/x.n>=0.7?'#15803d':'#b45309')}</td></tr>`
+    : `<tr><td style="font-weight:600">${nom}</td><td colspan="5" style="color:var(--muted)">Sin asignaturas completadas en los últimos 60 días</td></tr>`;
 
   el.innerHTML=`
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px">
@@ -5287,33 +5399,47 @@ function renderOperacion(){
       <button class="btn btn-sm" onclick="opSemHoy()">Ir a esta semana</button>
       <button class="btn btn-sm" onclick="cargarCronograma(true)">↻ Recargar</button></div>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px">
-      ${tile('Semana anterior a la elegida · entregadas', entPrev, cumPrev.plan ? `Del plan de esa semana: ${cumPrev.ok} de ${cumPrev.plan} (${Math.round(100*cumPrev.ok/cumPrev.plan)}%)` : 'Sin plan registrado esa semana', '#2a78d6')}
-      ${tile('Semana elegida · deben salir', semFilas.length, `${nEnt} ya entregadas del plan · ${entW} completadas en la semana`, '#374151')}
-      ${tile('En riesgo en la semana elegida', nRojo+nAmbar, `${nRojo} no alcanzan · ${nAmbar} justas`, nRojo?'#b91c1c':nAmbar?'#b45309':'#15803d')}
-      ${tile('Primera fecha sin capacidad', primera?_cFmt(primera.fecha):'Sin déficit', `${radar.Pd} diseñadores y ${radar.Pv} editores activos`, primera?'#b91c1c':'#15803d')}
+      ${tile('Salió la semana anterior', salio.length, cumPrev.plan ? `Del plan de esa semana: ${cumPrev.ok} de ${cumPrev.plan} (${Math.round(100*cumPrev.ok/cumPrev.plan)}%)` : 'Sin plan registrado esa semana', '#2a78d6')}
+      ${tile(rel==='pasada'?'Debían salir esa semana':'Pueden salir esta semana', derNum, rel==='pasada'?'según el cronograma':'en producción, por avance', '#374151')}
+      ${tile('Con fecha límite en riesgo', nRiesgo, rel==='pasada'?'no se cumplieron':'no alcanzan y vencen esa semana', nRiesgo?'#b91c1c':'#15803d')}
+      ${tile('Capacidad de diseño en '+_opMesLargo(mesActual.m.mes), capOk?'Alcanza':'No alcanza', mesActual.m.lanz>0 ? `${_opNum(mesActual.e.necD)} personas necesarias · ${pd} disponibles` : 'Sin lanzamientos', capOk?'#15803d':'#b91c1c')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-bottom:20px;align-items:start">
+      <div class="card"><div class="card-head"><span class="card-title">Salió la semana anterior</span><span style="font-size:11px;color:var(--muted)">${_cFmt(prevW)} al ${_cFmt(_opAddDias(prevW,4))}</span></div>
+        <div style="padding:14px 20px 4px;font-size:34px;font-weight:800;color:#2a78d6">${salio.length} <span style="font-size:13px;font-weight:600;color:var(--muted)">asignatura${salio.length===1?'':'s'} entregada${salio.length===1?'':'s'}</span></div>
+        ${izqHTML}</div>
+      <div class="card"><div class="card-head"><span class="card-title">${derTitulo}</span><span style="font-size:11px;color:var(--muted)">${derSub}</span></div>
+        <div style="padding:14px 20px 4px;font-size:34px;font-weight:800;color:#374151">${derNum} <span style="font-size:13px;font-weight:600;color:var(--muted)">${rel==='pasada'?'planeadas':'pueden salir'}</span></div>
+        ${derHTML}${derFoot}</div>
     </div>
     <div class="card" style="margin-bottom:20px"><div class="card-head"><span class="card-title">Entregas por semana</span><span style="font-size:11px;color:var(--muted)">Barras: materias entregadas · Línea: lo que el cronograma esperaba (desde la semana del ${_cFmt(OP_PLAN_DESDE)})</span></div>
       <div style="padding:14px 20px"><div style="position:relative;height:260px"><canvas id="op-chart-entregas"></canvas></div></div></div>
-    <div style="font-size:15px;font-weight:700;margin:0 0 10px">Salió la semana anterior <span style="font-weight:400;color:var(--muted);font-size:12px">· del ${_cFmt(prevW)} al ${_cFmt(_opAddDias(prevW,4))} · ${salio.length} asignatura${salio.length===1?'':'s'}</span></div>
-    <div class="card" style="margin-bottom:20px">${salio.length ? `<div style="overflow-x:auto"><table>
-      <thead><tr><th>Asignatura</th><th>Entregada el</th><th>Fecha límite del plan</th><th>Puntualidad</th></tr></thead>
-      <tbody>${salio.map(x=>`<tr><td style="font-weight:600">${_cEsc(x.nombre)}<div style="font-size:11px;color:var(--muted);font-weight:400">${_cEsc(x.prog)}</div></td><td>${_cFmt(x.fecha)}</td><td>${x.limite?_cFmt(x.limite):'—'}</td><td>${_opPuntual(x)}</td></tr>`).join('')}</tbody></table></div>` : '<div style="padding:24px;text-align:center;color:var(--muted)">No se entregó ninguna asignatura esa semana.</div>'}</div>
-    <div style="font-size:15px;font-weight:700;margin:0 0 10px">${rel==='pasada'?'Materias que debían salir esa semana':rel==='actual'?'Materias que deben salir esta semana':'Materias que deben salir esa semana'} <span style="font-weight:400;color:var(--muted);font-size:12px">· fecha límite de entrega del cronograma</span></div>
-    <div class="card" style="margin-bottom:20px">${semFilas.length ? `<div style="overflow-x:auto"><table>
-      <thead><tr><th>Asignatura</th><th>Entrega límite</th><th>Se lanza</th><th>Estado</th><th>Riesgo</th></tr></thead>
-      <tbody>${semFilas.map(filaHTML).join('')}</tbody></table></div>` : '<div style="padding:24px;text-align:center;color:var(--muted)">No hay entregas planeadas esta semana.</div>'}</div>
-    <div class="card" style="margin-bottom:20px"><div class="card-head"><span class="card-title">Radar de capacidad</span><span style="font-size:11px;color:var(--muted)">Trabajo pendiente que vence, acumulado, contra lo que el equipo activo alcanza a producir desde hoy</span></div>
-      <div style="padding:14px 20px"><div style="position:relative;height:280px"><canvas id="op-chart-capacidad"></canvas></div>
-      <div style="font-size:12px;color:var(--muted);margin:10px 0 2px">El radar cuenta ${radar.pendientes} materias pendientes${radar.sinEmparejar?`; ${radar.sinEmparejar} de ellas no aparecen en el dashboard (todavía no ingresaron o su nombre no coincide), así que cuentan con su trabajo completo. <a href="#" onclick="opIrA('cronograma');return false" style="color:var(--accent,#e8336d)">Revísalas en Cronograma</a>.`:'.'}</div>
-      ${alarmasTxt || '<div style="padding:10px 0;font-size:13px;color:#15803d">✅ Con el equipo activo y el avance actual, se alcanza a cumplir todo lo que viene en las próximas 12 semanas.</div>'}</div></div>
-    <div style="font-size:11px;color:var(--muted);line-height:1.6">Supuestos: cada asignatura necesita ${OP_DISENO_DIAS} días de diseño y ${OP_VIDEO_DIAS} de video (jornadas de 8 h), menos el avance real de sus entregables; cada persona activa produce 1 día por día hábil; las fechas límite que caen en fin de semana o festivo cuentan el último día hábil anterior; lo vencido y no entregado cuenta como si venciera hoy; el cronograma se compara con el dashboard por nombre.</div>`;
+    <div class="card" style="margin-bottom:20px"><div class="card-head"><span class="card-title">Capacidad por mes</span><span style="font-size:11px;color:var(--muted)">Cada diseñador saca ${_opNum(OP_CAP_DISENO)} asignaturas al mes (5 días ÷ 3 por asignatura × 4 semanas); video corre dentro de esos 3 días</span></div>
+      <div style="padding:14px 20px">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12px;margin-bottom:10px">
+          <label>¿Y si presto de diseño? <select class="btn btn-sm" onchange="opCfg('d',this.value)">${opts(Math.max(0,datos.Pd-1),_opPrestaD)}</select></label>
+          <label>¿Y si presto de video? <select class="btn btn-sm" onchange="opCfg('v',this.value)">${opts(Math.max(0,datos.Pv-1),_opPrestaV)}</select></label>
+          <label>Colchón por llegadas justas <select class="btn btn-sm" onchange="opCfg('c',this.value)"><option value="0" ${_opColchon===0?'selected':''}>0%</option><option value="0.1" ${_opColchon===0.1?'selected':''}>10%</option><option value="0.2" ${_opColchon===0.2?'selected':''}>20%</option></select></label></div>
+        <div style="position:relative;height:260px"><canvas id="op-chart-meses"></canvas></div>
+        ${concl}
+        <div style="overflow-x:auto;margin-top:14px"><table>
+          <thead><tr><th>Mes</th><th>Lanzan</th><th>Ya entregadas</th><th>Con colchón</th><th>Diseño: necesitas</th><th>Diseño</th><th>Video: necesitas</th><th>Video</th></tr></thead>
+          <tbody>${evMes.map(mesFila).join('')}</tbody></table></div></div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-bottom:20px;align-items:start">
+      <div class="card"><div class="card-head"><span class="card-title">¿Con cuánto tiempo llegan?</span><span style="font-size:11px;color:var(--muted)">de ingreso a fábrica a la fecha límite</span></div><div style="padding:14px 20px">${mgHTML}</div></div>
+      <div class="card"><div class="card-head"><span class="card-title">Tiempo real contra el objetivo</span><span style="font-size:11px;color:var(--muted)">asignaturas completadas en los últimos 60 días</span></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Frente</th><th>Asignaturas</th><th>Objetivo</th><th>Trabajo real (mediana)</th><th>De principio a fin</th><th>Cumple</th></tr></thead>
+        <tbody>${trFila('Diseño',tr.diseno)}${trFila('Video',tr.video)}</tbody></table></div>
+        <div style="padding:10px 20px;font-size:11px;color:var(--muted)">“Trabajo real” son los días de 8 h de timers, sin traslapes; “de principio a fin” son días hábiles desde el primer timer hasta el último.</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.6">Supuestos: una asignatura toma ${OP_DISENO_DIAS} días de diseño y el trabajo de video cabe dentro de esos días; el mes tiene ${OP_SEMANAS_MES} semanas de ${OP_DIAS_SEMANA} días; cada mes se mide por las asignaturas que se lanzan en él; "Pueden salir" compara lo que le falta a cada asignatura (según sus entregables) con los días hábiles que quedan de la semana; el cronograma se compara con el dashboard por nombre.</div>`;
 
   // Gráficas
   if(typeof Chart==='undefined') return;
   window.myCharts=window.myCharts||{};
-  ['opEntregas','opCapacidad'].forEach(k=>{ if(window.myCharts[k]){ try{ window.myCharts[k].destroy(); }catch(e){} } });
+  ['opEntregas','opMeses'].forEach(k=>{ if(window.myCharts[k]){ try{ window.myCharts[k].destroy(); }catch(e){} } });
   const semanas=[]; for(let k=-_opAtras;k<=_opAdelante;k++) semanas.push(_opAddDias(W,7*k));
-  const lunesHoy=_opLunes(hoy), planDesde=_opLunes(OP_PLAN_DESDE);
+  const planDesde=_opLunes(OP_PLAN_DESDE);
   const real=semanas.map(s=>s<=lunesHoy ? _opEntregadasSemana(s) : null);
   const plan=semanas.map(s=>s>=planDesde ? filas.filter(r=>r.sem===s).length : null);
   const etiqueta=s=>{ const p=s.split('-'); return p[2]+'/'+p[1]; };
@@ -5325,13 +5451,14 @@ function renderOperacion(){
     ]},
     options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }, title:{ display:true, text:'Materias' } }, x:{ title:{ display:true, text:'Semana (lunes)' } } } }
   });
-  window.myCharts.opCapacidad=new Chart(document.getElementById('op-chart-capacidad').getContext('2d'),{
-    type:'line',
-    data:{ labels:radar.labels.map(etiqueta), datasets:[
-      { label:'Demanda acumulada (días de diseño)', data:radar.demD.map(v=>Math.round(v*10)/10), borderColor:'#eb6834', backgroundColor:'#eb6834', borderWidth:2, pointRadius:0, stepped:true },
-      { label:'Capacidad acumulada ('+radar.Pd+' diseñadores)', data:radar.capD, borderColor:'#2a78d6', backgroundColor:'#2a78d6', borderWidth:2, pointRadius:0 }
-    ]},
-    options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{ position:'bottom' } }, scales:{ y:{ beginAtZero:true, title:{ display:true, text:'Días de diseño' } }, x:{ ticks:{ maxTicksLimit:12 } } } }
+  const dsMes=[
+    { type:'bar', label:`Lanzan en el mes (+${colTxt} de colchón)`, data:evMes.map(x=>Math.round(x.e.dem*10)/10), backgroundColor:evMes.map(x=>x.m.lanz>0 && !x.e.okD ? '#d03b3b' : '#2a78d6'), borderRadius:4, maxBarThickness:46 },
+    { type:'line', label:`Capacidad de diseño con ${pd} persona${pd===1?'':'s'}`, data:evMes.map(()=>Math.round(pd*OP_CAP_DISENO*10)/10), borderColor:'#eb6834', backgroundColor:'#eb6834', borderWidth:2, pointRadius:0 }
+  ];
+  if(pd!==datos.Pd) dsMes.push({ type:'line', label:`Con el equipo completo (${datos.Pd})`, data:evMes.map(()=>Math.round(datos.Pd*OP_CAP_DISENO*10)/10), borderColor:'#9ca3af', borderDash:[6,5], borderWidth:2, pointRadius:0 });
+  window.myCharts.opMeses=new Chart(document.getElementById('op-chart-meses').getContext('2d'),{
+    type:'bar', data:{ labels:evMes.map(x=>_opMesCorto(x.m.mes)), datasets:dsMes },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } }, scales:{ y:{ beginAtZero:true, title:{ display:true, text:'Asignaturas' } } } }
   });
 }
 
