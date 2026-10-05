@@ -2108,11 +2108,12 @@ function celulaDisponibleDesde(id){
   return CELULA_CFG[id]?.disponibleDesde || null;
 }
 
-function encontrarCelulaDisponible(){
+function encontrarCelulaDisponible(excluir=[]){
   const carga = evaluarCargaCelulas();
   const hoy = today();
   const entries = Object.entries(carga).filter(([id])=>{
     if(id==='JuanDiego') return false; // el video va aparte
+    if(excluir.includes(id)) return false; // p. ej. la persona de la que se está soltando la asignatura
     if(!celulaActiva(id)) return false; // pausada (Sheet, o respaldo en código)
     const disp = celulaDisponibleDesde(id);
     if(disp && hoy < disp) return false; // aún no ha ingresado
@@ -2437,6 +2438,98 @@ function limpiarReservasDuplicadas(){
     guardarEstadoLocal();
     renderAsignaturas();
     if(typeof renderCelulasDir==='function') renderCelulasDir();
+  }
+}
+
+// ═══ SIN MOVIMIENTO (decisión de Derly, oct 2026) ═══
+// Una asignatura con persona de diseño que lleva 1 día hábil SIN trabajo de diseño se suelta sola y se
+// manda a otra persona libre. Para saber CUÁNDO se asignó se anota cada asignación en la pestaña
+// "Asignaciones" del Sheet (ID, ID Asignatura, Persona, Fecha); se crea sola la primera vez.
+// Si nadie más está libre, NO se suelta (la tomaría la misma persona de vuelta): solo se avisa.
+const DIAS_SIN_MOVIMIENTO = 1;
+const MAX_LIBERACIONES_POR_SYNC = 3;
+const ENC_ASIGNACIONES = ['ID','ID Asignatura','Persona','Fecha'];
+let _asignacionesLog = {}, _asignacionesLogOk = false;
+
+async function cargarAsignacionesLog(){
+  _asignacionesLogOk = false;
+  const r = await jsonp(API+'?hoja='+encodeURIComponent('Asignaciones'));
+  // Si la lectura falló (timeout / sin conexión) NO se actúa: una lista vacía por error reiniciaría los plazos.
+  if(!r || r.ok===false || !Array.isArray(r.filas)) return;
+  const log = {};
+  r.filas.slice(1).forEach(f=>{
+    const id=String(f[1]||''), persona=String(f[2]||''), ms=Date.parse(String(f[3]||''));
+    if(!id || !persona || isNaN(ms)) return;
+    (log[id]=log[id]||[]).push({ persona, ms });
+  });
+  Object.values(log).forEach(a=>a.sort((x,y)=>x.ms-y.ms));
+  _asignacionesLog = log; _asignacionesLogOk = true;
+}
+// Anota las asignaciones nuevas (o cambios de persona) que todavía no están en el log. Una por una.
+async function registrarAsignaciones(){
+  if(!_asignacionesLogOk) return;
+  const nuevas = STATE.asignaturas.filter(a=>{
+    if(a.tipo!=='celula' || !a.celula || a.status==='Completada' || a.status==='Pausada') return false;
+    const arr=_asignacionesLog[a.id]||[], ult=arr[arr.length-1];
+    return !ult || ult.persona!==a.celula;
+  });
+  // Primero todo en memoria (al instante, para que la regla ya lo vea) y después al Sheet una por una
+  const ahora=Date.now();
+  const filas = nuevas.map(a=>{
+    (_asignacionesLog[a.id]=_asignacionesLog[a.id]||[]).push({ persona:a.celula, ms:ahora });
+    // El ID lleva la hora: si dos navegadores anotan lo mismo a la vez, el backend descarta el repetido
+    return [a.id+'|'+a.celula+'|'+new Date(ahora).toISOString().slice(0,13), a.id, a.celula, new Date(ahora).toISOString()];
+  });
+  for(const f of filas) await sheetGuardar('Asignaciones', ENC_ASIGNACIONES, f);
+}
+function _diaHabilAnterior(ymd, n){ let d=ymd, c=0; while(c<n){ d=_topeSumarDias(d,-1); if(_topeEsHabil(d)) c++; } return d; }
+// Lo que debería estar trabajando cada persona: su activa (En producción) o, si no tiene, su reserva
+function _candidatasSinMovimiento(){
+  const out=[];
+  UNIDADES_DISENO.forEach(pid=>{
+    if(!celulaActiva(pid)) return;
+    const mias = STATE.asignaturas.filter(a=>a.celula===pid && a.tipo==='celula' && a.status!=='Completada' && a.status!=='Pausada' && !disenoCompletoAsig(a));
+    const activas = mias.filter(a=>a.status==='En producción');
+    (activas.length ? activas : mias.filter(a=>a.status==='En espera').slice(0,1)).forEach(a=>out.push({ a, pid }));
+  });
+  return out;
+}
+async function liberarSinMovimiento(){
+  if(!_asignacionesLogOk) return;
+  const hoy=_ymdLocal(new Date());
+  if(!_topeEsHabil(hoy)) return; // solo se evalúa en día hábil
+  const umbral = new Date(_diaHabilAnterior(hoy, DIAS_SIN_MOVIMIENTO)+'T00:00:00').getTime(); // inicio del último día hábil completo
+  const inactivas = _candidatasSinMovimiento().filter(({a,pid})=>{
+    const arr=(_asignacionesLog[a.id]||[]).filter(x=>x.persona===pid), ult=arr[arr.length-1];
+    if(!ult) return false;                       // todavía no se anotó cuándo se asignó: se le da el plazo completo
+    const info=infoFrente(a,false), ultimoDiseno = info.iniciado ? info.ultimoFin : 0; // incluye timers corriendo
+    return ultimoDiseno < umbral && ult.ms < umbral;
+  }).sort((x,y)=>compararPorUrgencia(x.a,y.a));  // las vencidas primero
+  let movidas=0;
+  for(const {a,pid} of inactivas){
+    const origen = CELULA_CFG[pid]?.label || pid;
+    const disp = encontrarCelulaDisponible([pid]);
+    if(!disp){
+      const k='avisoSinMov_'+a.id+'_'+hoy;
+      if(!localStorage.getItem(k)){ localStorage.setItem(k,'1'); toast(`⚠️ "${a.nombre}" lleva un día hábil sin trabajo de diseño con ${origen}, pero no hay nadie libre para tomarla`); }
+      continue;
+    }
+    if(movidas>=MAX_LIBERACIONES_POR_SYNC) break;
+    movidas++;
+    const esPre = disp.tipo==='preasignacion';
+    a.celula = disp.celulaId; a.status = esPre ? 'En espera' : 'En producción';
+    if(!a.tareasCelula) a.tareasCelula = iniciarTareasCelula(disp.celulaId);
+    guardarEstadoLocal();
+    sheetActualizar('Asignaturas',
+      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
+      [a.id, a.nombre, a.prog, a.inicio, a.df, a.status, a.obs||'', today(), 'celula', a.celula, a.fechaCompletado||'', a.fechaInicioProduccion||'', a.link||'', a.videoPersona||'', a.prioridad||'media', a.fechaLimite||'', a.prioridadManual?'Si':'No', a.fechaDeberiaEntrar||'']
+    );
+    await notificarAsignacion(a, disp.celulaId, esPre);
+    toast(`↪ "${a.nombre}" llevaba un día hábil sin trabajo de diseño con ${origen}: pasa a ${CELULA_CFG[disp.celulaId]?.label||disp.celulaId}`);
+  }
+  if(movidas){
+    await registrarAsignaciones(); // la nueva persona arranca su plazo desde ahora
+    renderAsignaturas(); if(typeof renderDashboard==='function') renderDashboard(); if(typeof renderCelulasDir==='function') renderCelulasDir();
   }
 }
 
@@ -5993,6 +6086,8 @@ async function cargarDesdeSheets(){
     recalcularPrioridadesAutomaticas();
     // Limpiar reservas duplicadas (dato dañado por un hueco ya corregido) antes de reordenar
     limpiarReservasDuplicadas();
+    // Sin movimiento: anotar cuándo se asignó cada una y soltar las que llevan un día hábil sin diseño
+    try{ await cargarAsignacionesLog(); registrarAsignaciones().catch(e=>console.log('[ASIGNACIONES] error:', e)); await liberarSinMovimiento(); }catch(e){ console.log('[SIN MOVIMIENTO] error:', e); }
     // Reordenar reservas ya asignadas si algo más urgente quedó esperando en la cola —
     // MÁXIMO una vez al día (por navegador). Como todo el equipo tiene el dashboard
     // abierto a la vez, correr esto en cada sincronización (cada 15 min, en cada refresco)
