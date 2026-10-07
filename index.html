@@ -1277,7 +1277,7 @@ const STATE = {
 // ════════════════════════════════════════════
 // TURNO DE VIDEO — alternado Juan Diego / Valentina
 // ════════════════════════════════════════════
-const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Cristina Alisente', 'Juan Diego Cruz'];
+const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Cristina Alisente', 'Juan Diego Cruz', 'Alejandra Barco'];
 // El turno se calcula desde los DATOS compartidos (no de localStorage), para que la
 // alternancia sea consistente entre todos los equipos: se mira a quién le tocó la
 // ÚLTIMA asignatura de video y se devuelve al otro.
@@ -2143,6 +2143,7 @@ const CELULA_LIDERES = {
 const EQUIPO_EMAILS = {
   'Juliana Zarate':       'jzarate@eigedu.com',
   'Valentina Rodríguez':  'vchacon@esgerencia.com',
+  'Alejandra Barco':      'mbarco@eigedu.com',
   'David Bolaños':        'dbolanos@eigedu.com',
   'Leidy Gonzales':       '',
   'Julieth Pantoja':      'julieth.pantoja@eigedu.com',
@@ -2187,8 +2188,12 @@ const PRE_ASIGN_PCT = 60; // Pre-asignar cuando la célula alcance este % de pro
 // que acordarse de volver a cambiar "Pausado" a "Activo" a mano el día que alguien regresa).
 // Sin fecha, se usa la columna "Estado" tal cual. Si esa persona aún no tiene fila en el
 // Sheet, se usa el respaldo escrito en CELULA_CFG.
+// Si en la hoja Equipo el ID de alguien no es su nombre completo (p. ej. "AlejandraB"), aquí se indica
+// qué ID usa en el Sheet. Así pausar o dar fecha de inicio en esa fila sí le llega al dashboard.
+const EQUIPO_ID_ALIAS = { 'Alejandra Barco': 'AlejandraB' };
+function _filaEquipo(id){ return STATE.equipoEstado[id] || STATE.equipoEstado[EQUIPO_ID_ALIAS[id]]; }
 function celulaActiva(id){
-  const enSheet = STATE.equipoEstado[id];
+  const enSheet = _filaEquipo(id);
   if(enSheet){
     if(enSheet.disponibleDesde) return today() >= enSheet.disponibleDesde;
     if(typeof enSheet.activo === 'boolean') return enSheet.activo;
@@ -2196,7 +2201,7 @@ function celulaActiva(id){
   return !CELULA_CFG[id]?.pausada;
 }
 function celulaDisponibleDesde(id){
-  const enSheet = STATE.equipoEstado[id];
+  const enSheet = _filaEquipo(id);
   if(enSheet && enSheet.disponibleDesde) return enSheet.disponibleDesde;
   return CELULA_CFG[id]?.disponibleDesde || null;
 }
@@ -2695,7 +2700,7 @@ function rebalancearVideoEquipo(){
   if(!movibles.length) return;
 
   let huboCambios = false;
-  const cambios = [];
+  const cambios = [], filasSheet = [];
   movibles.forEach((asig, i)=>{
     const nuevo = pool[i % pool.length];
     if(asig.videoPersona === nuevo) return; // ya le tocaba a esa misma persona, no mover
@@ -2703,15 +2708,15 @@ function rebalancearVideoEquipo(){
     asig.videoPersona = nuevo;
     huboCambios = true;
     cambios.push(`${asig.nombre} (${anterior}→${nuevo})`);
-    sheetActualizar('Asignaturas',
-      ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
-      [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona, asig.prioridad, asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
-    );
+    filasSheet.push([asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona, asig.prioridad, asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']);
   });
   if(huboCambios){
     guardarEstadoLocal();
     renderAsignaturas();
     if(typeof renderCelulasDir==='function') renderCelulasDir();
+    // Al Sheet de una en una: un cambio de equipo puede mover decenas de asignaturas a la vez
+    const ENC=['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'];
+    (async()=>{ for(const f of filasSheet){ await sheetActualizar('Asignaturas', ENC, f); } })();
     toast(`🎬 Video rebalanceado entre ${pool.join(', ')} — ${cambios.length} movida${cambios.length!==1?'s':''}`);
     console.log('[REBALANCEO VIDEO]', cambios);
   }
