@@ -1000,7 +1000,7 @@ function renderCelulasDir(){
     const preAsignada = todas.find(a=>a.celula===id && a.status==='En espera' && !disenoCompletoAsig(a));
     // Asignaturas donde YA terminó su diseño pero siguen vivas esperando a que video cierre
     const esperandoVideo = todas.filter(a=>a.celula===id && a.status==='En producción' && disenoCompletoAsig(a) && !videoCompletoAsig(a));
-    const pct = asigActiva ? progAsig(asigActiva) : 0;
+    const pct = asigActiva ? progAsigVista(asigActiva) : 0;
     const dias = asigActiva ? diasAsig(asigActiva).toFixed(1) : '0';
     const completadasCelula = todas.filter(a=>a.celula===id && a.status==='Completada' && a.tipo==='celula');
     const promCelula = completadasCelula.length>0
@@ -1111,7 +1111,7 @@ function renderCelulasDir(){
   const recientesHTML = recientes.length===0
     ? `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No hay asignaturas aún</div>`
     : recientes.map(a=>{
-      const pct=progAsig(a);
+      const pct=progAsigVista(a);
       const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
       const statusDisplay = a.status;
       const stBg = statusDisplay==='Completada'?'rgba(22,163,74,.1)':statusDisplay==='En producción'?'rgba(217,119,6,.1)':'rgba(99,102,241,.12)';
@@ -1427,7 +1427,8 @@ function toggleRevision(asigId, item, el){
   if(nuevo) verificarAutoCompletado(asigId);
 }
 function _revisoresPosibles(){
-  const nombres=[...new Set([...UNIDADES_DISENO.filter(celulaActiva).map(id=>CELULA_CFG[id]?.label||id), ...VIDEO_PERSONAS, ...COORDINACION])];
+  // Revisar no depende de estar recibiendo asignaturas: salen todos, estén activos o en pausa en la hoja Equipo
+  const nombres=[...new Set([...UNIDADES_DISENO.map(id=>CELULA_CFG[id]?.label||id), ...VIDEO_PERSONAS, ...COORDINACION])];
   const actual=localStorage.getItem('revisorNombre')||''; if(actual && !nombres.includes(actual)) nombres.push(actual);
   return nombres;
 }
@@ -1875,6 +1876,14 @@ function progAsig(a){
     ['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'].forEach(k=>{ total++; if(a.assets.global[k])done++; });
   }
   return total>0?Math.round(done/total*100):0;
+}
+// Porcentaje que se MUESTRA en pantalla: una asignatura no marca 100 % hasta que está cerrada
+// (banner + revisión de calidad). Mientras falte el cierre se queda en 99 %. La lógica interna
+// (pre-asignación al 60 %, orden de reservas, cierre) sigue usando progAsig, que mide solo la producción.
+function progAsigVista(a){
+  const p = progAsig(a);
+  if(a.status==='Completada') return p;
+  return (p>=100 && !cierreCompletoAsig(a)) ? 99 : p;
 }
 // ¿Ya terminó el frente de DISEÑO de esta asignatura? (independiente de si video ya terminó o no)
 function disenoCompletoAsig(a){
@@ -3639,7 +3648,7 @@ function renderDashboard(){
     if(oa!==ob) return oa-ob;
     return new Date(b.inicio)-new Date(a.inicio);
   }).slice(0,5).map(a=>{
-    const pct=progAsig(a);
+    const pct=progAsigVista(a);
     const sesA=STATE.sesiones.filter(s=>s.asigId===a.id);
     const statusDisplay = a.status;
     const stBadge=statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='En espera'?'badge-info':'badge-muted';
@@ -3770,7 +3779,7 @@ function renderAsignaturas(filtro){
       if(!a.tareasCelula && a.celula) a.tareasCelula=iniciarTareasCelula(a.celula);
       if(!a.handoffs) a.handoffs={h1:null,h2:null,h3:null};
     }
-    const pct=progAsig(a);
+    const pct=progAsigVista(a);
     const dias=diasAsig(a);
     const diasEl2=diasAsig(a);
     const PCOL={'alta':'#ef4444','media':'#f59e0b','baja':'#22c55e'};
@@ -4011,7 +4020,7 @@ function toggleAsset(asigId, unitKey, assetKey, el){
   if(fechaEl&&done) fechaEl.textContent='✓ '+fmtFecha(new Date().toISOString());
   else if(fechaEl&&!done) fechaEl.remove();
   const ring=document.querySelector(`[onclick="toggleAsigBody('${asigId}')"] circle:last-child`);
-  if(ring){ const pct=progAsig(asig); ring.setAttribute('stroke-dasharray',`${(pct/100*113.1).toFixed(1)} 113.1`); }
+  if(ring){ const pct=progAsigVista(asig); ring.setAttribute('stroke-dasharray',`${(pct/100*113.1).toFixed(1)} 113.1`); }
   guardarEstadoLocal();
   setSyncStatus('sync');
   sheetGuardar('Entregables',
