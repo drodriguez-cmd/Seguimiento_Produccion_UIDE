@@ -1275,9 +1275,14 @@ const STATE = {
 };
 
 // ════════════════════════════════════════════
-// TURNO DE VIDEO — alternado Juan Diego / Valentina
+// TURNO DE VIDEO — alterna entre los editores de video activos
 // ════════════════════════════════════════════
-const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Cristina Alisente', 'Juan Diego Cruz', 'Alejandra Barco'];
+// Editores de video ACTIVOS (reciben asignaturas y aparecen en la vista inicial).
+// Oct 2026: Juan Diego Cruz pasó a Coordinador de Operación y Cristina Alisente a Coordinadora de Calidad.
+const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Alejandra Barco'];
+// Quienes salieron de video: su historial sigue contando como video, y siguen pudiendo revisar la calidad.
+const VIDEO_EXEDITORES = ['Juan Diego Cruz', 'Cristina Alisente'];
+const COORDINACION = ['Juan Diego Cruz', 'Cristina Alisente'];
 // El turno se calcula desde los DATOS compartidos (no de localStorage), para que la
 // alternancia sea consistente entre todos los equipos: se mira a quién le tocó la
 // ÚLTIMA asignatura de video y se devuelve al otro.
@@ -1422,7 +1427,7 @@ function toggleRevision(asigId, item, el){
   if(nuevo) verificarAutoCompletado(asigId);
 }
 function _revisoresPosibles(){
-  const nombres=[...UNIDADES_DISENO.filter(celulaActiva).map(id=>CELULA_CFG[id]?.label||id), ...VIDEO_PERSONAS];
+  const nombres=[...new Set([...UNIDADES_DISENO.filter(celulaActiva).map(id=>CELULA_CFG[id]?.label||id), ...VIDEO_PERSONAS, ...COORDINACION])];
   const actual=localStorage.getItem('revisorNombre')||''; if(actual && !nombres.includes(actual)) nombres.push(actual);
   return nombres;
 }
@@ -1733,12 +1738,16 @@ function diasAsig(a){
 // - fechaMs: fecha del primer trabajo de ese frente
 // - diasTranscurridos: días hábiles (festivos Colombia) desde ese primer trabajo hasta hoy
 // - diasProduccion: días de producción efectivos (tiempo real ÷ jornada 8h), fusionando paralelos
-// Video = Juan Diego / Valentina (o rol 'video'). Diseño = todo lo demás.
+// Video = los editores de video (o rol 'video'). Diseño = todo lo demás.
 function infoFrente(a, esVideo){
   if(!a) return { iniciado:false };
   const MIN_JORNADA = 480;
   const esDelFrente = (persona, rol) => {
-    const esV = VIDEO_PERSONAS.includes(persona) || String(rol||'').toLowerCase()==='video';
+    const rolMin = String(rol||'').toLowerCase();
+    // Quienes salieron de video siguen contando como video en lo que ya registraron, salvo que una sesión
+    // se registre expresamente como diseño.
+    const esV = VIDEO_PERSONAS.includes(persona) || rolMin==='video' ||
+      (VIDEO_EXEDITORES.includes(persona) && !['disenador','diseno','lider','coord','calidad'].includes(rolMin));
     return esVideo ? esV : !esV;
   };
   const intervalos = [];
@@ -2677,6 +2686,11 @@ function liberarAsignaturasDePausados(){
 // Detecta si el equipo ACTIVO de video cambió desde la última vez que se revisó
 // (alguien se pausó o alguien volvió) — solo en ese momento vale la pena reorganizar
 // todo; si nadie cambió, no tocamos nada para no mover cosas sin necesidad.
+// ¿Hay asignaturas de video pendientes con alguien que ya no está en el equipo de video?
+function hayVideoHuerfana(){
+  return STATE.asignaturas.some(a=>a.tipo==='celula' && a.videoPersona && !VIDEO_PERSONAS.includes(a.videoPersona) &&
+    a.status!=='Completada' && a.status!=='Pausada' && !videoCompletoAsig(a));
+}
 function equipoVideoActivoCambio(){
   const actual = VIDEO_PERSONAS.filter(p=>celulaActiva(p)).sort().join(',');
   const anterior = localStorage.getItem('videoActivoUltimo');
@@ -2693,10 +2707,12 @@ function rebalancearVideoEquipo(){
   const pool = VIDEO_PERSONAS.filter(p=>celulaActiva(p));
   if(!pool.length) return; // nadie activo, no hay a quién repartirle
 
-  const movibles = ordenarPorPrioridad(STATE.asignaturas.filter(a=>
-    a.tipo==='celula' && a.videoPersona && a.status!=='Completada' && a.status!=='Pausada' &&
-    !videoCompletoAsig(a) && !infoFrente(a, true).iniciado
-  ));
+  // Se reparte el video que aún no ha arrancado y, además, TODO lo pendiente de quien ya no está en el equipo
+  // de video (aunque ya tenga video empezado: esa persona dejó de hacer video; sus sesiones se conservan).
+  const movibles = ordenarPorPrioridad(STATE.asignaturas.filter(a=>{
+    if(!(a.tipo==='celula' && a.videoPersona && a.status!=='Completada' && a.status!=='Pausada' && !videoCompletoAsig(a))) return false;
+    return !VIDEO_PERSONAS.includes(a.videoPersona) || !infoFrente(a, true).iniciado;
+  }));
   if(!movibles.length) return;
 
   let huboCambios = false;
@@ -6228,7 +6244,8 @@ async function cargarDesdeSheets(){
     setSyncStatus('ok');
     // Si alguien se pausó y tenía algo sin arrancar, liberarlo primero (conserva su prioridad)
     liberarAsignaturasDePausados();
-    if(equipoVideoActivoCambio()) rebalancearVideoEquipo();
+    const cambioVideo = equipoVideoActivoCambio();
+    if(cambioVideo || hayVideoHuerfana()) rebalancearVideoEquipo();
     // Recalcular prioridad por fecha límite (respeta las que ya fueron cambiadas a mano)
     recalcularPrioridadesAutomaticas();
     // Limpiar reservas duplicadas (dato dañado por un hueco ya corregido) antes de reordenar
