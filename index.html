@@ -1880,6 +1880,21 @@ function progAsig(a){
 // Porcentaje que se MUESTRA en pantalla: una asignatura no marca 100 % hasta que está cerrada
 // (banner + revisión de calidad). Mientras falte el cierre se queda en 99 %. La lógica interna
 // (pre-asignación al 60 %, orden de reservas, cierre) sigue usando progAsig, que mide solo la producción.
+// El Sheet manda sobre qué asignaturas existen. Una asignatura que solo está en la memoria de este navegador
+// se conserva únicamente si es RECIÉN CREADA (su ID lleva la hora de creación) y aún no subió al Sheet.
+// Si es más vieja y ya no está en el Sheet, se eliminó en otro lado: se descarta. Antes se conservaba siempre,
+// y una pestaña vieja la volvía a escribir al Sheet (la "resucitaba") en cada sincronización.
+const MINUTOS_GRACIA_NUEVA = 30;
+function _horaDeCreacionPorId(id){ const m=/^id(\d{13})/.exec(String(id||'')); return m ? Number(m[1]) : null; }
+function asignaturasVigentes(locales, idsSheet, nombresSheet, ahora){
+  const limite = (ahora||Date.now()) - MINUTOS_GRACIA_NUEVA*60*1000;
+  return locales.filter(a=>{
+    if(idsSheet.has(a.id)) return true;                       // está en el Sheet
+    const t=_horaDeCreacionPorId(a.id);
+    if(t!==null && t<limite) return false;                    // vieja y ausente del Sheet: se eliminó en otro lado
+    return !nombresSheet.has(a.nombre);                       // reciente (o sin hora en el ID): se conserva salvo que sea un duplicado del Sheet
+  });
+}
 function progAsigVista(a){
   const p = progAsig(a);
   if(a.status==='Completada') return p;
@@ -5977,7 +5992,9 @@ async function cargarDesdeSheets(){
       //    Es seguro: el blindaje ya garantizó que la lectura de Asignaturas no vino vacía.
       const idsSheet = new Set(deSheets.map(s=>s.id));
       const nombresSheet = new Set(deSheets.map(s=>s.nombre));
-      STATE.asignaturas = STATE.asignaturas.filter(a => idsSheet.has(a.id) || !nombresSheet.has(a.nombre));
+      const antesPoda = STATE.asignaturas.length;
+      STATE.asignaturas = asignaturasVigentes(STATE.asignaturas, idsSheet, nombresSheet);
+      if(STATE.asignaturas.length < antesPoda) console.log('[CARGA] Se descartaron', antesPoda-STATE.asignaturas.length, 'asignatura(s) que ya no están en el Sheet');
 
       actualizado = true;
 
