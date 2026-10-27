@@ -278,6 +278,9 @@ textarea{resize:vertical;min-height:70px}
     <button class="nav-item" onclick="goPage('operacion',this)">
       <span class="dot" style="background:#7c3aed"></span> Operación
     </button>
+    <button class="nav-item" onclick="goPage('calidad',this)">
+      <span class="dot" style="background:#0d9488"></span> Calidad de entrada <span id="nav-cal-badge" style="display:none;margin-left:6px;font-size:10px;font-weight:700;color:#fff;background:#2563eb;border-radius:99px;padding:1px 7px"></span>
+    </button>
 
     <div class="nav-section">Registro</div>
     <button class="nav-item" onclick="goPage('nueva',this)">
@@ -337,6 +340,7 @@ textarea{resize:vertical;min-height:70px}
   <div class="chips" id="asig-filter-chips">
     <button class="chip" onclick="filterAsig('En producción',this)">🏭 En producción</button>
     <button class="chip" onclick="filterAsig('Por iniciar',this)">🕐 Por iniciar</button>
+    <button class="chip" onclick="filterAsig('En revisión de calidad',this)">🔎 En revisión</button>
     <button class="chip" onclick="filterAsig('En cola',this)">📋 En cola</button>
     <button class="chip" onclick="filterAsig('Pausada',this)">⏸ Pausada</button>
     <button class="chip" onclick="filterAsig('Completada',this)">✅ Completadas</button>
@@ -457,8 +461,8 @@ textarea{resize:vertical;min-height:70px}
           </div>
           <div class="fg" style="margin-bottom:14px"><label>Modo de ingreso</label>
             <select id="n-modo-ingreso" onchange="onModoIngresoChange()">
-              <option value="espera">⏳ Agregar a cola (auto-asignar persona)</option>
-              <option value="directo">⚡ Asignar persona manualmente</option>
+              <option value="espera">🔎 Pasa a revisión de calidad y luego a la cola</option>
+              <option value="directo">⚡ Asignar persona manualmente (sin revisión)</option>
             </select>
             <div id="celula-form-extra" style="display:none;margin-top:10px">
               <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Persona asignada</label>
@@ -695,6 +699,15 @@ textarea{resize:vertical;min-height:70px}
     <p>Qué se entregó, qué debe salir cada semana y si el equipo alcanza a cumplirlo</p>
   </div>
   <div id="operacion-content"></div>
+</div>
+
+<!-- ─── CALIDAD DE ENTRADA ─── -->
+<div class="page" id="page-calidad">
+  <div class="page-header">
+    <h1>Calidad de entrada</h1>
+    <p>Las materias nuevas se revisan con los 9 puntos de la pauta antes de entrar a la cola de producción</p>
+  </div>
+  <div id="calidad-content"></div>
 </div>
 
 <!-- ─── CRONOGRAMA ─── -->
@@ -959,6 +972,7 @@ function renderCelulasDir(){
   const porIniciar = todas.filter(a=>categoriaAsig(a)==='Por iniciar').length;
   const comp = todas.filter(a=>categoriaAsig(a)==='Completada').length;
   const cola = todas.filter(a=>categoriaAsig(a)==='En cola').length;
+  const enRev = todas.filter(a=>a.status===ST_REVISION).length;
   const total = todas.length;
   const pctComp = total>0?Math.round(comp/total*100):0;
   const completadas = todas.filter(a=>a.status==='Completada');
@@ -973,11 +987,12 @@ function renderCelulasDir(){
   const enRiesgo = todas.filter(a=>a.status==='En producción'&&diasAsig(a)>=(a.df||3)).length;
   const timersN = Object.values(STATE.timers).filter(t=>t.running).length;
   const kpiHTML = `
-  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-bottom:20px">
+  <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:20px">
     ${[
       {lbl:'Total asignaturas', val:total, sub:'en la fábrica', c:'#818cf8'},
       {lbl:'En producción', val:enProd, sub:'ya arrancaron', c:'#d97706'},
       {lbl:'Por iniciar', val:porIniciar, sub:'con persona, sin arrancar', c:'#6366f1'},
+      {lbl:'En revisión', val:enRev, sub:'calidad de entrada', c:'#0d9488'},
       {lbl:'En cola', val:cola, sub:'esperando persona', c:'#e8336d'},
       {lbl:'Completadas', val:comp, sub:pctComp+'% del total', c:'#16a34a'},
       {lbl:'En riesgo', val:enRiesgo, sub:enRiesgo>0?'superaron DF':'dentro del plazo', c:enRiesgo>0?'#dc2626':'#16a34a'},
@@ -1100,7 +1115,7 @@ function renderCelulasDir(){
 
   // Asignaturas recientes (mismo orden que dashboard original)
   const recientes = [...todas].sort((a,b)=>{
-    const orden = {'En producción':0,'Pausada':1,'En espera':2,'Completada':3};
+    const orden = {'En producción':0,'Pausada':1,'En espera':2,[ST_REVISION]:2,'Completada':3};
     const oa = orden[a.status]??4, ob = orden[b.status]??4;
     if(oa!==ob) return oa-ob;
     return new Date(b.inicio)-new Date(a.inicio);
@@ -1155,7 +1170,7 @@ function renderCelulasDir(){
         <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
           <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
             <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Cola de espera</span>
-            <span style="font-size:11px;padding:2px 10px;border-radius:99px;background:#eef2ff;color:#6366f1">${colaAsigs.length} pendientes</span>
+            <span style="font-size:11px;padding:2px 10px;border-radius:99px;background:#eef2ff;color:#6366f1">${colaAsigs.length} pendientes${enRev?' · '+enRev+' en revisión de calidad':''}</span>
           </div>
           ${colaHTML}
         </div>
@@ -1275,6 +1290,10 @@ const STATE = {
 // ════════════════════════════════════════════
 // TURNO DE VIDEO — alterna entre los editores de video activos
 // ════════════════════════════════════════════
+// Estado de una asignatura NUEVA mientras Calidad la revisa (calidad de entrada): queda fuera de la cola y del reparto,
+// igual que Pausada. Al cerrar la revisión pasa a 'En espera' y sigue el flujo normal.
+const ST_REVISION = 'En revisión de calidad';
+
 // Editores de video ACTIVOS (reciben asignaturas y aparecen en la vista inicial).
 // Oct 2026: Juan Diego Cruz pasó a Coordinador de Operación y Cristina Alisente a Coordinadora de Calidad.
 const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Alejandra Barco'];
@@ -1937,6 +1956,498 @@ function renderPage(id){
   else if(id==='operacion'){ renderOperacion(); cargarCronograma(false); }
   else if(id==='celula') renderCelula();
   else if(id==='celulas-dir') renderCelulasDir();
+  else if(id==='calidad'){ renderCalidad(); cargarCalidadEntrada().then(ok=>{ if(ok){ calSanar(); renderCalidad(); } }); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CALIDAD DE ENTRADA — revisión de las materias NUEVAS antes de entrar a la cola de producción
+//  Flujo acordado con Derly (oct-2026):
+//   1) Nueva asignatura → queda "En revisión de calidad" (status ST_REVISION): fuera de la cola y del reparto.
+//   2) Cristina corre su skill en Claude y pega el bloque FABRICA_REVISION_V1 en "Importar resultado" (ronda 1).
+//      Si hay algo por corregir → "Devuelta a instruccional" (alarma a 1 día hábil). Si todo está en Bien → se cierra y pasa a la cola.
+//   3) Instruccional corrige y avisa → Calidad pulsa "Ajustes confirmados" → "Lista para re-revisión" → ronda 2 …
+//   4) Solo cierra cuando una ronda deja los 9 puntos en Bien (doble validación), o con "Pasar con observaciones" (nota obligatoria).
+//  Hojas del Sheet (se crean solas): Revision_Entrada (1 fila por materia), Rondas_Entrada, Puntos_Entrada, Incidencias_Entrada.
+//  No requiere cambios en el Apps Script: usa guardar/actualizar/leer que ya existen.
+// ═══════════════════════════════════════════════════════════════════════════
+const CAL_ALERTA_DIAS = 1;   // días hábiles sin movimiento para marcar en rojo
+const CAL_REVISORES = ['Cristina Alisente','Juan Diego Cruz','Derly Rodríguez'];
+const CAL_ESTADO = { SIN:'Sin revisar', DEVUELTA:'Devuelta a instruccional', LISTA:'Lista para re-revisión', CERRADA:'Cerrada', OBS:'Pasó con observaciones', MANUAL:'Liberada sin revisión' };
+const CAL_CLASES = ['Introducción','Clase 1','Clase 2','Clase 3','General'];
+const CAL_PAUTA = [
+  [1,'¿Coinciden el tema y "¿Qué hemos aprendido?" en temas y subtemas?'],
+  [2,'¿Hay entre 3 y 5 subtemas?'],
+  [3,'¿Tiene el tema muchas imágenes o tablas?'],
+  [4,'¿Coincide el tema con la matriz?'],
+  [5,'¿Tiene el guion de infografía una estructura clara que resuma la clase?'],
+  [6,'¿Llevan los guiones de vídeo el título de la matriz, saludo inicial, buena estructura y máximo 404 palabras?'],
+  [7,'¿Está subido el vídeo de presentación docente?'],
+  [8,'¿Aporta el Saber más información nueva o amplía el tema?'],
+  [9,'¿Tienen los tests 30 preguntas?']
+];
+const CAL_ENC_REV = ['ID','Materia','Programa','Estado','Ronda','Desde','Revisor','Abierta','Ultima ronda','Cerrada','Cerrado por','Instruccional confirmo','Nota'];
+const CAL_ENC_RONDA = ['ID','ID Asignatura','Ronda','Fecha','Importado por','Bien','Revisar','Corregir','Incidencias abiertas','Acciones','Datos','Matriz'];
+const CAL_ENC_PUNTO = ['ID','ID Asignatura','Ronda','Punto','Estado','Bien','Falla','Accion'];
+const CAL_ENC_INC = ['ID','ID Asignatura','Punto','Clase','Detalle','Estado','Ronda abierta','Ultima ronda vista','Ronda resuelta','Fecha abierta','Fecha resuelta','Resuelta por'];
+const ENC_ASIG_18 = ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'];
+
+let _calVista=null;     // id de la asignatura abierta en el detalle (null = lista)
+let _calFiltro='todas';
+let _calImp=null;       // panel de importación: { texto, parsed, busqueda, over:{}, conf:false }
+let _calOcupado=false;  // hay una importación guardándose
+
+// ── Estado en memoria (se carga del Sheet; no se guarda en localStorage) ──
+function _cal(){ if(!STATE.calidad) STATE.calidad={ rev:{}, rondas:{}, pun:{}, inc:{}, cargado:false }; return STATE.calidad; }
+const _calAhora = () => new Date().toISOString();
+const _calNorm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+// Una celda que empiece por = + - @ el Sheet la tomaría como fórmula: se le antepone un espacio
+const _calCelda = v => { if(v==null) return ''; if(typeof v!=='string') return v; return /^[=+\-@]/.test(v) ? ' '+v : v; };
+const _calTxt = (v,max) => { v=String(v==null?'':v).replace(/\s+/g,' ').trim(); return v.length>max ? v.slice(0,max-1)+'…' : v; };
+function calUsuario(){ return localStorage.getItem('calidadUsuario')||''; }
+function calSetUsuario(v){ localStorage.setItem('calidadUsuario',v||''); }
+function _calFilaAsig(a){ return [a.id, a.nombre, a.prog, a.inicio, a.df, a.status, a.obs||'', today(), a.tipo||'estandar', a.celula||'', a.fechaCompletado||'', a.fechaInicioProduccion||'', a.link||'', a.videoPersona||'', a.prioridad||'media', a.fechaLimite||'', a.prioridadManual?'Si':'No', a.fechaDeberiaEntrar||'']; }
+
+// Escritura que SÍ informa si funcionó (sheetGuardar/sheetActualizar no lo devuelven)
+async function _calEscribir(accion, hoja, enc, fila){
+  try{
+    const url = API+'?accion='+accion+'&hoja='+encodeURIComponent(hoja)+'&enc='+encodeURIComponent(JSON.stringify(enc))+'&fila='+encodeURIComponent(JSON.stringify(fila.map(_calCelda)));
+    const r = await jsonp(url); const ok = !!r && r.ok!==false;
+    setSyncStatus(ok?'ok':'err'); return ok;
+  }catch(e){ setSyncStatus('err'); return false; }
+}
+
+// ── Días hábiles (festivos de Colombia): 0 el mismo día; 1 al siguiente día hábil ──
+function calDiasHabiles(desdeISO, hasta){
+  if(!desdeISO) return 0;
+  const f=new Date(desdeISO); if(isNaN(f)) return 0;
+  const d0=_ymdLocal(f), d1=_ymdLocal(hasta||new Date());
+  if(d1<=d0) return 0;
+  let n=0, x=d0, guard=0;
+  while(x<d1 && guard++<400){ x=_topeSumarDias(x,1); if(_topeEsHabil(x)) n++; }
+  return n;
+}
+
+// ── Consultas ──
+function calFila(id){ return _cal().rev[id]||null; }
+function calRondas(id){ return _cal().rondas[id]||[]; }
+function calIncidencias(id){ return _cal().inc[id]||[]; }
+function calAbiertas(id){ return calIncidencias(id).filter(i=>i.estado==='Abierta'); }
+function calEstadoDe(a){ const f=calFila(a.id); return f ? f.estado : (a.status===ST_REVISION ? CAL_ESTADO.SIN : null); }
+function calAbierta(estado){ return estado===CAL_ESTADO.SIN || estado===CAL_ESTADO.DEVUELTA || estado===CAL_ESTADO.LISTA; }
+function calPelota(estado){ return estado===CAL_ESTADO.DEVUELTA ? 'Equipo instruccional' : (estado===CAL_ESTADO.SIN||estado===CAL_ESTADO.LISTA) ? 'Calidad' : ''; }
+// Desde cuándo está en el estado actual: la fila guardada o, si nunca se revisó, desde que se creó (el ID lleva la hora)
+function calDesde(a){
+  const f=calFila(a.id); if(f && f.desde) return f.desde;
+  const t=_horaDeCreacionPorId(a.id); if(t) return new Date(t).toISOString();
+  return a.inicio ? a.inicio+'T12:00:00' : '';
+}
+function calAlerta(a){
+  const e=calEstadoDe(a); if(!calAbierta(e)) return { dias:0, rojo:false, pelota:'' };
+  const dias=calDiasHabiles(calDesde(a));
+  return { dias, rojo:dias>=CAL_ALERTA_DIAS, pelota:calPelota(e) };
+}
+// Materias que se muestran: las que están en revisión + las que ya tienen fila guardada
+function calLista(){
+  const C=_cal(); const ids=new Set([...Object.keys(C.rev), ...STATE.asignaturas.filter(a=>a.status===ST_REVISION).map(a=>a.id)]);
+  const out=[];
+  ids.forEach(id=>{
+    const a=STATE.asignaturas.find(x=>x.id===id); if(!a) return;
+    const estado=calEstadoDe(a); if(!estado) return;
+    const inc=calIncidencias(id);
+    out.push({ a, estado, fila:calFila(id), alerta:calAlerta(a), abiertas:inc.filter(i=>i.estado==='Abierta').length, resueltas:inc.filter(i=>i.estado==='Resuelta').length, ronda:calRondas(id).length });
+  });
+  return out;
+}
+function calActualizarBadge(){
+  const el=document.getElementById('nav-cal-badge'); if(!el) return;
+  const ab=calLista().filter(x=>calAbierta(x.estado)); const rojas=ab.filter(x=>x.alerta.rojo).length;
+  el.textContent=String(ab.length); el.style.display=ab.length?'inline-block':'none'; el.style.background=rojas?'#dc2626':'#2563eb';
+}
+
+// ── Carga desde el Sheet (4 hojas; si alguna falla se conserva lo que ya hay) ──
+async function cargarCalidadEntrada(){
+  const hojas=['Revision_Entrada','Rondas_Entrada','Puntos_Entrada','Incidencias_Entrada'];
+  const rs=await Promise.all(hojas.map(h=>jsonp(API+'?hoja='+encodeURIComponent(h))));
+  if(rs.some(r=>!r || r.ok===false || !Array.isArray(r.filas))) return false;
+  const rev={}, rondas={}, pun={}, inc={};
+  const num=v=>{ const n=Number(v); return isNaN(n)?0:n; }, tx=v=>String(v==null?'':v).trim();
+  rs[0].filas.slice(1).forEach(f=>{ const id=tx(f[0]); if(!id) return; rev[id]={ id, materia:tx(f[1]), prog:tx(f[2]), estado:tx(f[3])||CAL_ESTADO.SIN, ronda:num(f[4]), desde:tx(f[5]), revisor:tx(f[6]), abierta:tx(f[7]), ultima:tx(f[8]), cerrada:tx(f[9]), cerradoPor:tx(f[10]), instConfirmo:tx(f[11]), nota:tx(f[12]) }; });
+  rs[1].filas.slice(1).forEach(f=>{ const id=tx(f[1]); if(!id) return; let acc=[], dat={}, mat={}; try{acc=JSON.parse(tx(f[9])||'[]');}catch(e){} try{dat=JSON.parse(tx(f[10])||'{}');}catch(e){} try{mat=JSON.parse(tx(f[11])||'{}');}catch(e){}
+    (rondas[id]=rondas[id]||[]).push({ n:num(f[2]), fecha:tx(f[3]), por:tx(f[4]), bien:num(f[5]), revisar:num(f[6]), corregir:num(f[7]), abiertas:num(f[8]), acciones:acc, datos:dat, matriz:mat }); });
+  Object.values(rondas).forEach(a=>a.sort((x,y)=>x.n-y.n));
+  rs[2].filas.slice(1).forEach(f=>{ const id=tx(f[1]); if(!id) return; ((pun[id]=pun[id]||{})[num(f[2])]=(pun[id][num(f[2])]||[])).push({ punto:num(f[3]), estado:tx(f[4]), bien:tx(f[5]), falla:tx(f[6]), accion:tx(f[7]) }); });
+  Object.values(pun).forEach(o=>Object.values(o).forEach(a=>a.sort((x,y)=>x.punto-y.punto)));
+  rs[3].filas.slice(1).forEach(f=>{ const id=tx(f[1]); if(!id) return; (inc[id]=inc[id]||[]).push({ asigId:id, punto:num(f[2]), clase:tx(f[3]), detalle:tx(f[4]), estado:tx(f[5])||'Abierta', rondaAbierta:num(f[6]), ultima:num(f[7]), rondaResuelta:num(f[8]), fechaAbierta:tx(f[9]), fechaResuelta:tx(f[10]), por:tx(f[11]) }); });
+  STATE.calidad={ rev, rondas, pun, inc, cargado:true };
+  return true;
+}
+
+// ═══ EL BLOQUE DE CLAUDE: lectura y validación ═══
+function calParsearBloque(texto){
+  const errores=[], avisos=[]; texto=String(texto||'');
+  const iM=texto.indexOf('FABRICA_REVISION_V1');
+  if(iM<0) errores.push('No encuentro la línea FABRICA_REVISION_V1. Copia el bloque completo, desde esa línea.');
+  const ini=texto.indexOf('{', iM<0?0:iM), fin=texto.lastIndexOf('}');
+  if(ini<0 || fin<=ini){ errores.push('No encuentro el JSON del bloque (el texto que empieza por {).'); return { ok:false, errores, avisos }; }
+  let b; try{ b=JSON.parse(texto.slice(ini,fin+1)); }catch(e){ errores.push('El JSON no es válido ('+e.message+'). Pídele a Claude que entregue el bloque otra vez, sin comentarios ni comas finales.'); return { ok:false, errores, avisos }; }
+  const out={ asignatura_id:_calTxt(b.asignatura_id,60), materia:_calTxt(b.materia,200),
+    matriz:{ archivo:_calTxt((b.matriz||{}).archivo,200), pestana_usada:_calTxt((b.matriz||{}).pestana_usada,120), pestana_abierta:_calTxt((b.matriz||{}).pestana_abierta,120) },
+    puntos:[], incidencias:[], no_corresponden:[], acciones:[], datos:{} };
+  if(!out.materia) errores.push('Falta el nombre de la materia ("materia").');
+  // pestaña de la matriz: se compara el NÚMERO (Claude puede escribir el nombre completo en una y abreviado en la otra)
+  const nu=s=>(String(s).match(/\d+/)||[''])[0];
+  if(nu(out.matriz.pestana_usada) && nu(out.matriz.pestana_abierta) && nu(out.matriz.pestana_usada)!==nu(out.matriz.pestana_abierta))
+    avisos.push('La pestaña de la matriz que usó ("'+out.matriz.pestana_usada+'") no es la que estaba abierta ("'+out.matriz.pestana_abierta+'").');
+  // los 9 puntos
+  const ps=Array.isArray(b.puntos)?b.puntos:[];
+  if(ps.length!==9) errores.push('El bloque debe traer los 9 puntos y trae '+ps.length+'.');
+  else ps.forEach((p,i)=>{
+    const n=Number(p.n), est=String(p.estado||'').toLowerCase().trim();
+    if(n!==i+1) errores.push('Los puntos deben ir del 1 al 9 en orden (en la posición '+(i+1)+' viene el '+p.n+').');
+    if(!['bien','revisar','corregir'].includes(est)) errores.push('El punto '+(i+1)+' tiene un estado inválido ("'+p.estado+'"): debe ser bien, revisar o corregir.');
+    const o={ n:i+1, estado:est, bien:_calTxt(p.bien,600), falla:_calTxt(p.falla,600), accion:_calTxt(p.accion,400) };
+    if(est!=='bien' && !o.falla){ avisos.push('El punto '+(i+1)+' no está en bien pero no dice dónde falla.'); }
+    out.puntos.push(o);
+  });
+  // incidencias: una por punto y clase; solo de puntos que NO están en bien
+  const vistos=new Set();
+  (Array.isArray(b.incidencias)?b.incidencias:[]).forEach((x,i)=>{
+    const punto=Math.round(Number(x.punto)); let clase=String(x.clase||'').trim();
+    if(!(punto>=1 && punto<=9)){ avisos.push('Una incidencia traía un punto inválido ("'+x.punto+'") y se descartó.'); return; }
+    if(!CAL_CLASES.includes(clase)){ avisos.push('La clase "'+clase+'" no es válida (punto '+punto+'); se usó "General".'); clase='General'; }
+    const k=punto+'|'+clase; if(vistos.has(k)){ avisos.push('Había dos incidencias para el punto '+punto+' en '+clase+'; se dejó la primera.'); return; } vistos.add(k);
+    out.incidencias.push({ punto, clase, detalle:_calTxt(x.detalle||x.texto,500) });
+  });
+  (Array.isArray(b.no_corresponden)?b.no_corresponden:[]).forEach(x=>out.no_corresponden.push({ archivo:_calTxt(x.archivo,160), motivo:_calTxt(x.motivo,240) }));
+  (Array.isArray(b.acciones)?b.acciones:[]).forEach(x=>{ const t=_calTxt(x,250); if(t) out.acciones.push(t); });
+  const d=b.datos||{}; ['subtemas','tablas','imagenes','palabras_guion','palabras_infografia','preguntas_test'].forEach(k=>{ out.datos[k]=Array.isArray(d[k])?d[k].map(Number).filter(v=>!isNaN(v)).slice(0,8):[]; });
+  return { ok:errores.length===0, errores, avisos, bloque:out };
+}
+
+// ¿De qué asignatura es el bloque? Por ID; si no, por nombre (único)
+function calBuscarAsignatura(b){
+  const id=String(b.asignatura_id||''); const a=STATE.asignaturas.find(x=>x.id===id); const n2=_calNorm(b.materia);
+  if(a){ const n1=_calNorm(a.nombre); const parecido=n1===n2||n1.includes(n2)||n2.includes(n1);
+    return { asig:a, por:'id', conflicto:!parecido, aviso:parecido?'':'El ID corresponde a "'+a.nombre+'", pero el bloque dice "'+b.materia+'". Confirma que es la misma materia.' }; }
+  const cand=STATE.asignaturas.filter(x=>_calNorm(x.nombre)===n2);
+  if(cand.length===1) return { asig:cand[0], por:'nombre', conflicto:false, aviso:'No encontré el ID "'+id+'"; la emparejé por el nombre.' };
+  if(cand.length>1) return { asig:null, por:null, conflicto:true, aviso:'Hay '+cand.length+' asignaturas llamadas "'+b.materia+'" y el ID no coincide con ninguna.' };
+  return { asig:null, por:null, conflicto:true, aviso:'No encuentro ninguna asignatura con el ID "'+id+'" ni con el nombre "'+b.materia+'".' };
+}
+
+// ═══ LA RONDA: qué pasaría al importar (no escribe nada) ═══
+function calPlanImportacion(a, b, over){
+  const puntos=b.puntos.map(p=>Object.assign({}, p, { estado:(over&&over[p.n])||p.estado }));
+  const ronda=((calFila(a.id)||{}).ronda||0)+1, existentes=calIncidencias(a.id), key=i=>i.punto+'|'+i.clase;
+  const exMap=new Map(existentes.map(i=>[key(i),i]));
+  const estadoDe=n=>puntos[n-1].estado;
+  const delBloque=b.incidencias.filter(i=>estadoDe(i.punto)!=='bien');          // un punto en Bien no genera incidencias
+  const descartadas=b.incidencias.length-delBloque.length;
+  const conInc=new Set(delBloque.map(i=>i.punto));
+  const generadas=[];
+  puntos.forEach(p=>{ if(p.estado!=='bien' && !conInc.has(p.n)) generadas.push({ punto:p.n, clase:'General', detalle:p.falla||('Revisar el punto '+p.n) }); });
+  const todas=[...delBloque, ...generadas], nuevas=[], siguen=[], reabiertas=[], visto=new Set();
+  todas.forEach(i=>{ const k=key(i); visto.add(k); const ex=exMap.get(k); if(!ex) nuevas.push(i); else if(ex.estado==='Abierta') siguen.push(Object.assign({},i,{previa:ex})); else reabiertas.push(Object.assign({},i,{previa:ex})); });
+  const resueltas=existentes.filter(e=>e.estado==='Abierta' && !visto.has(key(e)));  // ya no aparecen: verificadas en esta ronda
+  const conteo={ bien:puntos.filter(p=>p.estado==='bien').length, revisar:puntos.filter(p=>p.estado==='revisar').length, corregir:puntos.filter(p=>p.estado==='corregir').length };
+  const todoBien=conteo.bien===9;
+  return { ronda, puntos, nuevas, siguen, reabiertas, resueltas, descartadas, generadas:generadas.length, abiertasFinal:nuevas.length+siguen.length+reabiertas.length, conteo, todoBien, cerrar:todoBien, estadoNuevo:todoBien?CAL_ESTADO.CERRADA:CAL_ESTADO.DEVUELTA };
+}
+
+// ═══ ACCIONES (escriben al Sheet de una en una) ═══
+function _calFilaRev(f){ return [f.id,f.materia,f.prog,f.estado,f.ronda,f.desde,f.revisor,f.abierta,f.ultima,f.cerrada,f.cerradoPor,f.instConfirmo,f.nota]; }
+function _calFilaInc(i){ return [i.asigId+'|'+i.punto+'|'+i.clase, i.asigId, i.punto, i.clase, i.detalle, i.estado, i.rondaAbierta, i.ultima, i.rondaResuelta||'', i.fechaAbierta, i.fechaResuelta||'', i.por||'']; }
+// La lista "Dónde trabajar" va en una sola celda dentro de la URL de escritura: se acota para que nunca la haga demasiado larga
+// (la acción de cada punto se guarda completa aparte, en Puntos_Entrada).
+function _calAcotar(arr,max){ const out=[]; let n=2; for(const x of (arr||[])){ n+=JSON.stringify(x).length+1; if(n>max) break; out.push(x); } return out; }
+function calProgreso(t){ const el=document.getElementById('cal-progreso'); if(el) el.textContent=t; }
+
+async function calAplicarImportacion(asigId, b, over){
+  const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return false;
+  const usuario=calUsuario(); if(!usuario){ toast('Primero elige quién importa (arriba a la derecha)'); return false; }
+  if(_calOcupado) return false; _calOcupado=true;
+  const plan=calPlanImportacion(a,b,over), ahora=_calAhora(), C=_cal(), prev=calFila(a.id);
+  // instantánea: si algo falla al guardar, se deshace lo local y se puede reintentar limpio
+  const snap=JSON.stringify({ rev:C.rev[a.id]||null, rondas:C.rondas[a.id]||null, pun:C.pun[a.id]||null, inc:C.inc[a.id]||null });
+  const fila={ id:a.id, materia:a.nombre, prog:a.prog||'', estado:plan.estadoNuevo, ronda:plan.ronda, desde:ahora, revisor:usuario, abierta:(prev&&prev.abierta)||calDesde(a), ultima:ahora, cerrada:plan.cerrar?ahora:'', cerradoPor:plan.cerrar?usuario:'', instConfirmo:(prev&&prev.instConfirmo)||'', nota:(prev&&prev.nota)||'' };
+  // 1) estado local primero (la pantalla responde al instante)
+  C.rev[a.id]=fila;
+  (C.rondas[a.id]=C.rondas[a.id]||[]).push({ n:plan.ronda, fecha:ahora, por:usuario, bien:plan.conteo.bien, revisar:plan.conteo.revisar, corregir:plan.conteo.corregir, abiertas:plan.abiertasFinal, acciones:b.acciones, datos:b.datos, matriz:b.matriz });
+  (C.pun[a.id]=C.pun[a.id]||{})[plan.ronda]=plan.puntos.map(p=>({ punto:p.n, estado:p.estado, bien:p.bien, falla:p.falla, accion:p.accion }));
+  const lista=(C.inc[a.id]=C.inc[a.id]||[]), tocadas=[];
+  const buscar=(i)=>lista.find(x=>x.punto===i.punto && x.clase===i.clase);
+  plan.nuevas.forEach(i=>{ const o={ asigId:a.id, punto:i.punto, clase:i.clase, detalle:i.detalle, estado:'Abierta', rondaAbierta:plan.ronda, ultima:plan.ronda, rondaResuelta:'', fechaAbierta:ahora, fechaResuelta:'', por:'' }; lista.push(o); tocadas.push(o); });
+  plan.siguen.forEach(i=>{ const o=buscar(i); if(o){ o.detalle=i.detalle; o.ultima=plan.ronda; tocadas.push(o); } });
+  plan.reabiertas.forEach(i=>{ const o=buscar(i); if(o){ o.detalle=i.detalle; o.estado='Abierta'; o.ultima=plan.ronda; o.rondaResuelta=''; o.fechaResuelta=''; o.por=''; tocadas.push(o); } });
+  plan.resueltas.forEach(i=>{ const o=buscar(i); if(o){ o.estado='Resuelta'; o.rondaResuelta=plan.ronda; o.fechaResuelta=ahora; o.por='Verificada en la ronda '+plan.ronda; tocadas.push(o); } });
+  // 2) al Sheet: ronda, puntos, incidencias y, al final, el estado de la materia
+  const tareas=[ ['actualizar','Rondas_Entrada',CAL_ENC_RONDA,[a.id+'|R'+plan.ronda,a.id,plan.ronda,ahora,usuario,plan.conteo.bien,plan.conteo.revisar,plan.conteo.corregir,plan.abiertasFinal,JSON.stringify(_calAcotar(b.acciones,900)),JSON.stringify(b.datos),JSON.stringify(b.matriz)]] ];
+  plan.puntos.forEach(p=>tareas.push(['actualizar','Puntos_Entrada',CAL_ENC_PUNTO,[a.id+'|R'+plan.ronda+'|'+p.n,a.id,plan.ronda,p.n,p.estado,p.bien,p.falla,p.accion]]));
+  tocadas.forEach(o=>tareas.push(['actualizar','Incidencias_Entrada',CAL_ENC_INC,_calFilaInc(o)]));
+  tareas.push(['actualizar','Revision_Entrada',CAL_ENC_REV,_calFilaRev(fila)]);
+  let ok=0; for(let i=0;i<tareas.length;i++){ calProgreso('Guardando '+(i+1)+' de '+tareas.length+'…'); if(await _calEscribir(tareas[i][0],tareas[i][1],tareas[i][2],tareas[i][3])) ok++; }
+  _calOcupado=false;
+  if(ok<tareas.length){
+    const s0=JSON.parse(snap); ['rev','rondas','pun','inc'].forEach(k=>{ if(s0[k]===null) delete C[k][a.id]; else C[k][a.id]=s0[k]; });
+    renderCalidad();   // el panel sigue abierto con lo pegado, para reintentar
+    toast('⚠️ Se guardaron '+ok+' de '+tareas.length+' registros y no se aplicó nada. Revisa la conexión y vuelve a pulsar Confirmar: no se duplica.');
+    return false;
+  }
+  _calImp=null;
+  if(plan.cerrar && a.status===ST_REVISION) await calLiberarACola(a);
+  _calVista=a.id; renderCalidad();
+  toast(plan.cerrar ? '✅ Ronda '+plan.ronda+' importada: todo en Bien, la materia pasa a la cola' : 'Ronda '+plan.ronda+' importada: devuelta al equipo instruccional ('+plan.abiertasFinal+' incidencias abiertas)');
+  return true;
+}
+
+// La materia sale de revisión y entra a la cola normal (se asigna por prioridad).
+// Si el Sheet no recibe el cambio, vuelve a "En revisión" localmente y calSanar() lo reintenta en la próxima carga:
+// así nunca queda una materia cerrada por Calidad pero atascada fuera de la cola.
+const _calLiberando=new Set();
+async function calLiberarACola(a){
+  if(_calLiberando.has(a.id)) return false; _calLiberando.add(a.id);
+  a.status='En espera'; guardarEstadoLocal();
+  const ok=await _calEscribir('actualizar','Asignaturas',ENC_ASIG_18,_calFilaAsig(a));
+  _calLiberando.delete(a.id);
+  if(!ok){ a.status=ST_REVISION; guardarEstadoLocal(); toast('⚠️ No se pudo guardar el paso a la cola; se reintentará solo en la próxima sincronización'); renderDashboard(); renderAsignaturas(); calActualizarBadge(); return false; }
+  toast('✅ "'+a.nombre+'" salió de revisión: pasa a la cola de producción');
+  if(a.videoPersona) notificarVideoPersona(a);   // el aviso al editor de video sale ahora, no al crearla
+  intentarAutoAsignar();
+  renderDashboard(); renderAsignaturas(); if(typeof renderCelulasDir==='function') renderCelulasDir(); calActualizarBadge();
+  return true;
+}
+// Autocorrección: materias que Calidad ya cerró (o pasó con observaciones / liberó) pero que en el Sheet siguen "En revisión"
+function calSanar(){
+  STATE.asignaturas.forEach(a=>{
+    if(a.status!==ST_REVISION) return;
+    const f=calFila(a.id);
+    if(f && (f.estado===CAL_ESTADO.CERRADA || f.estado===CAL_ESTADO.OBS || f.estado===CAL_ESTADO.MANUAL)) calLiberarACola(a);
+  });
+}
+// Derly la pasa a la cola desde la tarjeta sin terminar la revisión
+async function calLiberarManual(a){
+  const ahora=_calAhora(), prev=calFila(a.id);
+  const fila={ id:a.id, materia:a.nombre, prog:a.prog||'', estado:CAL_ESTADO.MANUAL, ronda:(prev&&prev.ronda)||0, desde:ahora, revisor:calUsuario()||'Derly Rodríguez', abierta:(prev&&prev.abierta)||calDesde(a), ultima:(prev&&prev.ultima)||'', cerrada:ahora, cerradoPor:calUsuario()||'Derly Rodríguez', instConfirmo:(prev&&prev.instConfirmo)||'', nota:'Pasada a la cola sin terminar la revisión de calidad' };
+  _cal().rev[a.id]=fila; _calEscribir('actualizar','Revision_Entrada',CAL_ENC_REV,_calFilaRev(fila));
+  return calLiberarACola(a);
+}
+async function calConfirmarInstruccional(asigId){
+  const a=STATE.asignaturas.find(x=>x.id===asigId), f=calFila(asigId); if(!a||!f) return;
+  const usuario=calUsuario(); if(!usuario){ toast('Primero elige quién eres (arriba a la derecha)'); return; }
+  const quien=(prompt('¿Quién del equipo instruccional confirmó que los ajustes están hechos?')||'').trim();
+  if(!quien){ toast('Anota quién confirmó para dejar el registro'); return; }
+  f.estado=CAL_ESTADO.LISTA; f.desde=_calAhora(); f.instConfirmo=quien+' · '+fmtFecha(today()); f.revisor=usuario;
+  renderCalidad(); const ok=await _calEscribir('actualizar','Revision_Entrada',CAL_ENC_REV,_calFilaRev(f));
+  toast(ok?'Ajustes confirmados: la materia queda lista para la siguiente ronda':'⚠️ No se pudo guardar; revisa la conexión');
+}
+async function calPasarConObservaciones(asigId){
+  const a=STATE.asignaturas.find(x=>x.id===asigId), f=calFila(asigId); if(!a||!f) return;
+  const usuario=calUsuario(); if(!usuario){ toast('Primero elige quién eres (arriba a la derecha)'); return; }
+  const nota=(document.getElementById('cal-nota')?.value||'').trim();
+  if(nota.length<10){ toast('La nota es obligatoria: explica por qué pasa a producción con incidencias abiertas'); return; }
+  f.estado=CAL_ESTADO.OBS; f.desde=_calAhora(); f.cerrada=f.desde; f.cerradoPor=usuario; f.nota=_calTxt(nota,500); f.revisor=usuario;
+  await _calEscribir('actualizar','Revision_Entrada',CAL_ENC_REV,_calFilaRev(f));
+  if(a.status===ST_REVISION) await calLiberarACola(a);
+  renderCalidad(); toast('Pasó con observaciones: las incidencias siguen abiertas en producción');
+}
+async function calCerrarManual(asigId){
+  const a=STATE.asignaturas.find(x=>x.id===asigId), f=calFila(asigId); if(!a||!f) return;
+  const usuario=calUsuario(); if(!usuario){ toast('Primero elige quién eres (arriba a la derecha)'); return; }
+  if(calAbiertas(asigId).length>0){ toast('Aún hay incidencias abiertas'); return; }
+  f.estado=CAL_ESTADO.CERRADA; f.desde=_calAhora(); f.cerrada=f.desde; f.cerradoPor=usuario; f.revisor=usuario;
+  await _calEscribir('actualizar','Revision_Entrada',CAL_ENC_REV,_calFilaRev(f));
+  if(a.status===ST_REVISION) await calLiberarACola(a);
+  renderCalidad();
+}
+async function calResolverInc(asigId, i, resolver){
+  const o=calIncidencias(asigId)[i]; if(!o) return;
+  const usuario=calUsuario(); if(!usuario){ toast('Primero elige quién eres (arriba a la derecha)'); return; }
+  if(resolver){ o.estado='Resuelta'; o.rondaResuelta=(calFila(asigId)||{}).ronda||''; o.fechaResuelta=_calAhora(); o.por='Marcada por '+usuario; }
+  else { o.estado='Abierta'; o.rondaResuelta=''; o.fechaResuelta=''; o.por=''; }
+  renderCalidad(); await _calEscribir('actualizar','Incidencias_Entrada',CAL_ENC_INC,_calFilaInc(o));
+}
+function calPrepararClaude(asigId){
+  const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
+  const txt='DASHBOARD_FABRICA\nasignatura_id: '+a.id+'\nasignatura: '+a.nombre+'\nprograma: '+(a.prog||'')+'\nlanzamiento: '+(a.fechaLimite||'');
+  const ok=()=>toast('Copiado. Pégalo debajo de la carpeta de la materia, en el chat de Claude');
+  try{ if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok,()=>calCopiarAlterno(txt,ok)); return; } }catch(e){}
+  calCopiarAlterno(txt,ok);
+}
+function calCopiarAlterno(txt,ok){ const t=document.createElement('textarea'); t.value=txt; document.body.appendChild(t); t.select(); try{ document.execCommand('copy'); ok(); }catch(e){ toast('No pude copiar: selecciona el texto a mano'); } document.body.removeChild(t); }
+
+// ═══ PANTALLAS ═══
+const _calBadgeEstado=(e)=>{
+  const m={ [CAL_ESTADO.SIN]:['#4b5563','#f3f4f6'], [CAL_ESTADO.DEVUELTA]:['#b45309','#fef3c7'], [CAL_ESTADO.LISTA]:['#1d4ed8','#dbeafe'], [CAL_ESTADO.CERRADA]:['#15803d','#dcfce7'], [CAL_ESTADO.OBS]:['#4338ca','#e0e7ff'], [CAL_ESTADO.MANUAL]:['#4b5563','#f3f4f6'] }[e]||['#4b5563','#f3f4f6'];
+  return `<span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;background:${m[1]};color:${m[0]};white-space:nowrap">${_cEsc(e)}</span>`;
+};
+const _calBadgePunto=(e)=>{ const m={bien:['#15803d','#dcfce7','Bien'],revisar:['#b45309','#fef3c7','Revisar'],corregir:['#b91c1c','#fee2e2','Corregir']}[e]||['#4b5563','#f3f4f6','Sin revisar']; return `<span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;background:${m[1]};color:${m[0]}">${m[2]}</span>`; };
+function _calFmtFecha(iso){ if(!iso) return '—'; const d=new Date(iso); if(isNaN(d)) return String(iso).slice(0,10); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'); }
+function calSetFiltro(f){ _calFiltro=f; renderCalidad(); }
+function calAbrir(id){ _calVista=id; renderCalidad(); try{ window.scrollTo(0,0); }catch(e){} }
+function calVolver(){ _calVista=null; renderCalidad(); }
+
+function _calBarra(){
+  const u=calUsuario();
+  return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+    <button class="btn btn-primary" onclick="calAbrirImport()">Importar resultado de Claude</button>
+    <span style="flex:1"></span>
+    <label style="font-size:12px;color:var(--muted)">Eres:
+      <select id="cal-usuario" onchange="calSetUsuario(this.value);renderCalidad()" style="margin-left:6px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff">
+        <option value="">Elige tu nombre…</option>${CAL_REVISORES.map(n=>`<option value="${_cEsc(n)}" ${u===n?'selected':''}>${_cEsc(n)}</option>`).join('')}
+      </select></label>
+  </div>
+  <div id="cal-import-box"></div>`;
+}
+function _calTile(lbl,val,sub,c){ return `<div style="flex:1;min-width:150px;background:#fff;border:1px solid var(--border);border-radius:var(--r2);padding:16px;border-top:3px solid ${c}"><div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px">${lbl}</div><div style="font-family:var(--fhead);font-size:30px;font-weight:700;color:${c};line-height:1">${val}</div><div style="font-size:11px;color:var(--muted);margin-top:5px">${sub}</div></div>`; }
+
+function _calListaHTML(){
+  const L=calLista(), ab=L.filter(x=>calAbierta(x.estado));
+  const lunes=(()=>{ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d; })();
+  const cerradasSemana=L.filter(x=>x.fila && (x.estado===CAL_ESTADO.CERRADA||x.estado===CAL_ESTADO.OBS) && x.fila.cerrada && new Date(x.fila.cerrada)>=lunes).length;
+  const incAbiertas=L.reduce((s,x)=>s+x.abiertas,0), rojas=ab.filter(x=>x.alerta.rojo).length;
+  const filtros=[['todas','Todas',L.length],['sin','Sin revisar',L.filter(x=>x.estado===CAL_ESTADO.SIN).length],['devuelta','Devueltas a instruccional',L.filter(x=>x.estado===CAL_ESTADO.DEVUELTA).length],['lista','Listas para re-revisión',L.filter(x=>x.estado===CAL_ESTADO.LISTA).length],['inc','Con incidencias abiertas',L.filter(x=>x.abiertas>0).length],['cerradas','Cerradas',L.filter(x=>!calAbierta(x.estado)).length]];
+  const pasa={ todas:()=>true, sin:x=>x.estado===CAL_ESTADO.SIN, devuelta:x=>x.estado===CAL_ESTADO.DEVUELTA, lista:x=>x.estado===CAL_ESTADO.LISTA, inc:x=>x.abiertas>0, cerradas:x=>!calAbierta(x.estado) }[_calFiltro]||(()=>true);
+  const filas=L.filter(pasa).sort((p,q)=>{
+    const ap=calAbierta(p.estado)?0:1, aq=calAbierta(q.estado)?0:1; if(ap!==aq) return ap-aq;
+    if(ap===0){ if(p.alerta.rojo!==q.alerta.rojo) return p.alerta.rojo?-1:1; const vp=esVencida(p.a)?0:1, vq=esVencida(q.a)?0:1; if(vp!==vq) return vp-vq; return String(p.a.fechaLimite||'9999').localeCompare(String(q.a.fechaLimite||'9999')); }
+    return String((q.fila&&q.fila.cerrada)||'').localeCompare(String((p.fila&&p.fila.cerrada)||''));
+  });
+  const celda='padding:12px 14px;border-top:1px solid var(--border);font-size:13px;vertical-align:middle';
+  const tabla = filas.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+    <thead><tr style="text-align:left;font-size:11px;color:var(--muted)"><th style="padding:10px 14px">Materia</th><th style="padding:10px 14px">Ingreso</th><th style="padding:10px 14px">Estado de la revisión</th><th style="padding:10px 14px">Ronda</th><th style="padding:10px 14px">Tiene la pelota</th><th style="padding:10px 14px">Incidencias</th><th style="padding:10px 14px">Días hábiles</th><th style="padding:10px 14px"></th></tr></thead>
+    <tbody>${filas.map(x=>{ const a=x.a, abierta=calAbierta(x.estado);
+      const inc = x.abiertas||x.resueltas ? `${x.abiertas?`<b style="color:#b91c1c">${x.abiertas} abierta${x.abiertas===1?'':'s'}</b>`:''}${x.abiertas&&x.resueltas?' · ':''}${x.resueltas?`${x.resueltas} resuelta${x.resueltas===1?'':'s'}`:''}` : '—';
+      const dias = abierta ? `<span style="font-weight:${x.alerta.rojo?'700':'400'};color:${x.alerta.rojo?'#b91c1c':'inherit'}">${x.alerta.dias} día${x.alerta.dias===1?'':'s'}</span>` : '—';
+      return `<tr>
+        <td style="${celda}"><div style="font-weight:600">${esVencida(a)&&abierta?'<span title="Pasó su tope de fábrica" style="color:#b91c1c">🚨 </span>':''}${_cEsc(a.nombre)}</div><div style="font-size:11px;color:var(--muted)">${_cEsc(a.prog||'')}${a.fechaLimite?' · lanza '+_cFmt(a.fechaLimite).slice(0,5):''}</div></td>
+        <td style="${celda}">${a.inicio?_cFmt(a.inicio).slice(0,5):'—'}</td>
+        <td style="${celda}">${_calBadgeEstado(x.estado)}</td>
+        <td style="${celda}">${x.ronda?'Ronda '+x.ronda:'—'}</td>
+        <td style="${celda}">${_cEsc(calPelota(x.estado))||'—'}</td>
+        <td style="${celda}">${inc}</td>
+        <td style="${celda}">${dias}</td>
+        <td style="${celda};text-align:right;white-space:nowrap">${abierta?`<button class="btn btn-sm" onclick="calPrepararClaude('${a.id}')">Preparar para Claude</button> `:''}<button class="btn btn-sm ${abierta?'btn-primary':''}" onclick="calAbrir('${a.id}')">${abierta?'Abrir':'Ver registro'}</button></td></tr>`; }).join('')}</tbody></table></div>`
+    : `<div class="empty-state"><div class="empty-icon">🔎</div><div class="empty-txt">${L.length?'No hay materias en este filtro.':'Aún no hay materias en revisión de calidad. Las asignaturas nuevas aparecerán aquí.'}</div></div>`;
+  return `${_calBarra()}
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+    ${_calTile('Sin revisar',L.filter(x=>x.estado===CAL_ESTADO.SIN).length,'esperan la ronda 1','#6b7280')}
+    ${_calTile('Devueltas a instruccional',L.filter(x=>x.estado===CAL_ESTADO.DEVUELTA).length,'esperan sus ajustes','#d97706')}
+    ${_calTile('Listas para re-revisión',L.filter(x=>x.estado===CAL_ESTADO.LISTA).length,'instruccional ya corrigió','#2563eb')}
+    ${_calTile('Cerradas esta semana',cerradasSemana,'pasaron a la cola','#16a34a')}
+    ${_calTile('Incidencias abiertas',incAbiertas,rojas?rojas+' materia'+(rojas===1?'':'s')+' con más de '+CAL_ALERTA_DIAS+' día hábil':'ninguna detenida',incAbiertas?'#dc2626':'#16a34a')}
+  </div>
+  <div class="chips" style="margin-bottom:14px">${filtros.map(f=>`<button class="chip ${_calFiltro===f[0]?'active':''}" onclick="calSetFiltro('${f[0]}')">${f[1]} · ${f[2]}</button>`).join('')}</div>
+  <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">${tabla}</div>
+  <div style="font-size:12px;color:var(--muted);margin-top:12px;line-height:1.6">Las materias "Sin revisar", "Devueltas" y "Listas para re-revisión" <b>no aparecen en la Cola de espera ni las toma el reparto automático</b>. Al cerrar la revisión entran a la cola y siguen el reparto normal. Los días hábiles se cuentan desde que la materia entró a su estado actual y se marcan en rojo a partir de ${CAL_ALERTA_DIAS} día hábil, porque la fecha límite sigue corriendo.</div>`;
+}
+
+function _calDetalleHTML(id){
+  const a=STATE.asignaturas.find(x=>x.id===id); if(!a) return `${_calBarra()}<button class="btn btn-sm" onclick="calVolver()">← Volver</button><div class="empty-state"><div class="empty-txt">No encuentro esa asignatura.</div></div>`;
+  const f=calFila(id), estado=calEstadoDe(a)||CAL_ESTADO.SIN, rondas=calRondas(id), ult=rondas[rondas.length-1], pun=(_cal().pun[id]||{})[ult&&ult.n]||[], inc=calIncidencias(id), al=calAlerta(a), abierta=calAbierta(estado);
+  const cnt={ bien:pun.filter(p=>p.estado==='bien').length, revisar:pun.filter(p=>p.estado==='revisar').length, corregir:pun.filter(p=>p.estado==='corregir').length };
+  const puntosHTML = pun.length ? CAL_PAUTA.map(([n,q])=>{ const p=pun.find(x=>x.punto===n)||{estado:'',bien:'',falla:'',accion:''};
+      return `<div style="display:flex;gap:14px;padding:12px 18px;border-top:1px solid var(--border);${p.estado==='corregir'?'background:#fff5f5':p.estado==='revisar'?'background:#fffbeb':''}">
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${n}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${_cEsc(q)}</div>
+          ${p.falla?`<div style="font-size:12px;color:${p.estado==='bien'?'var(--muted)':'#b91c1c'};margin-top:3px">${p.estado==='bien'?'Observación: ':''}${_cEsc(p.falla)}</div>`:''}
+          ${p.bien&&p.estado!=='bien'?`<div style="font-size:12px;color:var(--muted);margin-top:3px">Bien: ${_cEsc(p.bien)}</div>`:p.bien?`<div style="font-size:12px;color:var(--muted);margin-top:3px">${_cEsc(p.bien)}</div>`:''}
+          ${p.accion?`<div style="font-size:12px;margin-top:3px">→ ${_cEsc(p.accion)}</div>`:''}</div>
+        <div style="flex-shrink:0">${_calBadgePunto(p.estado)}</div></div>`; }).join('')
+    : `<div style="padding:18px;font-size:13px;color:var(--muted)">Todavía no se ha importado ninguna ronda. Pulsa "Preparar para Claude", pégalo en el chat de la skill con la carpeta de la materia y luego importa el resultado.</div>`;
+  const incHTML = inc.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)"><th style="padding:10px 14px">Punto</th><th style="padding:10px 14px">Clase</th><th style="padding:10px 14px">Incidencia</th><th style="padding:10px 14px">Estado</th><th style="padding:10px 14px">Historial</th><th style="padding:10px 14px"></th></tr></thead><tbody>${inc.map((o,i)=>`<tr>
+      <td style="padding:10px 14px;border-top:1px solid var(--border);font-size:13px">${o.punto}</td><td style="padding:10px 14px;border-top:1px solid var(--border);font-size:13px">${_cEsc(o.clase)}</td>
+      <td style="padding:10px 14px;border-top:1px solid var(--border);font-size:13px">${_cEsc(o.detalle)}</td>
+      <td style="padding:10px 14px;border-top:1px solid var(--border)"><span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;background:${o.estado==='Abierta'?'#fee2e2':'#dcfce7'};color:${o.estado==='Abierta'?'#b91c1c':'#15803d'}">${o.estado}</span></td>
+      <td style="padding:10px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">Abierta en la ronda ${o.rondaAbierta||'—'}${o.estado==='Resuelta'?' · '+_cEsc(o.por||'Resuelta'):''}</td>
+      <td style="padding:10px 14px;border-top:1px solid var(--border);text-align:right">${o.estado==='Abierta'?`<button class="btn btn-sm" onclick="calResolverInc('${id}',${i},true)">Marcar resuelta</button>`:`<button class="btn btn-sm" onclick="calResolverInc('${id}',${i},false)">Reabrir</button>`}</td></tr>`).join('')}</tbody></table></div>`
+    : `<div style="padding:18px;font-size:13px;color:var(--muted)">Sin incidencias.</div>`;
+  const rondasHTML = rondas.length ? rondas.map(r=>`<div style="display:flex;gap:12px;padding:10px 18px;border-top:1px solid var(--border);font-size:13px"><b style="width:70px">Ronda ${r.n}</b><span style="color:var(--muted);width:60px">${_calFmtFecha(r.fecha)}</span><span style="flex:1">${_cEsc(r.por)} · ${r.bien} bien · ${r.revisar} por revisar · ${r.corregir} por corregir · ${r.abiertas} incidencias abiertas</span></div>`).join('') : `<div style="padding:14px 18px;font-size:13px;color:var(--muted)">Sin rondas todavía.</div>`;
+  const acciones = ult && ult.acciones && ult.acciones.length ? `<div style="padding:14px 18px;border-top:1px solid var(--border)"><div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px">Dónde trabajar, por orden (última ronda)</div><ol style="margin:0 0 0 18px;font-size:13px;line-height:1.7">${ult.acciones.map(x=>`<li>${_cEsc(x)}</li>`).join('')}</ol></div>` : '';
+  const botones = [];
+  botones.push(`<button class="btn btn-sm" onclick="calPrepararClaude('${id}')">Preparar para Claude</button>`);
+  botones.push(`<button class="btn btn-sm btn-primary" onclick="calAbrirImport('${id}')">Importar ronda ${((f&&f.ronda)||0)+1}</button>`);
+  if(estado===CAL_ESTADO.DEVUELTA) botones.push(`<button class="btn btn-sm btn-ok" onclick="calConfirmarInstruccional('${id}')">Ajustes confirmados por instruccional</button>`);
+  const puedeCerrar = abierta && f && calAbiertas(id).length===0 && rondas.length>0;
+  const cierre = abierta && rondas.length>0 ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px">
+      <div style="border:1px solid var(--border);border-radius:12px;padding:14px"><div style="font-weight:600;margin-bottom:6px">Cerrar la revisión</div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">Se activa cuando no quedan incidencias abiertas. ${calAbiertas(id).length?'Faltan: '+calAbiertas(id).length+' incidencia'+(calAbiertas(id).length===1?'':'s')+' abierta'+(calAbiertas(id).length===1?'':'s')+'.':''}</div><button class="btn btn-sm ${puedeCerrar?'btn-ok':''}" ${puedeCerrar?'':'disabled'} onclick="calCerrarManual('${id}')">Cerrar y pasar a la cola</button></div>
+      <div style="border:1px solid var(--border);border-radius:12px;padding:14px;background:#f8faff"><div style="font-weight:600;margin-bottom:6px">Pasar con observaciones</div><div style="font-size:12px;color:var(--muted);margin-bottom:8px">A criterio del revisor. La materia entra a la cola y las incidencias abiertas siguen en seguimiento.</div><textarea id="cal-nota" placeholder="Nota obligatoria: por qué pasa a producción con incidencias abiertas" style="width:100%;min-height:60px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px"></textarea><button class="btn btn-sm" style="margin-top:8px" onclick="calPasarConObservaciones('${id}')">Pasar con observaciones</button></div></div>` : '';
+  return `${_calBarra()}
+  <button class="btn btn-sm" onclick="calVolver()" style="margin-bottom:14px">← Volver a Calidad de entrada</button>
+  <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);padding:20px 22px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;justify-content:space-between">
+    <div><div style="margin-bottom:8px">${_calBadgeEstado(estado)} ${a.status===ST_REVISION?'<span style="font-size:11px;color:#b45309;font-weight:600">fuera de la cola</span>':''}</div>
+      <div style="font-family:var(--fhead);font-size:22px;font-weight:700">${esVencida(a)&&abierta?'🚨 ':''}${_cEsc(a.nombre)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">${_cEsc(a.prog||'')} · Ingreso a fábrica ${a.inicio?_cFmt(a.inicio).slice(0,5):'—'}${a.fechaLimite?' · Lanzamiento '+_cFmt(a.fechaLimite).slice(0,5):''}</div></div>
+    <div style="display:flex;gap:28px;font-size:13px;flex-wrap:wrap">
+      <div><div style="color:var(--muted);font-size:11px">Ronda</div><b>${rondas.length||'—'}</b></div>
+      <div><div style="color:var(--muted);font-size:11px">Tiene la pelota</div><b>${_cEsc(calPelota(estado))||'—'}</b></div>
+      <div><div style="color:var(--muted);font-size:11px">Días hábiles aquí</div><b style="color:${al.rojo?'#b91c1c':'inherit'}">${abierta?al.dias:'—'}</b></div>
+      <div><div style="color:var(--muted);font-size:11px">Instruccional confirmó</div><b>${_cEsc((f&&f.instConfirmo)||'—')}</b></div>
+      ${f&&f.nota?`<div><div style="color:var(--muted);font-size:11px">Nota</div><b>${_cEsc(f.nota)}</b></div>`:''}</div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${botones.join('')}</div>
+  <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:16px"><div style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--fhead);font-size:14px;font-weight:600">Los 9 puntos de la pauta${ult?' · ronda '+ult.n:''}</span><span style="font-size:12px;color:var(--muted)">${pun.length?cnt.bien+' bien · '+cnt.revisar+' por revisar · '+cnt.corregir+' por corregir':''}</span></div>${puntosHTML}${acciones}</div>
+  <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:16px"><div style="padding:14px 18px;font-family:var(--fhead);font-size:14px;font-weight:600">Registro de incidencias</div>${incHTML}</div>
+  <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:16px"><div style="padding:14px 18px;font-family:var(--fhead);font-size:14px;font-weight:600">Rondas</div>${rondasHTML}</div>
+  ${cierre}`;
+}
+
+function renderCalidad(){
+  const el=document.getElementById('calidad-content'); if(!el) return;
+  calActualizarBadge();
+  el.innerHTML=_calVista?_calDetalleHTML(_calVista):_calListaHTML();
+  if(_calImp) calRenderImport();
+}
+
+// ── Panel de importación: pegar el bloque → vista previa (con ajuste de cada punto) → confirmar ──
+function calAbrirImport(asigId){ _calImp={ texto:'', parsed:null, busqueda:null, over:{}, conf:false, asigId:asigId||null }; renderCalidad(); const t=document.getElementById('cal-texto'); if(t && t.focus) t.focus(); }
+function calCerrarImport(){ _calImp=null; const b=document.getElementById('cal-import-box'); if(b) b.innerHTML=''; }
+function calRenderImport(){
+  const box=document.getElementById('cal-import-box'); if(!box||!_calImp) return;
+  box.innerHTML=`<div style="background:#fff;border:1px solid var(--border2);border-radius:var(--r2);padding:18px 20px;margin-bottom:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-family:var(--fhead);font-size:15px;font-weight:600">Importar resultado de Claude</span><button class="btn btn-sm" onclick="calCerrarImport()">Cerrar</button></div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Pega aquí el bloque que entrega la skill al final del informe (empieza por <b>FABRICA_REVISION_V1</b>). Nada se guarda hasta que confirmes.</div>
+    <textarea id="cal-texto" oninput="calOnTexto(this.value)" placeholder="FABRICA_REVISION_V1&#10;{ ... }" style="width:100%;min-height:110px;padding:10px;border:1px solid var(--border);border-radius:10px;font-family:ui-monospace,Menlo,monospace;font-size:11px">${_cEsc(_calImp.texto)}</textarea>
+    <div id="cal-preview" style="margin-top:12px"></div></div>`;
+  calRenderPreview();
+}
+function calOnTexto(v){
+  _calImp.texto=v; _calImp.over={}; _calImp.conf=false;
+  _calImp.parsed = v.trim() ? calParsearBloque(v) : null;
+  _calImp.busqueda = _calImp.parsed && _calImp.parsed.bloque ? calBuscarAsignatura(_calImp.parsed.bloque) : null;
+  calRenderPreview();
+}
+function calAjustarPunto(n,val){ const p=_calImp.parsed.bloque.puntos[n-1]; if(val===p.estado) delete _calImp.over[n]; else _calImp.over[n]=val; calRenderPreview(); }
+function calMarcarConf(v){ _calImp.conf=v; calRenderPreview(); }
+function calRenderPreview(){
+  const el=document.getElementById('cal-preview'); if(!el||!_calImp) return;
+  const P=_calImp.parsed; if(!P){ el.innerHTML=''; return; }
+  const aviso=(t,c)=>`<div style="font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:6px;background:${c==='r'?'#fee2e2':'#fef3c7'};color:${c==='r'?'#991b1b':'#92400e'}">${_cEsc(t)}</div>`;
+  let h=P.errores.map(e=>aviso(e,'r')).join('')+P.avisos.map(e=>aviso(e,'a')).join('');
+  if(!P.ok){ el.innerHTML=h; return; }
+  const B=_calImp.busqueda;
+  if(!B.asig){ el.innerHTML=h+aviso(B.aviso,'r'); return; }
+  if(B.aviso) h+=aviso(B.aviso, B.conflicto?'r':'a');
+  const a=B.asig, plan=calPlanImportacion(a,P.bloque,_calImp.over), usuario=calUsuario();
+  const enRev=a.status===ST_REVISION;
+  if(!enRev) h+=aviso('Esta materia no está en revisión de calidad (estado: '+a.status+'). Se guardará la revisión, pero su estado de producción no cambia.','a');
+  const puntosH=plan.puntos.map(p=>`<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--border);font-size:12px"><b style="width:20px">${p.n}</b><span style="flex:1">${_cEsc(CAL_PAUTA[p.n-1][1])}${p.falla?`<div style="color:${p.estado==='bien'?'var(--muted)':'#b91c1c'}">${_cEsc(p.falla)}</div>`:''}</span>
+    <select onchange="calAjustarPunto(${p.n},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px"><option value="bien" ${p.estado==='bien'?'selected':''}>Bien</option><option value="revisar" ${p.estado==='revisar'?'selected':''}>Revisar</option><option value="corregir" ${p.estado==='corregir'?'selected':''}>Corregir</option></select></div>`).join('');
+  const chip=(n,t,c)=>n?`<span style="font-size:12px;padding:3px 10px;border-radius:99px;background:${c};margin-right:6px">${n} ${t}</span>`:'';
+  const resultado = plan.cerrar
+    ? `<div style="padding:10px 14px;border-radius:10px;background:#dcfce7;color:#14532d;font-size:13px;margin:10px 0"><b>Los 9 puntos están en Bien.</b> Al confirmar, ${enRev?'la materia <b>se cierra y pasa a la cola de producción</b>':'la revisión queda cerrada'}.</div>`
+    : `<div style="padding:10px 14px;border-radius:10px;background:#fef3c7;color:#78350f;font-size:13px;margin:10px 0"><b>${9-plan.conteo.bien} punto${9-plan.conteo.bien===1?'':'s'} por revisar o corregir.</b> Al confirmar, la materia se <b>devuelve al equipo instruccional</b> con ${plan.abiertasFinal} incidencia${plan.abiertasFinal===1?'':'s'} abierta${plan.abiertasFinal===1?'':'s'}.</div>`;
+  const puedo = !!usuario && !_calOcupado && (!B.conflicto || _calImp.conf);
+  el.innerHTML=h+`<div style="font-size:13px;margin-bottom:8px"><b>${_cEsc(a.nombre)}</b> · ronda ${plan.ronda} · identificada por ${B.por==='id'?'su ID':'su nombre'}</div>
+    <div style="margin-bottom:8px">${chip(plan.conteo.bien,'en Bien','#dcfce7')}${chip(plan.conteo.revisar,'por revisar','#fef3c7')}${chip(plan.conteo.corregir,'por corregir','#fee2e2')}</div>
+    <div style="margin-bottom:6px;font-size:12px;color:var(--muted)">Puedes ajustar el estado de cada punto antes de confirmar.</div>${puntosH}
+    <div style="margin-top:10px;font-size:12px">Incidencias: ${chip(plan.nuevas.length,'nuevas','#fee2e2')}${chip(plan.siguen.length,'siguen abiertas','#fef3c7')}${chip(plan.reabiertas.length,'reabiertas','#fee2e2')}${chip(plan.resueltas.length,'resueltas (ya no aparecen)','#dcfce7')}${plan.descartadas?`<span style="color:var(--muted)"> · ${plan.descartadas} descartada${plan.descartadas===1?'':'s'} (puntos en Bien)</span>`:''}${plan.generadas?`<span style="color:var(--muted)"> · ${plan.generadas} general${plan.generadas===1?'':'es'} agregada${plan.generadas===1?'':'s'}</span>`:''}</div>
+    ${resultado}
+    ${B.conflicto?`<label style="font-size:12px;display:block;margin-bottom:8px"><input type="checkbox" ${_calImp.conf?'checked':''} onchange="calMarcarConf(this.checked)"> Confirmo que el bloque es de esta materia</label>`:''}
+    ${!usuario?`<div style="font-size:12px;color:#b45309;margin-bottom:8px">Elige tu nombre arriba a la derecha para poder confirmar.</div>`:''}
+    <button class="btn btn-primary" ${puedo?'':'disabled'} onclick="calConfirmarImport()">${plan.cerrar?'Confirmar y cerrar':'Confirmar y devolver a instruccional'}</button> <span id="cal-progreso" style="font-size:12px;color:var(--muted);margin-left:8px"></span>`;
+}
+async function calConfirmarImport(){
+  const P=_calImp&&_calImp.parsed; if(!P||!P.ok||!_calImp.busqueda||!_calImp.busqueda.asig) return;
+  await calAplicarImportacion(_calImp.busqueda.asig.id, P.bloque, _calImp.over);
 }
 
 // ══ TOAST ══
@@ -1958,7 +2469,9 @@ function crearAsignatura(){
   const esCelula = true; // en el modelo por persona, toda asignatura nueva es de diseño
   const modoIngreso = document.getElementById('n-modo-ingreso')?.value || 'espera';
   const celulaId = (esCelula && modoIngreso==='directo') ? (document.getElementById('n-celula')?.value||'') : '';
-  const statusInicial = esCelula && modoIngreso==='espera' ? 'En espera' : 'En producción';
+  // Calidad de entrada: toda asignatura nueva que entra "a cola" pasa primero por revisión de calidad.
+  // "Asignar persona manualmente" sigue siendo la salida directa (sin revisión).
+  const statusInicial = esCelula && modoIngreso==='espera' ? ST_REVISION : 'En producción';
   const asig={
     id:uid(), nombre, prog, inicio, df, obs, prioridad, status: statusInicial, link,
     fechaLimite, fechaDeberiaEntrar, prioridadManual:false, // al crear, la prioridad seleccionada es solo el punto de partida:
@@ -1994,10 +2507,11 @@ function crearAsignatura(){
   const extraDiv = document.getElementById('celula-form-extra');
   if(extraDiv) extraDiv.style.display='none';
   document.getElementById('n-prog').value='';
-  toast('Asignatura creada: '+nombre);
+  toast(asig.status===ST_REVISION ? 'Asignatura creada: '+nombre+'. Queda en revisión de calidad y entra a la cola cuando Calidad la cierre' : 'Asignatura creada: '+nombre);
   // Renderizar inmediatamente
   renderDashboard();
   renderAsignaturas();
+  calActualizarBadge();
   setSyncStatus('sync');
   sheetGuardar('Asignaturas',
     ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
@@ -2009,11 +2523,12 @@ function crearAsignatura(){
   }
   // Notificar al editor de video SIEMPRE que sea célula (aunque esté en cola),
   // porque el video es independiente y puede arrancar de inmediato.
-  if(esCelula && asig.videoPersona){
+  // (en revisión de calidad no se avisa todavía: el aviso sale cuando la materia pasa a la cola)
+  if(esCelula && asig.videoPersona && asig.status!==ST_REVISION){
     notificarVideoPersona(asig);
   }
   // Si entró en modo cola (espera), intentar auto-asignar de una según disponibilidad
-  if(esCelula && modoIngreso==='espera'){
+  if(esCelula && modoIngreso==='espera' && asig.status!==ST_REVISION){
     intentarAutoAsignar();
   }
   goPage('asignaturas',document.querySelector('[onclick*=asignaturas]'));
@@ -2711,7 +3226,7 @@ function liberarAsignaturasDePausados(){
 // ¿Hay asignaturas de video pendientes con alguien que ya no está en el equipo de video?
 function hayVideoHuerfana(){
   return STATE.asignaturas.some(a=>a.tipo==='celula' && a.videoPersona && !VIDEO_PERSONAS.includes(a.videoPersona) &&
-    a.status!=='Completada' && a.status!=='Pausada' && !videoCompletoAsig(a));
+    a.status!=='Completada' && a.status!=='Pausada' && a.status!==ST_REVISION && !videoCompletoAsig(a));
 }
 function equipoVideoActivoCambio(){
   const actual = VIDEO_PERSONAS.filter(p=>celulaActiva(p)).sort().join(',');
@@ -2732,7 +3247,7 @@ function rebalancearVideoEquipo(){
   // Se reparte el video que aún no ha arrancado y, además, TODO lo pendiente de quien ya no está en el equipo
   // de video (aunque ya tenga video empezado: esa persona dejó de hacer video; sus sesiones se conservan).
   const movibles = ordenarPorPrioridad(STATE.asignaturas.filter(a=>{
-    if(!(a.tipo==='celula' && a.videoPersona && a.status!=='Completada' && a.status!=='Pausada' && !videoCompletoAsig(a))) return false;
+    if(!(a.tipo==='celula' && a.videoPersona && a.status!=='Completada' && a.status!=='Pausada' && a.status!==ST_REVISION && !videoCompletoAsig(a))) return false;
     return !VIDEO_PERSONAS.includes(a.videoPersona) || !infoFrente(a, true).iniciado;
   }));
   if(!movibles.length) return;
@@ -3100,7 +3615,7 @@ async function enviarEmailCompletada(asig){
 
 function verificarAutoCompletado(asigId){
   const asig = STATE.asignaturas.find(a=>a.id===asigId);
-  if(!asig || asig.status==='Completada' || asig.status==='Pausada') return;
+  if(!asig || asig.status==='Completada' || asig.status==='Pausada' || asig.status===ST_REVISION) return;
 
   // Al avanzar el progreso, re-evaluar la cola (idempotente: solo asigna si corresponde)
   if(asig.tipo==='celula'){
@@ -3201,6 +3716,7 @@ function iniciarTimer(){
   const asigId=document.getElementById('t-asig').value;
   const asig=STATE.asignaturas.find(a=>a.id===asigId);
   const esCelula = asig?.tipo==='celula';
+  if(asig && asig.status===ST_REVISION){ toast('"'+asig.nombre+'" está en revisión de calidad: aún no se puede iniciar su producción'); return; }
   // Determine rol — standard or célula
   let rol;
   if(esCelula){
@@ -3656,7 +4172,7 @@ function renderDashboard(){
   const el=document.getElementById('dash-asig-list');
   if(!STATE.asignaturas.length) el.innerHTML='<div class="empty-state"><div class="empty-icon">📚</div><div class="empty-txt">No hay asignaturas</div></div>';
   else el.innerHTML=[...STATE.asignaturas].sort((a,b)=>{
-    const orden = {'En producción':0,'Pausada':1,'En espera':2,'Completada':3};
+    const orden = {'En producción':0,'Pausada':1,'En espera':2,[ST_REVISION]:2,'Completada':3};
     const oa = orden[a.status]??4, ob = orden[b.status]??4;
     if(oa!==ob) return oa-ob;
     return new Date(b.inicio)-new Date(a.inicio);
@@ -3725,6 +4241,7 @@ function arrancoAsig(a){
 function categoriaAsig(a){
   if(a.status==='Completada') return 'Completada';
   if(a.status==='Pausada') return 'Pausada';
+  if(a.status===ST_REVISION) return 'En revisión de calidad';
   if(arrancoAsig(a)) return 'En producción';
   if(a.celula) return 'Por iniciar';
   return 'En cola';
@@ -3771,7 +4288,7 @@ function renderAsignaturas(filtro){
   _sincronizarFiltroVideo();
   if(filtro!==undefined) _asigStatus=filtro;
   const el=document.getElementById('asig-list');
-  const ordenStatus = {'En producción':0,'Por iniciar':1,'En cola':2,'Pausada':3,'Completada':4};
+  const ordenStatus = {'En producción':0,'Por iniciar':1,'En revisión de calidad':2,'En cola':3,'Pausada':4,'Completada':5};
   let list=[...STATE.asignaturas];
   // Filtro por categoría (pestaña)
   if(_asigStatus!=='all') list=list.filter(a=>categoriaAsig(a)===_asigStatus);
@@ -3826,7 +4343,7 @@ function renderAsignaturas(filtro){
     
     // Si no hay sesiones y está "En producción", mostrar como "En espera"
     const statusDisplay = categoriaAsig(a);
-    const stBadgeDisplay = statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='Por iniciar'?'badge-info':'badge-muted';
+    const stBadgeDisplay = statusDisplay==='Completada'?'badge-ok':statusDisplay==='En producción'?'badge-warn':statusDisplay==='Por iniciar'?'badge-info':statusDisplay==='En revisión de calidad'?'badge-blue':'badge-muted';
 
     // Assets HTML
     const mkAssets=(u,key)=>{
@@ -3995,6 +4512,7 @@ function renderAsignaturas(filtro){
           </div>
           <div style="margin-top:14px;display:flex;gap:8px">
             <select style="max-width:200px" onchange="" id="st-${a.id}">
+              ${a.status===ST_REVISION?`<option value="${ST_REVISION}" selected>En revisión de calidad</option><option value="En espera">Pasar a la cola sin revisión</option>`:''}
               <option value="En producción" ${a.status==='En producción'?'selected':''}>En producción</option>
               <option value="Completada" ${a.status==='Completada'?'selected':''}>Completada</option>
               <option value="Pausada" ${a.status==='Pausada'?'selected':''}>Pausada</option>
@@ -4063,6 +4581,13 @@ async function cambiarStatus(id){
   const asig=STATE.asignaturas.find(a=>a.id===id); if(!asig)return;
   const nuevoStatus = document.getElementById('st-'+id).value;
   const statusAnterior = asig.status;
+  // En revisión de calidad: lo único permitido desde aquí es pasarla a la cola SIN terminar la revisión (decisión de Derly)
+  if(statusAnterior===ST_REVISION && nuevoStatus!==ST_REVISION){
+    const sel=document.getElementById('st-'+id);
+    if(nuevoStatus!=='En espera'){ toast('Está en revisión de calidad: primero pásala a la cola'); sel.value=asig.status; return; }
+    if(!confirm('¿Pasar "'+asig.nombre+'" a la cola SIN terminar la revisión de calidad?')){ sel.value=asig.status; return; }
+    await calLiberarManual(asig); return;
+  }
   // Only allow Pausada manually — Completada is auto
   if(nuevoStatus==='Completada'){
     toast('El sistema marca Completada automáticamente cuando todo esté listo');
@@ -5233,7 +5758,7 @@ function _cClasificar(f, emp, hoy, categoriaFn){
   const r={ f, m, pista:emp.pista, estado:'', ingreso:'', punt:'', diasPunt:null, alerta:'', diasAtraso:null, mes:(f.lanz||'').slice(0,7) };
   if(m){
     const cat=categoriaFn(m);
-    r.estado = cat==='Completada' ? 'entregada' : cat==='En producción' ? 'produccion' : cat==='Pausada' ? 'pausada' : 'cola';
+    r.estado = cat==='Completada' ? 'entregada' : cat==='En producción' ? 'produccion' : cat==='Pausada' ? 'pausada' : cat==='En revisión de calidad' ? 'revision' : 'cola';
     r.ingreso = _cYMD(m.inicio);
     if(r.ingreso && f.e0){
       const d=_cDiff(f.e0, r.ingreso); // + = ingresó después de lo debido
@@ -5325,6 +5850,7 @@ function _cEstadoBadge(r){
   if(r.estado==='produccion') return b('🔨 En producción','rgba(217,119,6,.12)','#b45309');
   if(r.estado==='cola') return b(r.m && r.m.celula ? '⏳ Por iniciar' : '⏳ En cola','rgba(99,102,241,.12)','#4f46e5');
   if(r.estado==='pausada') return b('⏸ Pausada','rgba(107,114,128,.14)','#4b5563');
+  if(r.estado==='revision') return b('🔎 En revisión de calidad','rgba(13,148,136,.12)','#0f766e');
   if(r.alerta==='sin_ingresar') return b('🔴 No ha ingresado','rgba(239,68,68,.12)','#b91c1c');
   return b('⚪ Aún no le toca','rgba(107,114,128,.10)','#6b7280');
 }
@@ -5402,12 +5928,13 @@ function renderCronograma(){
     ['Lanzan este mes', mes.length, '#374151'],
     ['✅ Entregadas', cuenta(_cCerrada), '#15803d'],
     ['🔨 En producción', cuenta(r=>r.estado==='produccion'), '#b45309'],
+    ['🔎 En revisión', cuenta(r=>r.estado==='revision'), '#0f766e'],
     ['⏳ En cola', cuenta(r=>r.estado==='cola'||r.estado==='pausada'), '#4f46e5'],
     ['🔴 No ingresadas', cuenta(r=>r.estado==='no_ingresada'), '#b91c1c']
   ].map(t=>`<div class="card" style="flex:1;min-width:130px"><div style="padding:14px 16px"><div style="font-size:11px;color:var(--muted);font-weight:600">${t[0]}</div><div style="font-size:26px;font-weight:800;color:${t[2]};margin-top:2px">${t[1]}</div></div></div>`).join('');
   const nAtras = cuenta(r=>r.alerta==='sin_ingresar');
 
-  const rank = r => r.alerta==='sin_ingresar'?0 : r.alerta==='entrega_vencida'?1 : r.estado==='no_ingresada'?2 : r.estado==='cola'?3 : r.estado==='pausada'?4 : r.estado==='produccion'?5 : r.estado==='entregada'?6 : 7;
+  const rank = r => r.alerta==='sin_ingresar'?0 : r.alerta==='entrega_vencida'?1 : r.estado==='no_ingresada'?2 : (r.estado==='cola'||r.estado==='revision')?3 : r.estado==='pausada'?4 : r.estado==='produccion'?5 : r.estado==='entregada'?6 : 7;
   const filas = [...mes].sort((a,b)=> rank(a)-rank(b) || (b.diasAtraso||0)-(a.diasAtraso||0) || a.f.lanz.localeCompare(b.f.lanz) || a.f.materia.localeCompare(b.f.materia));
 
   const filaHTML = r=>{
@@ -5486,6 +6013,7 @@ function _opRiesgo(r, hoy){
   }
   if(r.estado==='entregada_excel') return { k:'ok', txt:'Entregada (según Excel)' };
   if(r.estado==='pausada') return { k:'gris', txt:'Pausada' };
+  if(r.estado==='revision') return { k:'gris', txt:'En revisión de calidad' };
   if(r.e1a && hoy>r.e1a) return { k:'rojo', txt:'Vencida hace '+_cDiff(r.e1a,hoy)+' d' };
   if(r.estado==='no_ingresada'){
     if(r.f.e0 && hoy>r.f.e0) return { k:'rojo', txt:'No ha ingresado ('+_cDiff(r.f.e0,hoy)+' d de atraso)' };
@@ -5580,7 +6108,8 @@ function _opMaxPrestable(datos, colchon){
 function _opProyeccion(filas, hoy, W){
   const viernes=_opAddDias(W,4), disp=_opHabilesEntre(hoy>W?hoy:W, viernes);
   const porId=new Map(); filas.forEach(r=>{ if(r.m) porId.set(r.m.id, r); });
-  const vivas=STATE.asignaturas.filter(a=>a.tipo==='celula' && a.status!=='Completada' && a.status!=='Pausada');
+  const vivas=STATE.asignaturas.filter(a=>a.tipo==='celula' && a.status!=='Completada' && a.status!=='Pausada' && a.status!==ST_REVISION);
+  const enRevision=STATE.asignaturas.filter(a=>a.status===ST_REVISION).length;   // aún no pueden asignarse: esperan la revisión de calidad
   const est=new Map();
   const get=a=>{ let x=est.get(a.id); if(!x){ const fD=_opFrac(a,false), fV=_opFrac(a,true);
     x={ a, fD, fV, faltaD:OP_DISENO_DIAS*(1-fD), faltaV:OP_VIDEO_DIAS*(1-fV), dOk:false, vOk:false }; est.set(a.id,x); } return x; };
@@ -5603,7 +6132,7 @@ function _opProyeccion(filas, hoy, W){
     else { noAlcanzan++; if(limite && limite<=viernes) enRiesgo++; }
   });
   sale.sort((p,q)=>compararPorUrgencia(p.a,q.a));
-  return { disp, sale, noAlcanzan, sinPersona, enRiesgo };
+  return { disp, sale, noAlcanzan, sinPersona, enRiesgo, enRevision };
 }
 // ¿Con cuánto tiempo llegan? Días hábiles entre que ingresa (dashboard) y su fecha límite del cronograma.
 function _opMargenLlegada(filas){
@@ -5692,7 +6221,7 @@ function renderOperacion(){
       <tbody>${ya.map(x=>`<tr>${celdaAsig(x.nombre,x.prog)}<td>${quien(x.asig)}</td><td style="font-size:12px;color:var(--muted)">—</td><td style="font-size:12px;color:var(--muted)">Cerrada</td><td>${chip('Ya salió el '+_cFmt(x.fecha).slice(0,5),'rgba(37,99,235,.12)','#1d4ed8')}</td></tr>`).join('')}${pr.sale.map(p=>`<tr>${celdaAsig(p.a.nombre,p.a.prog)}<td>${quien(p.a)}</td><td style="font-size:12px">Diseño ${Math.round(p.fD*100)}% · Video ${Math.round(p.fV*100)}%</td><td>${cierreTxt(p.a)}</td><td>${chip('Sale','rgba(22,163,74,.12)','#15803d')}</td></tr>`).join('')}</tbody></table></div>`
       : sinDatos(rel==='actual' ? 'Ninguna alcanza a salir esta semana con lo que hay asignado.' : 'Ninguna alcanzaría a estar lista para esa fecha con lo que hay asignado.');
     derFoot = `<div style="padding:12px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);line-height:1.6">
-      Estimación: cada persona de diseño y cada editor de video trabaja 1 día por día hábil, en fila: primero lo que ya tiene en marcha y luego lo pre-asignado. Supone ${OP_DISENO_DIAS} días de diseño y ${OP_VIDEO_DIAS} de video por asignatura. «Sale» significa producción lista; el cierre (banner y revisión) se ve en su columna.${pr.noAlcanzan?` ${pr.noAlcanzan} asignada${pr.noAlcanzan===1?'':'s'} o pre-asignada${pr.noAlcanzan===1?'':'s'} no alcanza${pr.noAlcanzan===1?'':'n'} a salir ${rel==='actual'?'esta semana':'a esa fecha'} y no se muestra${pr.noAlcanzan===1?'':'n'}.`:''}${pr.sinPersona?` ${pr.sinPersona} esperan en la cola sin persona de diseño.`:''}
+      Estimación: cada persona de diseño y cada editor de video trabaja 1 día por día hábil, en fila: primero lo que ya tiene en marcha y luego lo pre-asignado. Supone ${OP_DISENO_DIAS} días de diseño y ${OP_VIDEO_DIAS} de video por asignatura. «Sale» significa producción lista; el cierre (banner y revisión) se ve en su columna.${pr.noAlcanzan?` ${pr.noAlcanzan} asignada${pr.noAlcanzan===1?'':'s'} o pre-asignada${pr.noAlcanzan===1?'':'s'} no alcanza${pr.noAlcanzan===1?'':'n'} a salir ${rel==='actual'?'esta semana':'a esa fecha'} y no se muestra${pr.noAlcanzan===1?'':'n'}.`:''}${pr.sinPersona?` ${pr.sinPersona} esperan en la cola sin persona de diseño.`:''}${pr.enRevision?` ${pr.enRevision} esperan la revisión de calidad antes de entrar a la cola y aún no cuentan en la proyección.`:''}
       <br>Capacidad de la semana: unas <b>${_opNum(capSem)}</b> asignaturas (${datos.Pd} diseñadores × ${habilesSem} días hábiles ÷ ${OP_DISENO_DIAS} días por asignatura).${ritmo!=null?` Ritmo que pide el cronograma: unas <b>${_opNum(ritmo)}</b> por semana.`:''}</div>`;
   }
 
@@ -6261,6 +6790,7 @@ async function cargarDesdeSheets(){
     try{ if(reconstruirEntregablesDesdeSesiones()) actualizado = true; }catch(e){ console.log('[ENTREGABLES] reconstrucción:', e); }
     // Revisiones de calidad (pestaña "Revisiones")
     try{ await cargarRevisiones(); }catch(e){ console.log('[REVISIONES] error:', e); }
+    try{ if(await cargarCalidadEntrada()) calSanar(); calActualizarBadge(); }catch(e){ console.log('[CALIDAD] error:', e); }
     if(actualizado){
       // Check all asignaturas for auto-completion (catches ones completed before this feature)
       let alguienCompletado = false;
