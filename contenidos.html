@@ -69,7 +69,7 @@ button{font-family:inherit}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .chip{border:1px solid var(--border);background:#fff;border-radius:99px;padding:6px 14px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer}
 .chip.on{background:#1a1d2e;color:#fff;border-color:#1a1d2e}
-.filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+.filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
 input,select,textarea{font-family:inherit;font-size:13px;border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;background:#fff;color:var(--text);width:100%}
 textarea{resize:vertical;min-height:54px}
 .arow{display:grid;grid-template-columns:minmax(0,2.2fr) 120px 130px minmax(0,1.4fr) 86px;gap:12px;align-items:center;padding:12px 18px;border-top:1px solid var(--border);cursor:pointer}
@@ -161,6 +161,7 @@ textarea{resize:vertical;min-height:54px}
       <div class="card"><div class="card-head"><span class="card-title">Personas de generación de contenidos</span><span class="tag">clic para ver sus asignaturas</span></div>
         <div class="prow" style="cursor:default;padding:8px 20px;background:#f5f6fa"><span class="mini">PERSONA</span><span class="mini">SUS ASIGNATURAS EN CURSO, POR ETAPA</span><span class="mini" style="text-align:center">EN CURSO</span><span class="mini" style="text-align:center">LE TOCA A ELLA</span><span class="mini">ESTADO</span></div>
         <div id="personas"></div></div>
+      <div class="card"><div class="card-head"><span class="card-title">Por facultad</span><span class="tag">para repartir por decanatura</span></div><div id="porfac"></div></div>
     </div>
     <div>
       <div class="card"><div class="card-head"><span class="card-title">Trabajando ahora</span><span class="badge b-ok">● En vivo</span></div><div id="vivo"></div></div>
@@ -177,6 +178,7 @@ textarea{resize:vertical;min-height:54px}
   <div class="filters">
     <input id="f-q" placeholder="Buscar asignatura, programa o docente" oninput="renderAsig()">
     <select id="f-p" onchange="renderAsig()"></select>
+    <select id="f-fac" onchange="renderAsig()"></select>
     <select id="f-fl" onchange="renderAsig()"><option value="">Autor e IA</option><option value="Autor">Escribe el profesor (Autor)</option><option value="IA">Escribimos con IA</option></select>
     <select id="f-m" onchange="renderAsig()"></select>
   </div>
@@ -187,7 +189,7 @@ textarea{resize:vertical;min-height:54px}
   <div class="page-header"><h1>Cronograma</h1><p>Fechas del cronograma UIDE para cada etapa, contra lo que realmente pasó · por mes de inicio de la materia</p></div>
   <div class="chips" id="crono-meses"></div>
   <div class="kpi-grid" id="crono-kpis"></div>
-  <div class="filters" style="grid-template-columns:2fr 1fr 1fr 1fr"><input id="c-q" placeholder="Buscar asignatura o programa" oninput="renderCrono()"><select id="c-p" onchange="renderCrono()"></select><select id="c-fl" onchange="renderCrono()"><option value="">Autor e IA</option><option value="Autor">Autor</option><option value="IA">IA</option></select><select id="c-e" onchange="renderCrono()"><option value="">Todas</option><option value="pend">Sin entregar a Fábrica</option><option value="tarde">Con algo vencido</option></select></div>
+  <div class="filters" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr"><input id="c-q" placeholder="Buscar asignatura o programa" oninput="renderCrono()"><select id="c-p" onchange="renderCrono()"></select><select id="c-fac" onchange="renderCrono()"></select><select id="c-fl" onchange="renderCrono()"><option value="">Autor e IA</option><option value="Autor">Autor</option><option value="IA">IA</option></select><select id="c-e" onchange="renderCrono()"><option value="">Todas</option><option value="pend">Sin entregar a Fábrica</option><option value="tarde">Con algo vencido</option></select></div>
   <div class="card" style="overflow-x:auto"><div id="crono-tabla"></div></div>
 </div>
 
@@ -296,7 +298,7 @@ function estadoSync(msg,err){const el=document.getElementById('sync');if(!el)ret
   el.textContent=msg||('✓ Guardado en el Sheet'+(ULTIMA?' · '+ULTIMA.toTimeString().slice(0,5):''))}
 function colsDe(id){const s=ST[id],w=trab(s);return{'Responsable':s.responsable||'','Etapa':s.etapa,'Desde':s.desde||'','Rondas':String(s.rondas||0),'Encargo':s.encargo||'',
   'Recordatorios':s.recordatorios===false?'No':'Sí','Marca':s.incompleto?'incompleto':s.aprobCoord?'aprobCoord':'','Entregables':JSON.stringify(s.ent||{}),
-  'Reloj inicio':w.ini?new Date(w.ini).toISOString():'','Reloj persona':w.ini?(w.persona||s.responsable||''):''}}
+  'Reloj inicio':w.ini?new Date(w.ini).toISOString():'','Reloj persona':w.ini?(w.persona||s.responsable||''):'','Calidad':s.cal?JSON.stringify(s.cal):''}}
 async function cargarSheet(){
   if(CARGANDO||COLA.length||ENVIANDO)return false;CARGANDO=true;
   const r=await jsonp({accion:'leerTodo'});CARGANDO=false;
@@ -312,12 +314,12 @@ async function cargarSheet(){
   const D=[],S={};
   A.forEach(x=>{const id=x['ID'];if(!/^\d{4}-\d{2}-\d{2}$/.test(x['Inicio']||''))return;
     const a={id,materia:x['Materia'],programa:x['Programa'],inicio:x['Inicio'],metodologia:x['Metodologia']||'',flujo:x['Flujo']==='IA'?'IA':'Autor',
-      institucion:x['Institucion']||'',docente:x['Docente']||'',contacto:x['Contacto']||'',historial:x['Historial Excel']||'',filaCrono:x['Fila cronograma']||'',filaSeg:x['Fila seguimiento']||'',
+      institucion:x['Institucion']||'',docente:x['Docente']||'',contacto:x['Contacto']||'',historial:x['Historial Excel']||'',facultad:x['Facultad']||'',escuela:x['Escuela']||'',novedad:x['Novedad UIDE']||'',incidencia:x['Incidencia UIDE']||'',drive:x['Carpeta Drive']||'',coordinador:x['Coordinador']||'',correoCoord:x['Correo coordinador']||'',filaCrono:x['Fila cronograma']||'',filaSeg:x['Fila seguimiento']||'',
       plan:{encargo:x['Plan encargo']||'',escritura:x['Plan escritura hasta']||'',revDesde:x['Plan revision desde']||'',revHasta:x['Plan revision hasta']||'',correccion:x['Plan correccion hasta']||'',coordDesde:x['Plan coord desde']||'',coordHasta:x['Plan coord hasta']||'',fabrica:x['Plan entra Fabrica']||'',rondas:+x['Rondas plan']||0}};
     let ent={};try{ent=JSON.parse(x['Entregables']||'{}')||{}}catch(e){}
     const ses=sePor[id]||[];const ini=Date.parse(x['Reloj inicio']);
     S[id]={etapa:ET[x['Etapa']]?x['Etapa']:'sin',desde:x['Desde']||null,responsable:x['Responsable']||null,rondas:+x['Rondas']||0,encargo:x['Encargo']||null,
-      recordatorios:String(x['Recordatorios']).toLowerCase()!=='no',incompleto:x['Marca']==='incompleto',aprobCoord:x['Marca']==='aprobCoord',ent,eventos:evPor[id]||[],
+      recordatorios:String(x['Recordatorios']).toLowerCase()!=='no',incompleto:x['Marca']==='incompleto',aprobCoord:x['Marca']==='aprobCoord',ent,cal:(()=>{try{return x['Calidad']?JSON.parse(x['Calidad']):null}catch(e){return null}})(),eventos:evPor[id]||[],
       trab:{ini:isNaN(ini)?null:ini,persona:x['Reloj persona']||'',ms:ses.reduce((t,z)=>t+(z.f-z.i),0),ses}};
     D.push(a)});
   DATOS=D;ST=S;SNAP={};DATOS.forEach(a=>SNAP[a.id]=JSON.stringify(colsDe(a.id)));
@@ -396,7 +398,7 @@ function goPage(p){
 function verAsig(etapa,persona){FILTRO.etapa=etapa||'';document.getElementById('f-p').value=persona||'';goPage('asig')}
 function abrir(id){
   const a=DATOS.find(x=>x.id===id);FILTRO.etapa='';
-  document.getElementById('f-q').value=a.materia;document.getElementById('f-p').value='';document.getElementById('f-fl').value='';document.getElementById('f-m').value='';
+  document.getElementById('f-q').value=a.materia;document.getElementById('f-p').value='';document.getElementById('f-fl').value='';document.getElementById('f-m').value='';document.getElementById('f-fac').value='';
   ABIERTA=id;goPage('asig');
 }
 function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),2200)}
@@ -418,7 +420,7 @@ function msHabil(t0,t1){
   return ms}
 function tiemposEtapas(a){
   const s=ST[a.id],r={equipo:0,docente:0,coordinador:0,desde:null};
-  const cambios=s.eventos.filter(e=>e.ts&&e.a&&e.de&&e.a!==e.de);
+  const cambios=s.eventos.filter(e=>e.ts&&e.a&&e.de&&e.a!==e.de).slice().sort((x,y)=>x.ts-y.ts);
   if(!cambios.length)return r;
   r.desde=cambios[0].ts;
   for(let i=0;i<cambios.length;i++){
@@ -436,7 +438,7 @@ function empezar(id){
   const a=DATOS.find(x=>x.id===id),s=ST[id];
   if(!s.responsable){toast('Asigna una responsable antes de empezar');return}
   corriendo(s.responsable).forEach(o=>{if(o.id!==id)pausar(o.id,true)});
-  const w=trab(s);if(w.ini)return;w.ini=Date.now();w.persona=s.responsable;guardar();render();toast(s.responsable+' empezó · '+a.materia.slice(0,40))}
+  const w=trab(s);if(w.ini)return;w.ini=Date.now();w.persona=s.responsable;guardar();render();if(!arguments[1])toast(s.responsable+' empezó · '+a.materia.slice(0,40))}
 function pausar(id,silencio){
   const s=ST[id],w=trab(s);if(!w.ini)return;
   const fin=Date.now();if(fin-w.ini>=60000)w.ses.push({i:w.ini,f:fin,p:s.responsable||''});w.ms+=fin-w.ini;w.ini=null;guardar();
@@ -475,6 +477,9 @@ function renderDash(){
     const bar=act.length?ACTIVAS.map(x=>'<div title="'+ET[x].l+': '+c[x]+'" style="width:'+(c[x]/act.length*100)+'%;background:'+ET[x].c+'"></div>').join(''):'';
     return '<div class="prow" onclick="verAsig(\'curso\',\''+p+'\')"><div><div class="nm">'+p+'</div><div class="sb">'+sub+'</div></div><div><div class="stack">'+bar+'</div><div class="mini" style="margin-top:4px">'+ACTIVAS.filter(x=>c[x]).map(x=>c[x]+' '+ET[x].l.toLowerCase()).join(' · ')+'</div></div><div class="num"><b>'+act.length+'</b><span>en curso</span></div><div class="num"><b>'+lePasa+'</b><span>pendientes</span></div><div>'+pill+'</div></div>';
   }).join('');
+  const fac={};DATOS.forEach(a=>{const s=ST[a.id];if(s.etapa==='fab')return;const f=a.facultad||'';const o=fac[f]=fac[f]||{n:0,curso:0,sinR:0,resp:{}};o.n++;if(ACTIVAS.includes(s.etapa))o.curso++;if(!s.responsable)o.sinR++;else o.resp[s.responsable]=(o.resp[s.responsable]||0)+1});
+  document.getElementById('porfac').innerHTML='<div class="prow" style="cursor:default;padding:8px 20px;background:#f5f6fa;grid-template-columns:minmax(0,1.4fr) 60px 60px 80px minmax(0,2fr)"><span class="mini">FACULTAD</span><span class="mini" style="text-align:center">PENDIENTES</span><span class="mini" style="text-align:center">EN CURSO</span><span class="mini" style="text-align:center">SIN RESPONSABLE</span><span class="mini">QUIÉN LAS TIENE HOY</span></div>'+
+    Object.entries(fac).sort((x,y)=>y[1].n-x[1].n).map(([f,o])=>'<div class="prow" style="grid-template-columns:minmax(0,1.4fr) 60px 60px 80px minmax(0,2fr)" onclick="document.getElementById(\'f-fac\').value=\''+esc(f||'__sin')+'\';verAsig(\'\')"><div class="nm" style="font-size:13px">'+esc(f?facCorta(f):'Sin facultad')+'</div><div class="num"><b>'+o.n+'</b></div><div class="num"><b>'+o.curso+'</b></div><div class="num"><b style="color:'+(o.sinR?'var(--warn)':'inherit')+'">'+o.sinR+'</b></div><div class="mini">'+Object.entries(o.resp).sort((x,y)=>y[1]-x[1]).map(([p,n])=>p+' '+n).join(' · ')+'</div></div>').join('');
   const viv=DATOS.filter(a=>trab(ST[a.id]).ini);
   document.getElementById('vivo').innerHTML=viv.length?viv.map(a=>'<div class="qrow" onclick="abrir(\''+a.id+'\')"><div class="q1"><div>'+esc(ST[a.id].responsable)+'</div><div class="q2">'+esc(a.materia)+'</div></div><span class="dd" style="color:var(--ok);font-variant-numeric:tabular-nums" data-clk="'+a.id+'">'+fmtClk(msTrab(ST[a.id]))+'</span></div>').join(''):'<div class="empty">Nadie tiene el reloj corriendo</div>';
   const cola=q=>DATOS.filter(a=>quien(a,ST[a.id])===q&&ACTIVAS.includes(ST[a.id].etapa)).map(a=>({a,s:ST[a.id],r:reloj(a)})).sort((x,y)=>y.r.ord-x.r.ord);
@@ -485,14 +490,18 @@ function renderDash(){
 }
 
 /* ── Asignaturas ── */
+function facCorta(f){return String(f||'').replace(/^Facultad (de |)/,'').replace('Ingenierías','Ing.').replace(', Ciencias Sociales y Humanidades','').replace(', de la Salud y la Vida','').replace(' y Desarrollo Industrial','').replace(' y Tecnologías Emergentes','').replace(', Diseño y Artes','')||'Sin facultad'}
+function opcionesFac(){const fs=[...new Set(DATOS.map(a=>a.facultad||''))].sort();return '<option value="">Todas las facultades</option>'+fs.map(f=>'<option value="'+esc(f||'__sin')+'">'+esc(f?facCorta(f):'Sin facultad')+'</option>').join('')}
+function pasaFac(a,v){return !v||(v==='__sin'?!a.facultad:a.facultad===v)}
 function initFiltros(){
+  ['f-fac','c-fac'].forEach(id=>{const el=document.getElementById(id);if(el){const v=el.value;el.innerHTML=opcionesFac();el.value=v}});
   document.getElementById('f-p').innerHTML='<option value="">Todas las personas</option>'+PERSONAS.map(p=>'<option>'+p+'</option>').join('')+'<option value="__sin">Sin responsable</option>';
   const meses=[...new Set(DATOS.map(a=>a.inicio.slice(0,7)))].sort();
   const N=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   document.getElementById('f-m').innerHTML='<option value="">Todos los meses de inicio</option>'+meses.map(m=>'<option value="'+m+'">Inicia '+N[+m.slice(5)-1]+' '+m.slice(0,4)+'</option>').join('');
 }
 function renderAsig(){
-  const fq=document.getElementById('f-q').value.toLowerCase().trim(),fp=document.getElementById('f-p').value,ff=document.getElementById('f-fl').value,fm=document.getElementById('f-m').value;
+  const fq=document.getElementById('f-q').value.toLowerCase().trim(),fp=document.getElementById('f-p').value,ff=document.getElementById('f-fl').value,fm=document.getElementById('f-m').value,ffac=document.getElementById('f-fac').value;
   const ch=[['','Todas'],['curso','En curso'],['alarma','Con alarma']].concat(ETAPAS.map(e=>[e.k,e.l]));
   document.getElementById('chips').innerHTML=ch.map(c=>'<span class="chip'+(FILTRO.etapa===c[0]?' on':'')+'" onclick="FILTRO.etapa=\''+c[0]+'\';renderAsig()">'+c[1]+'</span>').join('');
   let l=DATOS.filter(a=>{
@@ -503,6 +512,7 @@ function renderAsig(){
     if(fp==='__sin'&&s.responsable)return false;
     if(fp&&fp!=='__sin'&&s.responsable!==fp)return false;
     if(ff&&a.flujo!==ff)return false;
+    if(!pasaFac(a,ffac))return false;
     if(fm&&a.inicio.slice(0,7)!==fm)return false;
     if(fq&&!(a.materia+' '+a.programa+' '+a.docente).toLowerCase().includes(fq))return false;
     return true;
@@ -511,7 +521,7 @@ function renderAsig(){
   document.getElementById('lista').innerHTML=h+(l.length?l.map(a=>{
     const s=ST[a.id],F=fechas(a),al=alarmas(a),n=al.length?al[0].n:0;
     const alH=n?'<div class="t2" style="color:'+(n>=3?'var(--danger)':n==2?'var(--warn)':'var(--muted)')+'">'+esc(al[0].txt)+(al.length>1?' · +'+(al.length-1):'')+'</div>':'';
-    return '<div class="arow'+(ABIERTA===a.id?' open':'')+'" onclick="toggle(\''+a.id+'\')"><div><div class="t1">'+esc(a.materia)+'</div><div class="t2">'+esc(a.programa)+' · '+a.metodologia+' · '+(a.flujo==='IA'?'IA':'Autor')+' · '+a.institucion+(trab(s).ini?' · <span style="color:var(--ok);font-weight:600">● trabajando</span>':msTrab(s)>0?' · trabajado '+fmtH(msTrab(s)):'')+'</div>'+alH+'</div><span>'+(s.responsable?esc(s.responsable):'<span class="badge b-warn">Sin asignar</span>')+'</span><span style="font-size:12px">'+fmt(a.inicio)+'<div class="t2">tope '+fmtc(F.tope)+'</div></span><span>'+estHtml(a,s)+(s.rondas?'<div class="t2">'+s.rondas+' ronda'+(s.rondas>1?'s':'')+'</div>':'')+'</span><span class="dd" style="color:'+(n>=3?'var(--danger)':n==2?'var(--warn)':'var(--text)')+'">'+diasTxt(s,a)+'</span></div>'+(ABIERTA===a.id?detalle(a):'');
+    return '<div class="arow'+(ABIERTA===a.id?' open':'')+'" onclick="toggle(\''+a.id+'\')"><div><div class="t1">'+esc(a.materia)+'</div><div class="t2">'+esc(a.programa)+' · '+a.metodologia+' · '+(a.flujo==='IA'?'IA':'Autor')+' · '+a.institucion+(a.facultad?' · '+esc(facCorta(a.facultad)):'')+(a.novedad&&a.novedad.toUpperCase().startsWith('SI')?' · <b style="color:var(--danger)">Novedad UIDE</b>':'')+(trab(s).ini?' · <span style="color:var(--ok);font-weight:600">● trabajando</span>':msTrab(s)>0?' · trabajado '+fmtH(msTrab(s)):'')+'</div>'+alH+'</div><span>'+(s.responsable?esc(s.responsable):'<span class="badge b-warn">Sin asignar</span>')+'</span><span style="font-size:12px">'+fmt(a.inicio)+'<div class="t2">tope '+fmtc(F.tope)+'</div></span><span>'+estHtml(a,s)+(s.rondas?'<div class="t2">'+s.rondas+' ronda'+(s.rondas>1?'s':'')+'</div>':'')+chipCal(a,s)+'</span><span class="dd" style="color:'+(n>=3?'var(--danger)':n==2?'var(--warn)':'var(--text)')+'">'+diasTxt(s,a)+'</span></div>'+(ABIERTA===a.id?detalle(a):'');
   }).join(''):'<div class="empty">Sin resultados</div>');
 }
 function toggle(id){ABIERTA=ABIERTA===id?null:id;renderAsig()}
@@ -527,29 +537,30 @@ function detalle(a){
   const pts=[['Encargo',F.encargo],['Entrega docente',F.entregaDocente]].concat(F.revHasta?[['Revisión equipo',F.revHasta]]:[]).concat(F.correccion?[['Corrección docente',F.correccion]]:[]).concat(F.coordHasta?[['Coordinador',F.coordHasta]]:[]).concat([['Entra a Fábrica',F.tope],['Inicio',F.inicio]]);
   let hoyPuesto=false;
   const tl='<div class="tl">'+pts.map(p=>{const past=HOY>=p[1];return '<div class="p'+(past?' past':'')+'"><i></i>'+p[0]+'<b>'+fmt(p[1])+'</b></div>'}).join('')+'</div>';
-  const posibles=Object.entries(EVENTOS).filter(([k,e])=>e.de.includes(s.etapa)&&(!e.flujo||e.flujo===a.flujo));
+  const posibles=Object.entries(EVENTOS).filter(([k,e])=>e.de.includes(s.etapa)&&(!e.flujo||e.flujo===a.flujo)&&!(s.etapa==='rev'&&(k==='alDocente'||k==='aCoord')));
   const acts=posibles.map(([k,e],i)=>'<button class="btn'+(i===0?' pri':'')+'" onclick="event.stopPropagation();registrar(\''+a.id+'\',\''+k+'\')">'+e.l+'</button>').join('');
   const al=alarmas(a);
-  const evs=s.eventos.slice().reverse().map(e=>'<div class="ev"><span class="f">'+fmt(e.f)+'</span><div>'+esc(e.l)+(e.nota?'<div class="w">'+esc(e.nota)+'</div>':'')+'<div class="w">'+esc(e.por||'')+'</div></div></div>').join('');
+  const evs=s.eventos.slice().sort((x,y)=>(x.ts||0)-(y.ts||0)).reverse().map(e=>'<div class="ev"><span class="f">'+fmt(e.f)+'</span><div>'+esc(e.l)+(e.nota?'<div class="w">'+esc(e.nota)+'</div>':'')+'<div class="w">'+esc(e.por||'')+'</div></div></div>').join('');
   const hist=a.historial;
-  const p=entProg(a);
-  const ent='<table class="ent"><tr><th>Entregable</th><th>Clase 1</th><th>Clase 2</th><th>Clase 3</th></tr>'+
-    ITEMS_G.map(([k,l])=>'<tr><td>'+l+'</td><td colspan="3">'+ck(a,k)+'</td></tr>').join('')+
-    itemsClase(a).map(([k,l])=>'<tr><td>'+l+'</td>'+[1,2,3].map(c=>'<td>'+ck(a,k+c)+'</td>').join('')+'</tr>').join('')+'</table>';
   return '<div class="det" onclick="event.stopPropagation()"><div class="dgrid"><div>'+
     '<div class="box"><h4>Fechas del cronograma UIDE · '+(a.flujo==='IA'?'IA':'Autor')+(F.dePlan?'':' · calculadas (sin fila en el cronograma)')+'</h4>'+tl+'<div class="mini" style="margin-top:8px">Hoy '+fmt(HOY)+(s.encargo?' · encargo enviado '+(/^\d{4}-\d{2}-\d{2}$/.test(s.encargo)?fmt(s.encargo):'(sin fecha)'):'')+'</div></div>'+
     (al.length?'<div class="box" style="border-color:#f5c2c2"><h4 style="color:var(--danger)">Alarmas</h4>'+al.map(x=>'<div style="font-size:13px;padding:3px 0"><span class="sq" style="background:'+(x.n>=3?'var(--danger)':x.n==2?'var(--warn)':'var(--dim)')+'"></span>'+esc(x.txt)+' <span class="mini">· le toca al '+x.q+'</span></div>').join('')+'</div>':'')+
-    '<div class="box"><h4>Registrar lo que pasó · '+etiquetaEtapa(a,s)+'</h4>'+(acts?'<div class="acts">'+acts+'</div>':'<div class="mini">Entregada a Fábrica. No hay más pasos.</div>')+
+    cajaCalidad(a)+
+    '<div class="box"><h4>Registrar lo que pasó · '+etiquetaEtapa(a,s)+'</h4><div class="row2" style="margin:0 0 10px"><span class="mini">¿Cuándo pasó?</span><input type="date" id="fecha-'+a.id+'" value="'+HOY+'" max="'+HOY+'" style="width:auto"><span class="mini">cámbiala si estás registrando algo de días anteriores</span></div>'+(acts?'<div class="acts">'+acts+'</div>':'<div class="mini">'+(s.etapa==='rev'?'Para devolver al docente o aprobar, usa la caja de Revisión de calidad de arriba.':'Entregada a Fábrica. No hay más pasos.')+'</div>')+
       '<textarea id="nota-'+a.id+'" placeholder="Nota opcional (se guarda con el próximo registro)" style="margin-top:10px"></textarea>'+
       '<div class="row2"><button class="btn" onclick="registrar(\''+a.id+'\',\'nota\')">Guardar solo la nota</button>'+
       '<select style="width:auto" onchange="cambiarResp(\''+a.id+'\',this.value)"><option value="">Responsable: '+(s.responsable||'sin asignar')+'</option>'+PERSONAS.map(p=>'<option>'+p+'</option>').join('')+'</select>'+
       '<select style="width:auto" onchange="moverEtapa(\''+a.id+'\',this.value)"><option value="">Corregir etapa…</option>'+ETAPAS.map(e=>'<option value="'+e.k+'">'+e.l+'</option>').join('')+'</select></div></div>'+
-    '<div class="box"><h4>Datos</h4><div style="font-size:12.5px;line-height:1.8"><b>Docente:</b> '+esc(a.docente||'—')+' ('+esc(a.institucion||'—')+')<br><b>Contacto:</b> '+esc(a.contacto||'—')+'<br><b>Programa:</b> '+esc(a.programa)+(a.metodologia?' · '+a.metodologia:'')+'<br><b>Excel:</b> '+(a.filaCrono?'fila '+a.filaCrono+' del cronograma':'sin fila en el cronograma')+(a.filaSeg?' · fila '+a.filaSeg+' del seguimiento':'')+'</div></div>'+
+    '<div class="box"><h4>Datos</h4><div style="font-size:12.5px;line-height:1.8"><b>Docente:</b> '+esc(a.docente||'—')+' ('+esc(a.institucion||'—')+')<br><b>Contacto:</b> '+esc(a.contacto||'—')+'<br><b>Programa:</b> '+esc(a.programa)+(a.metodologia?' · '+a.metodologia:'')+(a.facultad?'<br><b>Facultad:</b> '+esc(a.facultad)+(a.escuela?' · '+esc(a.escuela):''):'')+
+      '<br><b>Coordinador:</b> '+(a.coordinador?esc(a.coordinador)+(a.correoCoord?' · '+esc(a.correoCoord):' · <span style="color:var(--warn)">sin correo</span>'):'<span style="color:var(--warn)">sin dato</span>')+
+      '<br><b>Carpeta:</b> '+(a.drive?'<a href="'+esc(a.drive)+'" target="_blank" rel="noopener">Abrir carpeta de Drive ↗</a>':'<span style="color:var(--warn)">sin enlace</span>')+
+      (a.novedad&&a.novedad.toUpperCase().startsWith('SI')?'<br><b style="color:var(--danger)">Novedad UIDE:</b> '+esc(a.novedad):'')+
+      (a.incidencia?'<br><b>Nota de UIDE:</b> '+esc(a.incidencia):'')+
+      '<br><b>Excel:</b> '+(a.filaCrono?'fila '+a.filaCrono+' del cronograma':'sin fila en el cronograma')+(a.filaSeg?' · fila '+a.filaSeg+' del seguimiento':'')+'</div></div>'+
     cajaCorreos(a)+
   '</div><div>'+
     cajaTiempo(a)+
     '<div class="box"><h4>Trazabilidad</h4>'+(evs||'<div class="mini">Aún no hay registros en el dashboard.</div>')+(hist?'<div class="mini" style="margin-top:10px"><b>Historial anterior (Excel)</b></div><div class="hist">'+esc(hist)+'</div>':'')+'</div>'+
-    '<div class="box"><h4>Entregables · '+p.ok+' de '+p.t+' aprobados</h4><div class="mini" style="margin-bottom:6px">Clic para cambiar: pendiente → recibido → aprobado → no aplica</div>'+ent+'</div>'+
   '</div></div></div>';
 }
 function cajaTiempo(a){
@@ -562,6 +573,61 @@ function cajaTiempo(a){
     '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">'+cel('Trabajado',fmtH(msTrab(s)),'var(--ok)')+cel('En sus manos',fmtDias(te.equipo))+cel('Con el docente',fmtDias(te.docente))+cel('Con coordinador',fmtDias(te.coordinador))+'</div>'+
     '<div class="mini" style="margin-top:6px">Días hábiles desde el primer registro en el dashboard'+(te.desde?' ('+fmt(ymd(new Date(te.desde)))+')':'')+'. Si empieza otra asignatura, esta se pausa sola; también al enviarla al docente o al coordinador.</div>'+
     (ses?'<div style="margin-top:8px">'+ses+'</div>':'')+'</div>'}
+/* ── Revisión de calidad (skill revision-materia-eig, 9 puntos) ── */
+const CAL_PUNTOS=['Tema y ¿Qué hemos aprendido? coinciden','Entre 3 y 5 subtemas','Imágenes y tablas (cantidad y rótulos)','El tema coincide con la matriz','Guion de infografía claro y secuencial','Guiones de video: título de la matriz, saludo y máx. 404 palabras','Video de presentación docente subido','El Saber más aporta información nueva','Tests con 30 preguntas'];
+const CAL_EST={bien:['Bien','ok'],revisar:['Revisar','hoy'],corregir:['Corregir','mal']};
+const CAL_VER={},CAL_PEGAR={};
+function calResumen(c){const r={bien:0,revisar:0,corregir:0};(c&&c.p||[]).forEach(x=>r[x.e]=(r[x.e]||0)+1);return r}
+function cal9(s){const c=s.cal;return !!(c&&c.p&&c.p.length===9&&c.p.every(x=>x.e==='bien'))}
+function calRonda(s){const c=s.cal;return c?(c.dev?c.r+1:c.r):1}
+function chipCal(a,s){const c=s.cal;
+  if(!c)return s.etapa==='rev'?'<div class="t2">Calidad pendiente</div>':'';
+  if(cal9(s))return '<div><span class="cr ok">Calidad 9/9</span></div>';
+  const r=calResumen(c);return '<div><span class="cr '+(r.corregir?'mal':'hoy')+'">R'+c.r+' · '+[r.corregir?r.corregir+' por corregir':'',r.revisar?r.revisar+' por revisar':''].filter(Boolean).join(' · ')+'</span></div>'}
+function copiarTexto(txt,ok){
+  const plan=()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast(ok)}catch(e){prompt('Copia este texto:',txt)}ta.remove()};
+  if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(txt).then(()=>toast(ok)).catch(plan);else plan()}
+function calPreparar(id){const a=DATOS.find(x=>x.id===id),s=ST[id];
+  if(s.responsable&&!trab(s).ini)empezar(id,true);
+  copiarTexto('DASHBOARD_FABRICA · GENERACION_CONTENIDOS · asignatura_id='+a.id+' · ronda='+calRonda(s)+'\nRevisa la materia "'+a.materia+'" ('+a.programa+') con la pauta de 9 puntos y al final entrega el bloque FABRICA_REVISION_V1.\nCarpeta de la materia: '+(a.drive||'[pega aquí el enlace]')+'\nMatriz de arranque: [pega aquí el enlace y la pestaña "Materia N"]',
+    'Copiado: pégalo en Claude junto con la carpeta y la matriz'+(trab(s).ini?' · el reloj de trabajo está corriendo':''))}
+function calLeerBloque(txt){const i=txt.indexOf('FABRICA_REVISION_V1');if(i<0)return null;const r=txt.slice(i+19);const a=r.indexOf('{'),b=r.lastIndexOf('}');if(a<0||b<a)return null;try{return JSON.parse(r.slice(a,b+1))}catch(e){return null}}
+function calEstado(v){v=String(v||'').toLowerCase();return /corr|❌/.test(v)?'corregir':/rev|⚠/.test(v)?'revisar':'bien'}
+function calCompactar(c){let L=[180,140,160];const arma=()=>({r:c.r,f:c.f,por:c.por,dev:c.dev,p:c.p.map(x=>({n:x.n,e:x.e,f:String(x.f||'').slice(0,L[0]),a:String(x.a||'').slice(0,L[1]),m:x.m||0})),ac:c.ac.slice(0,6).map(x=>String(x).slice(0,L[2])),nc:c.nc});
+  let o=arma();while(JSON.stringify(o).length>3800&&L[0]>40){L=L.map(x=>Math.floor(x*0.75));o=arma()}return o}
+function calImportar(id){const a=DATOS.find(x=>x.id===id),s=ST[id];const el=document.getElementById('cal-txt-'+id);const j=calLeerBloque(el?el.value:'');
+  if(!j||!Array.isArray(j.puntos)){toast('No encontré el bloque FABRICA_REVISION_V1. Pega la respuesta completa de Claude.');return}
+  if(j.asignatura_id&&j.asignatura_id!==id&&!confirm('Ese resultado dice ser de otra asignatura ('+j.asignatura_id+' · '+(j.materia||'')+'). ¿Usarlo igual para "'+a.materia+'"?'))return;
+  const p=[];for(let n=1;n<=9;n++){const x=j.puntos.find(q=>+q.n===n);p.push(x?{n,e:calEstado(x.estado),f:x.falla||x.bien||'',a:x.accion||''}:{n,e:'revisar',f:'Este punto no vino en el resultado',a:''})}
+  const c=calCompactar({r:calRonda(s),f:ymd(new Date()),por:s.responsable||'',dev:false,p,ac:(j.acciones||[]).map(String),nc:(j.no_corresponden||[]).slice(0,4).map(x=>({ar:String(x.archivo||'').slice(0,80),m:String(x.motivo||'').slice(0,120)}))});
+  s.cal=c;const r=calResumen(c);
+  s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'calidad',l:'Revisión de calidad ronda '+c.r+': '+r.bien+' bien · '+r.revisar+' por revisar · '+r.corregir+' por corregir',nota:c.ac.slice(0,3).join(' · ').slice(0,300),por:s.responsable||''});
+  CAL_PEGAR[id]=false;guardar();render();toast(cal9(s)?'Calidad 9/9: lista para pasar al coordinador':'Resultado guardado: '+(r.corregir+r.revisar)+' punto(s) por ajustar')}
+function calCiclo(id,n){const s=ST[id];if(!s.cal)return;const x=s.cal.p.find(q=>q.n===n);const o=['bien','revisar','corregir'];x.e=o[(o.indexOf(x.e)+1)%3];x.m=1;guardar();renderAsig()}
+function calCorreo(a){const s=ST[a.id],c=s.cal;
+  const lin=c.p.filter(x=>x.e!=='bien').map(x=>'• '+CAL_PUNTOS[x.n-1]+': '+(x.a||x.f||'por revisar'));
+  (c.nc||[]).forEach(x=>lin.push('• Revisar el documento "'+x.ar+'": '+x.m));
+  return 'Estimado/a '+(a.docente||'docente')+':\n\nHemos revisado los contenidos de la asignatura '+a.materia+(a.programa?' ('+a.programa+')':'')+'. Para poder continuar con el proceso, le pedimos por favor los siguientes ajustes:\n\n'+lin.join('\n')+
+    '\n\nQuedamos atentos a los documentos corregidos. Puede responder directamente a este correo.\n\nCordialmente,\n\n'+(CFG.FIRMA||'Equipo de Generación de Contenidos · EIG Campus')}
+function calDevolver(id){const a=DATOS.find(x=>x.id===id),s=ST[id];if(!s.cal){toast('Primero pega el resultado de la revisión');return}
+  if(cal9(s)&&!confirm('La revisión está en 9/9. ¿Seguro que quieres devolverla al docente?'))return;
+  copiarTexto(calCorreo(a),'Correo copiado: pégalo en Outlook respondiendo al profesor');
+  const r=calResumen(s.cal);const ta=document.getElementById('nota-'+id);if(ta)ta.value='Devolución con informe de calidad ronda '+s.cal.r+': '+r.corregir+' por corregir, '+r.revisar+' por revisar';
+  s.cal.dev=true;registrar(id,'alDocente')}
+function cajaCalidad(a){const s=ST[a.id],c=s.cal;
+  if(s.etapa!=='rev'){if(!c)return '';const r=calResumen(c);
+    return '<div class="box"><h4>Revisión de calidad</h4><div style="font-size:13px">'+(cal9(s)?'<span class="cr ok">9/9</span>':'<span class="cr '+(r.corregir?'mal':'hoy')+'">'+r.corregir+' por corregir · '+r.revisar+' por revisar</span>')+' <span class="mini">· ronda '+c.r+' · '+fmt(c.f)+(c.dev?' · devuelta al docente':'')+'</span></div></div>'}
+  const pegar=CAL_PEGAR[a.id]||!c;
+  let h='<div class="box" style="border-color:#c9c3f3"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap"><h4 style="margin:0">Revisión de calidad · ronda '+calRonda(s)+'</h4><span class="acts">'+
+    '<button class="btn" onclick="calPreparar(\''+a.id+'\')">1 · Preparar para Claude</button><button class="btn" onclick="CAL_PEGAR[\''+a.id+'\']=true;renderAsig()">2 · Pegar resultado</button></span></div>';
+  if(pegar)h+='<div class="mini" style="margin-bottom:6px">Pega aquí la respuesta completa de Claude (incluye el bloque FABRICA_REVISION_V1).</div><textarea id="cal-txt-'+a.id+'" style="min-height:70px"></textarea><div class="row2"><button class="btn pri" onclick="calImportar(\''+a.id+'\')">Importar resultado</button>'+(c?'<button class="btn" onclick="CAL_PEGAR[\''+a.id+'\']=false;renderAsig()">Cancelar</button>':'')+'</div>';
+  if(c){const malos=c.p.filter(x=>x.e!=='bien'),buenos=c.p.filter(x=>x.e==='bien');
+    const fila=x=>'<div style="display:grid;grid-template-columns:20px minmax(0,1fr) 84px;gap:8px;align-items:start;padding:6px 0;border-top:1px dashed var(--border);font-size:12.5px"><span class="mini">'+x.n+'</span><div>'+CAL_PUNTOS[x.n-1]+(x.e!=='bien'&&(x.f||x.a)?'<div class="mini">'+esc(x.f)+(x.a?' → '+esc(x.a):'')+'</div>':'')+'</div><span class="cr '+CAL_EST[x.e][1]+'" style="cursor:pointer;text-align:center" title="Clic para cambiar" onclick="calCiclo(\''+a.id+'\','+x.n+')">'+CAL_EST[x.e][0]+(x.m?' ✎':'')+'</span></div>';
+    h+='<div class="mini" style="margin:8px 0 2px">Resultado de la ronda '+c.r+' · '+fmt(c.f)+(c.por?' · '+esc(c.por):'')+'</div>'+malos.map(fila).join('')+
+      (buenos.length?(CAL_VER[a.id]?buenos.map(fila).join(''):'<div class="mini" style="padding:6px 0;cursor:pointer;border-top:1px dashed var(--border)" onclick="CAL_VER[\''+a.id+'\']=true;renderAsig()">+ '+buenos.length+' punto(s) en bien (ver)</div>'):'')+
+      ((c.nc||[]).length?'<div style="margin-top:8px;font-size:12px;color:var(--danger)">⚠️ Posibles documentos que no corresponden: '+c.nc.map(x=>esc(x.ar)+' ('+esc(x.m)+')').join(' · ')+'</div>':'')+
+      '<div class="row2" style="margin-top:12px;flex-wrap:wrap"><button class="btn" style="border-color:#f0b4b4;color:var(--danger)" onclick="calDevolver(\''+a.id+'\')">Devolver al docente con el informe</button><button class="btn'+(cal9(s)?' pri':'')+'" onclick="registrar(\''+a.id+'\',\'aCoord\')">Aprobar → coordinador'+(cal9(s)?'':' (requiere 9/9 o motivo)')+'</button></div>';}
+  return h+'</div>'}
 function proxRecordatorio(a){const s=ST[a.id];if(s.recordatorios===false)return 'Pausados para esta asignatura';
   let base,tipos;if(s.etapa==='escr'&&a.flujo==='Autor'){base=fechas(a).entregaDocente;tipos=[[addD(base,-5),'5 días antes de la entrega'],[base,'el día de la entrega'],[addD(base,3),'3 días después (con copia a María)']]}
   else if(s.etapa==='doc'&&s.desde){base=s.desde;tipos=[[addD(base,7),'7 días sin ajustes'],[addD(base,10),'10 días sin ajustes (con copia a María)']]}
@@ -574,17 +640,23 @@ function cajaCorreos(a){const s=ST[a.id],l=(CORREOS[a.id]||[]).slice(-5).reverse
 function togRecordatorios(id){const s=ST[id];s.recordatorios=s.recordatorios===false;s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'nota',l:s.recordatorios?'Recordatorios automáticos reactivados':'Recordatorios automáticos pausados',por:s.responsable||''});guardar();render()}
 function ck(a,k){const v=ST[a.id].ent[k]||'';return '<span class="ck '+v+'" onclick="event.stopPropagation();ciclo(\''+a.id+'\',\''+k+'\')">'+CK[v]+'</span>'}
 function ciclo(id,k){const o=['','rec','ok','na'];const s=ST[id];s.ent[k]=o[(o.indexOf(s.ent[k]||'')+1)%4];if(!s.ent[k])delete s.ent[k];guardar();renderAsig()}
+function fechaRegistro(id){const el=document.getElementById('fecha-'+id);let f=el&&el.value?el.value:ymd(new Date());const hoy=ymd(new Date());
+  if(f>hoy){toast('No se puede registrar una fecha futura: se usa hoy');f=hoy}
+  return {f,ts:f===hoy?Date.now():new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10),12).getTime()}}
 function registrar(id,k){
-  const a=DATOS.find(x=>x.id===id),s=ST[id];const ta=document.getElementById('nota-'+id);const nota=ta?ta.value.trim():'';
-  if(k==='nota'){if(!nota){toast('Escribe la nota primero');return}s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'nota',l:'Nota',nota,por:s.responsable||''});guardar();render();toast('Nota guardada');return}
+  const FR=fechaRegistro(id);
+  const a=DATOS.find(x=>x.id===id),s=ST[id];const ta=document.getElementById('nota-'+id);let nota=ta?ta.value.trim():'';
+  if(k==='aCoord'&&!cal9(s)){const m=prompt('Esta asignatura no tiene la revisión de calidad en 9/9.\nPara pasarla al coordinador escribe el motivo (queda en la trazabilidad):','');
+    if(!m||!m.trim()){toast('Sin motivo no se puede pasar al coordinador');return}nota='Pasó sin calidad 9/9. Motivo: '+m.trim()+(nota?' · '+nota:'')}
+  if(k==='nota'){if(!nota){toast('Escribe la nota primero');return}s.eventos.push({f:FR.f,ts:FR.ts,t:'nota',l:'Nota'+(FR.f!==ymd(new Date())?' (registrada el '+fmt(ymd(new Date()))+')':''),nota,por:s.responsable||''});guardar();render();toast('Nota guardada · '+fmtc(FR.f));return}
   const e=EVENTOS[k];
-  s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:k,l:e.l,nota,por:s.responsable||'',de:s.etapa,a:e.a||s.etapa});
+  s.eventos.push({f:FR.f,ts:FR.ts,t:k,l:e.l+(FR.f!==ymd(new Date())?' (registrado el '+fmt(ymd(new Date()))+')':''),nota,por:s.responsable||'',de:s.etapa,a:e.a||s.etapa});
   if(e.a&&quienEtapa(a,e.a)!=='equipo')pausar(id,true);
-  if(k==='encargo')s.encargo=ymd(new Date());
+  if(k==='encargo')s.encargo=FR.f;
   if(e.ronda)s.rondas=(s.rondas||0)+1;
-  if(e.a){s.etapa=e.a;s.desde=ymd(new Date());s.incompleto=false;s.aprobCoord=false}
+  if(e.a){s.etapa=e.a;s.desde=FR.f;s.incompleto=false;s.aprobCoord=false}
   if(k==='recordatorio'||k==='recCoord'){/* no mueve la etapa ni reinicia el reloj */}
-  guardar();render();toast(e.l+' · '+fmtc(HOY));
+  guardar();render();toast(e.l+' · '+fmtc(FR.f));
 }
 function cambiarResp(id,p){if(!p)return;const s=ST[id];s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'resp',l:'Responsable: '+p+(s.responsable?' (antes '+s.responsable+')':''),por:p});s.responsable=p;guardar();render();toast('Responsable: '+p)}
 function moverEtapa(id,k){if(!k)return;const s=ST[id];s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'mover',l:'Etapa corregida a mano: '+ET[s.etapa].l+' → '+ET[k].l,de:s.etapa,a:k});s.etapa=k;s.desde=HOY;guardar();render();toast('Etapa: '+ET[k].l)}
@@ -634,12 +706,12 @@ function renderCrono(){
   if(!CRONO_MES||!meses.includes(CRONO_MES))CRONO_MES=meses.find(m=>DATOS.some(a=>a.inicio.startsWith(m)&&ST[a.id].etapa!=='fab'))||meses[0]||'';
   document.getElementById('crono-meses').innerHTML=meses.map(m=>{const n=DATOS.filter(a=>a.inicio.startsWith(m)).length;return '<span class="chip'+(m===CRONO_MES?' on':'')+'" onclick="CRONO_MES=\''+m+'\';renderCrono()">'+N[+m.slice(5)-1].slice(0,3)+' '+m.slice(2,4)+' · '+n+'</span>'}).join('');
   const sp=document.getElementById('c-p');if(sp.options.length<2)sp.innerHTML='<option value="">Todas las personas</option>'+PERSONAS.map(p=>'<option>'+p+'</option>').join('')+'<option value="__sin">Sin responsable</option>';
-  const q=document.getElementById('c-q').value.toLowerCase().trim(),fp=sp.value,ff=document.getElementById('c-fl').value,fe=document.getElementById('c-e').value;
+  const q=document.getElementById('c-q').value.toLowerCase().trim(),fp=sp.value,ff=document.getElementById('c-fl').value,fe=document.getElementById('c-e').value,cfac=document.getElementById('c-fac').value;
   const ORD={sin:0,escr:1,rev:2,doc:3,coord:4,fab:5};
   const todas=DATOS.filter(a=>a.inicio.startsWith(CRONO_MES));
   const venc=a=>{const s=ST[a.id],F=fechas(a);return s.etapa!=='fab'&&((s.etapa==='sin'&&HOY>F.encargo)||(ORD[s.etapa]<=1&&a.flujo==='Autor'&&HOY>F.entregaDocente)||HOY>F.tope)};
   let l=todas.filter(a=>{const s=ST[a.id];
-    if(fp==='__sin'&&s.responsable)return false;if(fp&&fp!=='__sin'&&s.responsable!==fp)return false;if(ff&&a.flujo!==ff)return false;
+    if(fp==='__sin'&&s.responsable)return false;if(fp&&fp!=='__sin'&&s.responsable!==fp)return false;if(ff&&a.flujo!==ff)return false;if(!pasaFac(a,cfac))return false;
     if(fe==='pend'&&s.etapa==='fab')return false;if(fe==='tarde'&&!venc(a))return false;
     if(q&&!(a.materia+' '+a.programa).toLowerCase().includes(q))return false;return true}).sort((x,y)=>fechas(x).tope.localeCompare(fechas(y).tope)||x.materia.localeCompare(y.materia));
   const fab=todas.filter(a=>ST[a.id].etapa==='fab').length,sinEnc=todas.filter(a=>ST[a.id].etapa==='sin'&&HOY>fechas(a).encargo).length,noEnt=todas.filter(a=>a.flujo==='Autor'&&ORD[ST[a.id].etapa]<=1&&HOY>fechas(a).entregaDocente).length,pasTope=todas.filter(a=>ST[a.id].etapa!=='fab'&&HOY>fechas(a).tope).length;
