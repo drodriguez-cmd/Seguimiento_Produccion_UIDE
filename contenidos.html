@@ -161,6 +161,8 @@ textarea{resize:vertical;min-height:54px}
       <div class="card"><div class="card-head"><span class="card-title">Personas de generación de contenidos</span><span class="tag">clic para ver sus asignaturas</span></div>
         <div class="prow" style="cursor:default;padding:8px 20px;background:#f5f6fa"><span class="mini">PERSONA</span><span class="mini">SUS ASIGNATURAS EN CURSO, POR ETAPA</span><span class="mini" style="text-align:center">EN CURSO</span><span class="mini" style="text-align:center">LE TOCA A ELLA</span><span class="mini">ESTADO</span></div>
         <div id="personas"></div></div>
+      <div class="card"><div class="card-head"><span class="card-title">¿En qué se va el tiempo?</span><span class="tag" id="tcat-mes"></span></div><div id="tcat"></div></div>
+      <div class="card"><div class="card-head"><span class="card-title">¿Cuánto tarda una asignatura en salir?</span><span class="tag">con reloj · salidas a Fábrica</span></div><div id="salidas"></div></div>
       <div class="card"><div class="card-head"><span class="card-title">Por facultad</span><span class="tag">para repartir por decanatura</span></div><div id="porfac"></div></div>
     </div>
     <div>
@@ -284,7 +286,7 @@ function ultimaFecha(txt){
 
 /* ── Datos: Google Sheet por medio del Apps Script ── */
 const ENC_EV=['ID','ID Asignatura','Fecha','Tipo','Texto','Nota','Por','De','A'];
-const ENC_SES=['ID','ID Asignatura','Persona','Inicio','Fin','Minutos'];
+const ENC_SES=['ID','ID Asignatura','Persona','Inicio','Fin','Minutos','Categoría','Ronda'];
 let SNAP={},COLA=[],ENVIANDO=false,CARGANDO=false,ULTIMA=null;
 function jsonp(params){return new Promise(res=>{
   const cb='gcb'+Date.now()+Math.floor(Math.random()*1e6);const s=document.createElement('script');let done=false;
@@ -298,7 +300,7 @@ function estadoSync(msg,err){const el=document.getElementById('sync');if(!el)ret
   el.textContent=msg||('✓ Guardado en el Sheet'+(ULTIMA?' · '+ULTIMA.toTimeString().slice(0,5):''))}
 function colsDe(id){const s=ST[id],w=trab(s);return{'Responsable':s.responsable||'','Etapa':s.etapa,'Desde':s.desde||'','Rondas':String(s.rondas||0),'Encargo':s.encargo||'',
   'Recordatorios':s.recordatorios===false?'No':'Sí','Marca':s.incompleto?'incompleto':s.aprobCoord?'aprobCoord':'','Entregables':JSON.stringify(s.ent||{}),
-  'Reloj inicio':w.ini?new Date(w.ini).toISOString():'','Reloj persona':w.ini?(w.persona||s.responsable||''):'','Calidad':s.cal?JSON.stringify(s.cal):''}}
+  'Reloj inicio':w.ini?new Date(w.ini).toISOString():'','Reloj persona':w.ini?(w.persona||s.responsable||''):'','Reloj categoría':w.ini?(w.cat||''):'','Calidad':s.cal?JSON.stringify(s.cal):''}}
 async function cargarSheet(){
   if(CARGANDO||COLA.length||ENVIANDO)return false;CARGANDO=true;
   const r=await jsonp({accion:'leerTodo'});CARGANDO=false;
@@ -309,7 +311,7 @@ async function cargarSheet(){
   const act=EQ.filter(x=>x['Nombre']&&String(x['Estado']).toLowerCase()!=='inactiva').map(x=>x['Nombre']);if(act.length)PERSONAS=act;
   const evPor={};EV.forEach(e=>{const ts=Date.parse(e['Fecha']);(evPor[e['ID Asignatura']]=evPor[e['ID Asignatura']]||[]).push({id:e['ID'],ts:isNaN(ts)?null:ts,f:ymdDe(e['Fecha']),t:e['Tipo'],l:e['Texto'],nota:e['Nota'],por:e['Por'],de:e['De']||undefined,a:e['A']||undefined,_ok:1})});
   Object.values(evPor).forEach(l=>l.sort((x,y)=>(x.ts||0)-(y.ts||0)));
-  const sePor={};SE.forEach(x=>{const i=Date.parse(x['Inicio']),f=Date.parse(x['Fin']);if(isNaN(i)||isNaN(f))return;(sePor[x['ID Asignatura']]=sePor[x['ID Asignatura']]||[]).push({id:x['ID'],i,f,p:x['Persona'],_ok:1})});
+  const sePor={};SE.forEach(x=>{const i=Date.parse(x['Inicio']),f=Date.parse(x['Fin']);if(isNaN(i)||isNaN(f))return;(sePor[x['ID Asignatura']]=sePor[x['ID Asignatura']]||[]).push({id:x['ID'],i,f,p:x['Persona'],c:x['Categoría']||'',r:x['Ronda']||'',_ok:1})});
   CORREOS={};CO.forEach(x=>{(CORREOS[x['ID Asignatura']]=CORREOS[x['ID Asignatura']]||[]).push(x)});
   const D=[],S={};
   A.forEach(x=>{const id=x['ID'];if(!/^\d{4}-\d{2}-\d{2}$/.test(x['Inicio']||''))return;
@@ -320,7 +322,7 @@ async function cargarSheet(){
     const ses=sePor[id]||[];const ini=Date.parse(x['Reloj inicio']);
     S[id]={etapa:ET[x['Etapa']]?x['Etapa']:'sin',desde:x['Desde']||null,responsable:x['Responsable']||null,rondas:+x['Rondas']||0,encargo:x['Encargo']||null,
       recordatorios:String(x['Recordatorios']).toLowerCase()!=='no',incompleto:x['Marca']==='incompleto',aprobCoord:x['Marca']==='aprobCoord',ent,cal:(()=>{try{return x['Calidad']?JSON.parse(x['Calidad']):null}catch(e){return null}})(),eventos:evPor[id]||[],
-      trab:{ini:isNaN(ini)?null:ini,persona:x['Reloj persona']||'',ms:ses.reduce((t,z)=>t+(z.f-z.i),0),ses}};
+      trab:{ini:isNaN(ini)?null:ini,persona:x['Reloj persona']||'',cat:x['Reloj categoría']||'',ms:ses.reduce((t,z)=>t+(z.f-z.i),0),ses}};
     D.push(a)});
   DATOS=D;ST=S;SNAP={};DATOS.forEach(a=>SNAP[a.id]=JSON.stringify(colsDe(a.id)));
   ULTIMA=new Date();estadoSync();
@@ -334,7 +336,7 @@ function guardar(){
     s.eventos.forEach(e=>{if(e._ok||e._q)return;e._q=1;e.id=e.id||('ev'+Date.now()+Math.floor(Math.random()*1e5));
       COLA.push({accion:'guardar',hoja:'Eventos',enc:JSON.stringify(ENC_EV),fila:JSON.stringify([e.id,a.id,new Date(e.ts||Date.now()).toISOString(),e.t,e.l,e.nota||'',e.por||'',e.de||'',e.a||'']),_ref:e})});
     trab(s).ses.forEach(z=>{if(z._ok||z._q)return;z._q=1;z.id=z.id||('se'+z.i+Math.floor(Math.random()*1e3));
-      COLA.push({accion:'guardar',hoja:'Sesiones',enc:JSON.stringify(ENC_SES),fila:JSON.stringify([z.id,a.id,z.p||'',new Date(z.i).toISOString(),new Date(z.f).toISOString(),String(Math.round((z.f-z.i)/60000))]),_ref:z})});
+      COLA.push({accion:'guardar',hoja:'Sesiones',enc:JSON.stringify(ENC_SES),fila:JSON.stringify([z.id,a.id,z.p||'',new Date(z.i).toISOString(),new Date(z.f).toISOString(),String(Math.round((z.f-z.i)/60000)),z.c||'',z.r||'']),_ref:z})});
   });
   procesarCola()}
 async function procesarCola(){
@@ -382,6 +384,7 @@ function alarmas(a){
     else if(s.etapa==='doc'&&dc>META.docenteAjustes)out.push({n:dc>META.docenteAjustes*2?3:2,q:'docente',txt:'El docente lleva '+dc+' días sin responder',d:dc});
     else if(s.etapa==='coord'&&dh>META.coordinador)out.push({n:dh>META.coordinador*2?3:2,q:'coordinador',txt:'El coordinador lleva '+dh+' días hábiles sin responder',d:dh});
   }
+  if((s.rondas||0)>3&&s.etapa!=='fab')out.push({n:2,q:'equipo',txt:'Se ha devuelto '+s.rondas+' veces al docente (máximo 3)',d:null});
   if(s.incompleto&&s.etapa==='rev')out.push({n:2,q:'equipo',txt:'Documentos incompletos / incidencia en la matriz',d:null});
   if(s.aprobCoord&&s.etapa==='coord')out.push({n:2,q:'equipo',txt:'Ya aprobó el coordinador: falta pasarla a Fábrica',d:null});
   return out.sort((x,y)=>y.n-x.n);
@@ -428,6 +431,24 @@ function tiemposEtapas(a){
     const q=quienEtapa(a,et);if(q&&r[q]!=null)r[q]+=msHabil(t0,t1);
   }
   return r}
+const CATS=['Escritura con IA','Revisión inicial del docente','2.ª revisión docente','3.ª revisión docente','Guiones','Comunicación'];
+function catSugerida(a,s){
+  if(a.flujo==='IA'&&(s.etapa==='sin'||s.etapa==='escr'))return 'Escritura con IA';
+  if(s.etapa==='rev'){const r=s.rondas||0;return r<=0?CATS[1]:r===1?CATS[2]:CATS[3]}
+  return 'Comunicación'}
+function dhTxt(ms){const x=fmtDias(ms);return /d$/.test(x)?x+' hábiles':x}
+function rondaAct(s){return String((s.rondas||0)+1)}
+function terminadas(s){const r=rondaAct(s),o={};s.eventos.forEach(e=>{if(e.t==='terminar'&&String(e.nota||'').indexOf('Ronda '+r+' ')===0)o[String(e.l).replace(/^Terminado: /,'').replace(/ \(automático.*$/,'')]=1});return o}
+function msCat(s,c){const r=rondaAct(s),w=trab(s);let ms=0,ini=null;w.ses.forEach(x=>{if(x.c===c&&String(x.r||'1')===r){ms+=x.f-x.i;ini=ini===null?x.i:Math.min(ini,x.i)}});if(w.ini&&w.cat===c){ms+=Date.now()-w.ini;ini=ini===null?w.ini:Math.min(ini,w.ini)}return {ms,ini}}
+function _marcarTerminado(a,s,c,auto){const m=msCat(s,c);if(!m.ms)return false;
+  s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'terminar',l:'Terminado: '+c+(auto?' (automático al enviar)':''),nota:'Ronda '+rondaAct(s)+' · trabajado '+fmtH(m.ms)+' · desde el '+fmt(ymd(new Date(m.ini)))+' ('+dhTxt(msHabil(m.ini,Date.now()))+')',por:s.responsable||''});return true}
+function terminar(id){const a=DATOS.find(x=>x.id===id),s=ST[id],w=trab(s);const sel=document.getElementById('cat-'+id);const c=(w.ini&&w.cat)||(sel&&sel.value)||catSugerida(a,s);
+  if(w.ini)pausar(id,true);
+  if(!_marcarTerminado(a,s,c,false)){toast('No hay tiempo registrado en '+c+' en esta ronda');render();return}
+  guardar();render();toast('Terminado: '+c)}
+function autoTerminar(a,s,k){let c=null;if(k==='alDocente'||k==='aCoord')c=catSugerida(a,s);else if(k==='iaLista')c='Escritura con IA';
+  if(c&&!terminadas(s)[c])_marcarTerminado(a,s,c,true)}
+function elegirCat(id,v){const s=ST[id],w=trab(s);if(!v)return;if(w.ini){pausar(id,true);w.cat=v;empezar(id,true);render();toast('Ahora: '+v)}else{w.cat=v}}
 function trab(s){if(!s.trab)s.trab={ini:null,ms:0,ses:[]};return s.trab}
 function msTrab(s){const w=trab(s);return w.ms+(w.ini?Date.now()-w.ini:0)}
 function fmtH(ms){const m=Math.round(ms/60000);if(m<1)return '0 min';const h=Math.floor(m/60);return h?h+' h '+String(m%60).padStart(2,'0')+' min':m+' min'}
@@ -438,10 +459,10 @@ function empezar(id){
   const a=DATOS.find(x=>x.id===id),s=ST[id];
   if(!s.responsable){toast('Asigna una responsable antes de empezar');return}
   corriendo(s.responsable).forEach(o=>{if(o.id!==id)pausar(o.id,true)});
-  const w=trab(s);if(w.ini)return;w.ini=Date.now();w.persona=s.responsable;guardar();render();if(!arguments[1])toast(s.responsable+' empezó · '+a.materia.slice(0,40))}
+  const w=trab(s);if(w.ini)return;const sel=document.getElementById('cat-'+id);w.cat=(sel&&sel.value)||w.cat||catSugerida(a,s);w.ini=Date.now();w.persona=s.responsable;guardar();render();if(!arguments[1])toast(s.responsable+' empezó · '+w.cat)}
 function pausar(id,silencio){
   const s=ST[id],w=trab(s);if(!w.ini)return;
-  const fin=Date.now();if(fin-w.ini>=60000)w.ses.push({i:w.ini,f:fin,p:s.responsable||''});w.ms+=fin-w.ini;w.ini=null;guardar();
+  const fin=Date.now();if(fin-w.ini>=60000)w.ses.push({i:w.ini,f:fin,p:s.responsable||'',c:w.cat||'',r:String((s.rondas||0)+1)});w.ms+=fin-w.ini;w.ini=null;guardar();
   if(!silencio){render();toast('Pausado · '+fmtH(w.ms)+' en total')}}
 function promPersona(p){
   const mias=DATOS.filter(a=>ST[a.id].responsable===p);
@@ -480,6 +501,17 @@ function renderDash(){
   const fac={};DATOS.forEach(a=>{const s=ST[a.id];if(s.etapa==='fab')return;const f=a.facultad||'';const o=fac[f]=fac[f]||{n:0,curso:0,sinR:0,resp:{}};o.n++;if(ACTIVAS.includes(s.etapa))o.curso++;if(!s.responsable)o.sinR++;else o.resp[s.responsable]=(o.resp[s.responsable]||0)+1});
   document.getElementById('porfac').innerHTML='<div class="prow" style="cursor:default;padding:8px 20px;background:#f5f6fa;grid-template-columns:minmax(0,1.4fr) 60px 60px 80px minmax(0,2fr)"><span class="mini">FACULTAD</span><span class="mini" style="text-align:center">PENDIENTES</span><span class="mini" style="text-align:center">EN CURSO</span><span class="mini" style="text-align:center">SIN RESPONSABLE</span><span class="mini">QUIÉN LAS TIENE HOY</span></div>'+
     Object.entries(fac).sort((x,y)=>y[1].n-x[1].n).map(([f,o])=>'<div class="prow" style="grid-template-columns:minmax(0,1.4fr) 60px 60px 80px minmax(0,2fr)" onclick="document.getElementById(\'f-fac\').value=\''+esc(f||'__sin')+'\';verAsig(\'\')"><div class="nm" style="font-size:13px">'+esc(f?facCorta(f):'Sin facultad')+'</div><div class="num"><b>'+o.n+'</b></div><div class="num"><b>'+o.curso+'</b></div><div class="num"><b style="color:'+(o.sinR?'var(--warn)':'inherit')+'">'+o.sinR+'</b></div><div class="mini">'+Object.entries(o.resp).sort((x,y)=>y[1]-x[1]).map(([p,n])=>p+' '+n).join(' · ')+'</div></div>').join('');
+  {const mes=HOY.slice(0,7),T={},tot={};DATOS.forEach(a=>{const w=trab(ST[a.id]);const add=(p,c,ms)=>{if(!p)return;T[p]=T[p]||{};T[p][c]=(T[p][c]||0)+ms;tot[p]=(tot[p]||0)+ms};
+      w.ses.forEach(x=>{if(ymd(new Date(x.i)).slice(0,7)===mes)add(x.p,x.c||'Sin categoría',x.f-x.i)});if(w.ini)add(w.persona||ST[a.id].responsable,w.cat||'Sin categoría',Date.now()-w.ini)});
+    const cols=CATS.concat(Object.values(T).some(o=>o['Sin categoría'])?['Sin categoría']:[]);const gt='grid-template-columns:minmax(0,1fr) repeat('+cols.length+',minmax(0,1fr)) 70px';
+    document.getElementById('tcat-mes').textContent='este mes · horas';
+    document.getElementById('tcat').innerHTML=Object.keys(T).length?'<div class="prow" style="cursor:default;padding:8px 20px;background:#f5f6fa;'+gt+'"><span class="mini">PERSONA</span>'+cols.map(c=>'<span class="mini" style="text-align:center">'+esc(c.toUpperCase())+'</span>').join('')+'<span class="mini" style="text-align:center">TOTAL</span></div>'+
+      PERSONAS.filter(p=>T[p]).map(p=>'<div class="prow" style="cursor:default;'+gt+'"><div class="nm" style="font-size:13px">'+esc(p)+'</div>'+cols.map(c=>'<div class="num">'+(T[p][c]?(Math.round(T[p][c]/36e5*10)/10).toString().replace('.',','):'—')+'</div>').join('')+'<div class="num"><b>'+(Math.round(tot[p]/36e5*10)/10).toString().replace('.',',')+'</b></div></div>').join(''):'<div class="empty">Todavía no hay tiempos registrados este mes</div>'}
+  {const P={};DATOS.forEach(a=>{const s=ST[a.id],w=trab(s);if(s.etapa!=='fab'||!w.ses.length)return;const ini=w.ses.reduce((m,x)=>Math.min(m,x.i),Infinity);const fin=s.eventos.filter(e=>e.a==='fab'&&e.ts).map(e=>e.ts).pop();if(!fin||fin<ini)return;
+      const p=s.responsable||'—';const o=P[p]=P[p]||{n:0,dias:0,ms:0};o.n++;o.dias+=msHabil(ini,fin)/864e5;o.ms+=msTrab(s)});
+    const gs='grid-template-columns:minmax(0,1.2fr) 70px 110px 110px';
+    document.getElementById('salidas').innerHTML=Object.keys(P).length?'<div class="prow" style="cursor:default;padding:8px 20px;background:#f5f6fa;'+gs+'"><span class="mini">PERSONA</span><span class="mini" style="text-align:center">SALIDAS</span><span class="mini" style="text-align:center">DÍAS HÁBILES (PROM.)</span><span class="mini" style="text-align:center">HORAS TRABAJADAS (PROM.)</span></div>'+
+      Object.entries(P).map(([p,o])=>'<div class="prow" style="cursor:default;'+gs+'"><div class="nm" style="font-size:13px">'+esc(p)+'</div><div class="num"><b>'+o.n+'</b></div><div class="num">'+(Math.round(o.dias/o.n*10)/10).toString().replace('.',',')+'</div><div class="num">'+(Math.round(o.ms/o.n/36e5*10)/10).toString().replace('.',',')+'</div></div>').join(''):'<div class="empty">Aparece cuando salga a Fábrica la primera asignatura trabajada con el reloj</div>'}
   const viv=DATOS.filter(a=>trab(ST[a.id]).ini);
   document.getElementById('vivo').innerHTML=viv.length?viv.map(a=>'<div class="qrow" onclick="abrir(\''+a.id+'\')"><div class="q1"><div>'+esc(ST[a.id].responsable)+'</div><div class="q2">'+esc(a.materia)+'</div></div><span class="dd" style="color:var(--ok);font-variant-numeric:tabular-nums" data-clk="'+a.id+'">'+fmtClk(msTrab(ST[a.id]))+'</span></div>').join(''):'<div class="empty">Nadie tiene el reloj corriendo</div>';
   const cola=q=>DATOS.filter(a=>quien(a,ST[a.id])===q&&ACTIVAS.includes(ST[a.id].etapa)).map(a=>({a,s:ST[a.id],r:reloj(a)})).sort((x,y)=>y.r.ord-x.r.ord);
@@ -543,7 +575,7 @@ function pasoSiguiente(a,s){
     else if(cal9(s))pasos=['La revisión quedó en 9/9: pasarla al coordinador desde la caja de Revisión de calidad.'];
     else pasos=['Ya hay revisión con puntos por corregir: <b>Devolver al docente</b> (copia el correo listo y envíalo).','Si las corrige el equipo, volver a <b>Preparar para Claude</b> para una nueva ronda.']}
   else if(s.etapa==='doc'){quienT='Le toca al profesor';pasos=['El profesor está haciendo ajustes; los recordatorios salen solos a los 7 y 10 días.','Cuando respondan, registrar <b>Ajustes recibidos</b> o <b>Aprobado por el docente</b>.']}
-  else if(s.etapa==='coord'){quienT=s.aprobCoord?'Le toca al equipo':'Le toca al coordinador';pasos=s.aprobCoord?['El coordinador ya aprobó: entregarla a la Fábrica y registrarlo.']:['Esperando la respuesta del coordinador.','Cuando responda, registrar lo que dijo (aprobó o pidió cambios).']}
+  else if(s.etapa==='coord'){quienT=s.aprobCoord?'Le toca al equipo':'Le toca al coordinador';pasos=s.aprobCoord?['El coordinador ya aprobó: abajo, pulsar <b>Aprobado por coordinador → entregado a Fábrica</b>.','Cargarla en el dashboard de digitalización (Fábrica).']:['Esperando la respuesta del coordinador.','Si aprobó: pulsar <b>Aprobado por coordinador → entregado a Fábrica</b>. Si pidió cambios: <b>El coordinador pidió cambios</b>.']}
   else return '';
   const tocaEquipo=quienT==='Le toca al equipo';
   const est=tocaEquipo?(!r?'<span style="color:var(--warn);font-weight:600">Nadie la ha tomado todavía.</span> Primero alguien se asigna:':w.ini?'<span style="color:var(--ok);font-weight:600">'+esc(r)+' está trabajando en ella ahora.</span>':'<span>La tiene '+esc(r)+' · reloj en pausa.</span>'):'<span class="mini">'+(r?'Responsable: '+esc(r):'Sin responsable')+'</span>';
@@ -587,13 +619,24 @@ function detalle(a){
 }
 function cajaTiempo(a){
   const s=ST[a.id],w=trab(s),te=tiemposEtapas(a);
-  const btn=w.ini?'<button class="btn" style="border-color:#f0b4b4;color:var(--danger)" onclick="pausar(\''+a.id+'\')">Pausar</button>':'<button class="btn pri" style="background:var(--ok);border-color:var(--ok)" onclick="empezar(\''+a.id+'\')">Empezar a trabajar</button>';
-  const ses=w.ses.slice(-4).reverse().map(x=>'<div class="ev"><span class="f">'+fmtc(ymd(new Date(x.i)))+'</span><div>'+fmtH(x.f-x.i)+' <span class="w">· '+esc(x.p)+' · '+new Date(x.i).toTimeString().slice(0,5)+'–'+new Date(x.f).toTimeString().slice(0,5)+'</span></div></div>').join('');
+  const catAct=w.ini?(w.cat||catSugerida(a,s)):(w.cat&&CATS.includes(w.cat)&&w.cat===catSugerida(a,s)?w.cat:catSugerida(a,s));
+  const selC='<select id="cat-'+a.id+'" style="width:auto" onchange="elegirCat(\''+a.id+'\',this.value)" title="¿En qué vas a trabajar?">'+CATS.map(c=>'<option'+(c===catAct?' selected':'')+'>'+c+'</option>').join('')+'</select>';
+  const termAct=terminadas(s);const hayCat=w.ini||msCat(s,catAct).ms>0;
+  const btn=s.etapa==='fab'&&!w.ini?'<span class="mini">Entregada a Fábrica: el reloj quedó cerrado.</span>':selC+(w.ini?'<button class="btn" style="border-color:#f0b4b4;color:var(--danger)" onclick="pausar(\''+a.id+'\')">Pausar</button>':'<button class="btn pri" style="background:var(--ok);border-color:var(--ok)" onclick="empezar(\''+a.id+'\')">'+(msCat(s,catAct).ms>0?'Seguir':'Empezar a trabajar')+'</button>')+
+    (hayCat&&!(!w.ini&&termAct[catAct])?'<button class="btn" style="border-color:#9ccfb3;color:#137a4b" onclick="terminar(\''+a.id+'\')" title="Ya acabé esta tarea">✓ Terminar</button>':'');
+  const porCat={};w.ses.forEach(x=>{const c=x.c||'Sin categoría';porCat[c]=(porCat[c]||0)+(x.f-x.i)});if(w.ini){const c=w.cat||'Sin categoría';porCat[c]=(porCat[c]||0)+(Date.now()-w.ini)}
+  const lineaCat=Object.keys(porCat).length?'<div class="mini" style="margin-top:8px"><b>Por categoría:</b> '+Object.entries(porCat).sort((x,y)=>y[1]-x[1]).map(([c,ms])=>esc(c)+' '+fmtH(ms)).join(' · ')+'</div>':'';
+  const dev=s.rondas||0;
+  const terms=s.eventos.filter(e=>e.t==='terminar').map(e=>'<span style="display:inline-block;background:#e9f7ef;color:#137a4b;border-radius:10px;padding:1px 8px;margin:2px 4px 0 0">✓ '+esc(String(e.l).replace(/^Terminado: /,'').replace(/ \(automático.*$/,''))+' · R'+esc((String(e.nota||'').match(/^Ronda (\d+)/)||[])[1]||'')+'</span>').join('');
+  const primero=w.ses.reduce((m,x)=>Math.min(m,x.i),w.ini||Infinity);const salida=s.etapa==='fab'?(s.eventos.filter(e=>e.a==='fab'&&e.ts).map(e=>e.ts).pop()||Date.now()):Date.now();
+  const lineaOp=isFinite(primero)?'<div class="mini" style="margin-top:4px"><b>Tiempo real operativo:</b> '+dhTxt(msHabil(primero,salida))+' desde el primer Empezar ('+fmt(ymd(new Date(primero)))+')'+(s.etapa==='fab'?' hasta la salida a Fábrica':' hasta hoy')+' · '+fmtH(msTrab(s))+' trabajadas</div>':'';
+  const ses=w.ses.slice(-4).reverse().map(x=>'<div class="ev"><span class="f">'+fmtc(ymd(new Date(x.i)))+'</span><div>'+fmtH(x.f-x.i)+(x.c?' · '+esc(x.c):'')+' <span class="w">· '+esc(x.p)+' · '+new Date(x.i).toTimeString().slice(0,5)+'–'+new Date(x.f).toTimeString().slice(0,5)+'</span></div></div>').join('');
   const cel=(l,v,c)=>'<div style="background:var(--bg);border-radius:8px;padding:8px 10px"><div class="mini">'+l+'</div><div style="font-size:16px;font-weight:700;'+(c?'color:'+c:'')+'">'+v+'</div></div>';
   return '<div class="box"><h4>Tiempo · '+esc(s.responsable||'sin responsable')+'</h4>'+
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+btn+'<span style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:'+(w.ini?'var(--ok)':'var(--text)')+'" data-clk="'+a.id+'">'+fmtClk(msTrab(s))+'</span><span class="mini">'+(w.ini?'corriendo':w.ses.length?w.ses.length+' sesión'+(w.ses.length>1?'es':''):'sin iniciar')+'</span></div>'+
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+btn+'<span style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:'+(w.ini?'var(--ok)':'var(--text)')+'" data-clk="'+a.id+'">'+fmtClk(msTrab(s))+'</span><span class="mini">'+(w.ini?'corriendo · '+esc(w.cat||''):w.ses.length?w.ses.length+' sesión'+(w.ses.length>1?'es':''):'sin iniciar')+'</span></div>'+
     '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">'+cel('Trabajado',fmtH(msTrab(s)),'var(--ok)')+cel('En sus manos',fmtDias(te.equipo))+cel('Con el docente',fmtDias(te.docente))+cel('Con coordinador',fmtDias(te.coordinador))+'</div>'+
-    '<div class="mini" style="margin-top:6px">Días hábiles desde el primer registro en el dashboard'+(te.desde?' ('+fmt(ymd(new Date(te.desde)))+')':'')+'. Si empieza otra asignatura, esta se pausa sola; también al enviarla al docente o al coordinador.</div>'+
+    '<div class="mini" style="margin-top:6px">Días hábiles desde el primer registro en el dashboard'+(te.desde?' ('+fmt(ymd(new Date(te.desde)))+')':'')+'. Si empieza otra asignatura, esta se pausa sola; también al enviarla al docente o al coordinador. Si cambias la categoría con el reloj corriendo, se cierra un tramo y empieza otro. <b>Pausar</b> = la retomo después; <b>✓ Terminar</b> = ya acabé esa tarea.</div>'+
+    lineaCat+lineaOp+(terms?'<div class="mini" style="margin-top:4px">'+terms+'</div>':'')+'<div class="mini" style="margin-top:4px"><b>Devoluciones al docente:</b> <span style="'+(dev>3?'color:var(--danger);font-weight:700':'')+'">'+dev+(dev>3?' (más de 3)':'')+'</span></div>'+
     (ses?'<div style="margin-top:8px">'+ses+'</div>':'')+'</div>'}
 /* ── Revisión de calidad (skill revision-materia-eig, 9 puntos) ── */
 const CAL_PUNTOS=['Tema y ¿Qué hemos aprendido? coinciden','Entre 3 y 5 subtemas','Imágenes y tablas (cantidad y rótulos)','El tema coincide con la matriz','Guion de infografía claro y secuencial','Guiones de video: título de la matriz, saludo y máx. 404 palabras','Video de presentación docente subido','El Saber más aporta información nueva','Tests con 30 preguntas'];
@@ -673,7 +716,7 @@ function registrar(id,k){
   if(k==='nota'){if(!nota){toast('Escribe la nota primero');return}s.eventos.push({f:FR.f,ts:FR.ts,t:'nota',l:'Nota'+(FR.f!==ymd(new Date())?' (registrada el '+fmt(ymd(new Date()))+')':''),nota,por:s.responsable||''});guardar();render();toast('Nota guardada · '+fmtc(FR.f));return}
   const e=EVENTOS[k];
   s.eventos.push({f:FR.f,ts:FR.ts,t:k,l:e.l+(FR.f!==ymd(new Date())?' (registrado el '+fmt(ymd(new Date()))+')':''),nota,por:s.responsable||'',de:s.etapa,a:e.a||s.etapa});
-  if(e.a&&quienEtapa(a,e.a)!=='equipo')pausar(id,true);
+  if(e.a&&quienEtapa(a,e.a)!=='equipo')pausar(id,true);if(k==='alDocente'||k==='aCoord'||k==='iaLista'){if(trab(s).ini)pausar(id,true);autoTerminar(a,s,k)}
   if(k==='encargo')s.encargo=FR.f;
   if(e.ronda)s.rondas=(s.rondas||0)+1;
   if(e.a){s.etapa=e.a;s.desde=FR.f;s.incompleto=false;s.aprobCoord=false}
