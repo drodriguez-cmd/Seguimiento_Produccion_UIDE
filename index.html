@@ -922,6 +922,7 @@ async function borrarDatosAsignatura(nombre, id){
   const r1 = await sheetBorrar('Sesiones', 1, nombre);       // col 1 = Asignatura
   const r3 = await sheetBorrar('Timers_Activos', 5, nombre); // col 5 = Asignatura
   if(id) await sheetBorrar('Revisiones', 1, id);              // col 1 = ID Asignatura (la revisión también vuelve a cero)
+  if(id) await sheetBorrar('Comentarios', 1, id);             // col 1 = ID Asignatura (sus comentarios)
   console.log('🗑 Borrado en Sheet para "'+nombre+'":',
     'Sesiones='+(r1&&r1.borradas||0),
     'Entregables='+(r2&&r2.borradas||0),
@@ -1449,6 +1450,103 @@ function _revisoresPosibles(){
   const actual=localStorage.getItem('revisorNombre')||''; if(actual && !nombres.includes(actual)) nombres.push(actual);
   return nombres;
 }
+// ══ COMENTARIOS POR ASIGNATURA (29-oct-2026) ══
+// Pestaña "Comentarios" del Sheet (se crea sola): una fila por comentario, con autor y fecha. Nunca se pisan entre sí.
+// Escribe cualquiera del equipo eligiendo su nombre; cada comentario solo lo puede borrar quien lo escribió.
+// La nota "Observaciones" que se escribe al crear la asignatura se muestra como primera nota (no se puede borrar aquí).
+const ENC_COMENTARIOS = ['ID','ID Asignatura','Asignatura','Fecha','Autor','Texto'];
+const COM_MAX = 600;            // caracteres por comentario
+const COM_MAX_URL = 1300;       // el comentario viaja dentro de la URL de escritura: se acota para que nunca sea demasiado larga
+let COMENTARIOS = {};           // asigId -> [{id, asig, fecha, autor, texto}]
+let _comOcupado = false;
+const _comBorrador = {};        // lo que se está escribiendo, para no perderlo si la página se redibuja
+async function cargarComentarios(){
+  const r = await jsonp(API+'?hoja='+encodeURIComponent('Comentarios'));
+  // Si la lectura falló, se conserva lo que ya había (una lista vacía por error haría "desaparecer" comentarios)
+  if(!r || r.ok===false || !Array.isArray(r.filas)) return false;
+  const m={};
+  r.filas.slice(1).forEach(f=>{
+    const id=String(f[0]||'').trim(), asig=String(f[1]||'').trim(); if(!id||!asig) return;
+    (m[asig]=m[asig]||[]).push({ id, asig, fecha:String(f[3]||''), autor:String(f[4]||''), texto:String(f[5]==null?'':f[5]).replace(/^ (?=[=+\-@])/,'') });
+  });
+  const t=x=>{ const v=Date.parse(x.fecha); return isNaN(v)?0:v; };
+  Object.values(m).forEach(l=>l.sort((x,y)=>t(x)-t(y)));
+  COMENTARIOS=m;
+  STATE.asignaturas.forEach(a=>_comRefrescar(a.id,true));
+  return true;
+}
+function _comAutores(){ const yo=localStorage.getItem('revisorNombre')||''; const l=[...new Set([..._revisoresPosibles(), ...CAL_REVISORES])]; if(yo && !l.includes(yo)) l.push(yo); return l; }
+function _comConteoTxt(a){ const n=(COMENTARIOS[a.id]||[]).length + (String(a.obs||'').trim()?1:0); return n?' · '+n:''; }
+function _comFecha(f){ const d=new Date(f); if(isNaN(d)) return _cEsc(f||''); return d.toLocaleString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function comentariosHTML(a){
+  const yo=localStorage.getItem('revisorNombre')||'';
+  const lista=(COMENTARIOS[a.id]||[]).slice().reverse();   // lo más reciente arriba
+  const caja='border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#fff';
+  const items=lista.map(c=>`<div style="${caja}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:12px"><b>${_cEsc(c.autor||'—')}</b> <span style="color:var(--muted)">· ${_comFecha(c.fecha)}</span></span>
+        ${c.autor && c.autor===yo && /^[\w-]+$/.test(c.id) ? `<button class="btn btn-sm" onclick="event.stopPropagation();borrarComentario('${a.id}','${c.id}')">Borrar</button>` : ''}
+      </div>
+      <div style="font-size:13px;white-space:pre-wrap;word-break:break-word">${_cEsc(c.texto)}</div></div>`).join('');
+  const nota=String(a.obs||'').trim() ? `<div style="${caja};background:#f8faff">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Nota al crear la asignatura</div>
+      <div style="font-size:13px;white-space:pre-wrap;word-break:break-word">${_cEsc(a.obs)}</div></div>` : '';
+  const vacio = !items && !nota ? `<div style="font-size:12px;color:var(--muted);padding:6px 0">Todavía no hay comentarios en esta asignatura.</div>` : '';
+  return `<div class="ind-title" style="margin-bottom:8px">Comentarios</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;margin-bottom:8px">Soy:
+      <select onchange="setRevisor(this.value);_comRefrescar('${a.id}')" style="font-size:12px;padding:4px 8px">
+        <option value="">Elige tu nombre…</option>
+        ${_comAutores().map(n=>`<option value="${_cEsc(n)}" ${yo===n?'selected':''}>${_cEsc(n)}</option>`).join('')}
+      </select>
+      <button class="btn btn-sm" style="margin-left:auto" onclick="actualizarComentarios('${a.id}')">Actualizar</button>
+    </div>
+    <textarea id="com-txt-${a.id}" maxlength="${COM_MAX}" oninput="_comBorrador['${a.id}']=this.value" placeholder="Escribe una anotación sobre esta asignatura…" style="width:100%;min-height:64px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;font-family:inherit">${_cEsc(_comBorrador[a.id]||'')}</textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 12px">
+      <span style="font-size:11px;color:var(--muted)">Máximo ${COM_MAX} caracteres. Cada persona puede borrar solo sus propios comentarios.</span>
+      <button class="btn btn-sm btn-primary" onclick="agregarComentario('${a.id}')">Guardar comentario</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">${items}${nota}${vacio}</div>`;
+}
+function _comRefrescar(asigId, soloConteo){
+  const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
+  const cnt=document.getElementById('com-cnt-'+asigId); if(cnt) cnt.textContent=_comConteoTxt(a);
+  if(soloConteo){ const t=document.getElementById('com-txt-'+asigId); if(t && t.value) return; }   // no tocar la caja si alguien está escribiendo
+  const box=document.getElementById('com-box-'+asigId); if(box) box.innerHTML=comentariosHTML(a);
+}
+async function actualizarComentarios(asigId){
+  const ok=await cargarComentarios(); _comRefrescar(asigId);
+  toast(ok?'Comentarios al día':'No pude leer los comentarios; inténtalo de nuevo');
+}
+async function agregarComentario(asigId){
+  const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
+  const autor=localStorage.getItem('revisorNombre')||'';
+  if(!autor){ toast('Primero elige tu nombre en "Soy:"'); return; }
+  const el=document.getElementById('com-txt-'+asigId);
+  const texto=String((el&&el.value)||_comBorrador[asigId]||'').trim();
+  if(!texto){ toast('Escribe el comentario antes de guardar'); return; }
+  if(texto.length>COM_MAX){ toast('El comentario es muy largo (máximo '+COM_MAX+' caracteres)'); return; }
+  if(encodeURIComponent(JSON.stringify(texto)).length>COM_MAX_URL){ toast('El comentario es muy largo para guardarlo de una vez: divídelo en dos'); return; }
+  if(_comOcupado) return; _comOcupado=true;
+  const c={ id:'cm'+Date.now()+Math.random().toString(36).slice(2,6), asig:asigId, fecha:new Date().toISOString(), autor, texto };
+  let ok=false;
+  try{ ok=await _calEscribir('guardar','Comentarios',ENC_COMENTARIOS,[c.id, asigId, a.nombre, c.fecha, autor, texto]); }
+  finally{ _comOcupado=false; }
+  if(!ok){ toast('No se pudo guardar el comentario. Revisa la conexión e inténtalo de nuevo (tu texto sigue ahí)'); return; }
+  (COMENTARIOS[asigId]=COMENTARIOS[asigId]||[]).push(c);
+  delete _comBorrador[asigId]; if(el) el.value='';
+  _comRefrescar(asigId); toast('Comentario guardado');
+}
+async function borrarComentario(asigId, comId){
+  const l=COMENTARIOS[asigId]||[], c=l.find(x=>x.id===comId); if(!c) return;
+  const yo=localStorage.getItem('revisorNombre')||'';
+  if(!yo || c.autor!==yo){ toast('Solo quien escribió el comentario puede borrarlo'); return; }
+  if(!confirm('¿Borrar este comentario?')) return;
+  const r=await sheetBorrar('Comentarios', 0, comId);
+  if(!r || r.ok===false){ toast('No se pudo borrar. Inténtalo de nuevo'); return; }
+  COMENTARIOS[asigId]=(COMENTARIOS[asigId]||[]).filter(x=>x.id!==comId);
+  _comRefrescar(asigId); toast('Comentario borrado');
+}
+
 // Los entregables solo vivían como filas del Sheet; las que se descartaron por el fallo de duplicados
 // (o que solo están en el navegador de quien las marcó) se reconstruyen desde las SESIONES, que sí se guardaron.
 function reconstruirEntregablesDesdeSesiones(){
@@ -2268,7 +2366,7 @@ async function calResolverInc(asigId, i, resolver){
 }
 function calPrepararClaude(asigId){
   const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
-  const txt='DASHBOARD_FABRICA\nasignatura_id: '+a.id+'\nasignatura: '+a.nombre+'\nprograma: '+(a.prog||'')+'\nlanzamiento: '+(a.fechaLimite||'');
+  const txt='DASHBOARD_FABRICA\nasignatura_id: '+a.id+'\nasignatura: '+a.nombre+'\nprograma: '+(a.prog||'')+'\nlanzamiento: '+(a.fechaLimite||'')+(_linkSeguro(a.link)?'\ncarpeta: '+_linkSeguro(a.link):'');
   const ok=()=>toast('Copiado. Pégalo debajo de la carpeta de la materia, en el chat de Claude');
   try{ if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok,()=>calCopiarAlterno(txt,ok)); return; } }catch(e){}
   calCopiarAlterno(txt,ok);
@@ -2300,6 +2398,13 @@ function _calBarra(){
 }
 function _calTile(lbl,val,sub,c){ return `<div style="flex:1;min-width:150px;background:#fff;border:1px solid var(--border);border-radius:var(--r2);padding:16px;border-top:3px solid ${c}"><div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px">${lbl}</div><div style="font-family:var(--fhead);font-size:30px;font-weight:700;color:${c};line-height:1">${val}</div><div style="font-size:11px;color:var(--muted);margin-top:5px">${sub}</div></div>`; }
 
+// Enlace a la carpeta de la asignatura (columna "Link Curso"), para no tener que ir a Asignaturas a buscarla
+function _linkSeguro(u){ u=String(u||'').trim(); return /^https?:\/\//i.test(u) ? u : ''; }
+function _calCarpetaHTML(a){
+  const u=_linkSeguro(a.link);
+  if(!u) return `<span style="font-size:11px;color:#b45309">Sin carpeta registrada</span>`;
+  return `<a href="${_cEsc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#2563eb;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2);padding:3px 10px;border-radius:99px;text-decoration:none;white-space:nowrap">📁 Carpeta del curso</a>`;
+}
 function _calListaHTML(){
   const L=calLista(), ab=L.filter(x=>calAbierta(x.estado));
   const lunes=(()=>{ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d; })();
@@ -2319,7 +2424,7 @@ function _calListaHTML(){
       const inc = x.abiertas||x.resueltas ? `${x.abiertas?`<b style="color:#b91c1c">${x.abiertas} abierta${x.abiertas===1?'':'s'}</b>`:''}${x.abiertas&&x.resueltas?' · ':''}${x.resueltas?`${x.resueltas} resuelta${x.resueltas===1?'':'s'}`:''}` : '—';
       const dias = abierta ? `<span style="font-weight:${x.alerta.rojo?'700':'400'};color:${x.alerta.rojo?'#b91c1c':'inherit'}">${x.alerta.dias} día${x.alerta.dias===1?'':'s'}</span>` : '—';
       return `<tr>
-        <td style="${celda}"><div style="font-weight:600">${esVencida(a)&&abierta?'<span title="Pasó su tope de fábrica" style="color:#b91c1c">🚨 </span>':''}${_cEsc(a.nombre)}</div><div style="font-size:11px;color:var(--muted)">${_cEsc(a.prog||'')}${a.fechaLimite?' · lanza '+_cFmt(a.fechaLimite).slice(0,5):''}</div></td>
+        <td style="${celda}"><div style="font-weight:600">${esVencida(a)&&abierta?'<span title="Pasó su tope de fábrica" style="color:#b91c1c">🚨 </span>':''}${_cEsc(a.nombre)}</div><div style="font-size:11px;color:var(--muted)">${_cEsc(a.prog||'')}${a.fechaLimite?' · lanza '+_cFmt(a.fechaLimite).slice(0,5):''}</div><div style="margin-top:5px">${_calCarpetaHTML(a)}</div></td>
         <td style="${celda}">${a.inicio?_cFmt(a.inicio).slice(0,5):'—'}</td>
         <td style="${celda}">${_calBadgeEstado(x.estado)}</td>
         <td style="${celda}">${x.ronda?'Ronda '+x.ronda:'—'}</td>
@@ -2376,7 +2481,7 @@ function _calDetalleHTML(id){
   <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);padding:20px 22px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;justify-content:space-between">
     <div><div style="margin-bottom:8px">${_calBadgeEstado(estado)} ${a.status===ST_REVISION?'<span style="font-size:11px;color:#b45309;font-weight:600">fuera de la cola</span>':''}</div>
       <div style="font-family:var(--fhead);font-size:22px;font-weight:700">${esVencida(a)&&abierta?'🚨 ':''}${_cEsc(a.nombre)}</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">${_cEsc(a.prog||'')} · Ingreso a fábrica ${a.inicio?_cFmt(a.inicio).slice(0,5):'—'}${a.fechaLimite?' · Lanzamiento '+_cFmt(a.fechaLimite).slice(0,5):''}</div></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">${_cEsc(a.prog||'')} · Ingreso a fábrica ${a.inicio?_cFmt(a.inicio).slice(0,5):'—'}${a.fechaLimite?' · Lanzamiento '+_cFmt(a.fechaLimite).slice(0,5):''}</div><div style="margin-top:8px">${_calCarpetaHTML(a)}</div></div>
     <div style="display:flex;gap:28px;font-size:13px;flex-wrap:wrap">
       <div><div style="color:var(--muted);font-size:11px">Ronda</div><b>${rondas.length||'—'}</b></div>
       <div><div style="color:var(--muted);font-size:11px">Tiene la pelota</div><b>${_cEsc(calPelota(estado))||'—'}</b></div>
@@ -4431,6 +4536,7 @@ function renderAsignaturas(filtro){
             <button class="utab" onclick="showUnit('${a.id}','equipo',this)">${a.tipo==='celula'?'👥 Equipo':'Equipo'}</button>
 
             <button class="utab" onclick="showUnit('${a.id}','sesiones',this)">Sesiones</button>
+            <button class="utab" onclick="showUnit('${a.id}','comentarios',this)">Comentarios<span id="com-cnt-${a.id}">${_comConteoTxt(a)}</span></button>
         </div>
         ${a.tipo==='celula' ? renderCelulaBodyInlineSafe(a) : ''}
         <div id="unit-${a.id}-u1"  class="form-section" ${a.tipo==='celula'?'style="display:none"':''}>
@@ -4529,6 +4635,9 @@ function renderAsignaturas(filtro){
           }).join('')+
           `</tbody></table>`:`<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-txt">Sin sesiones registradas</div></div>`}
         </div>
+        <div id="unit-${a.id}-comentarios" class="form-section" style="display:none" onclick="event.stopPropagation()">
+          <div id="com-box-${a.id}">${comentariosHTML(a)}</div>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -4542,7 +4651,7 @@ function toggleAsigBody(id){
 }
 
 function showUnit(asigId, unit, el){
-  ['u1','u2','u3','global','cierre','equipo','sesiones','celula-flujo','celula-lider','celula-diseno','celula-video'].forEach(u=>{
+  ['u1','u2','u3','global','cierre','equipo','sesiones','comentarios','celula-flujo','celula-lider','celula-diseno','celula-video'].forEach(u=>{
     const d=document.getElementById(`unit-${asigId}-${u}`);
     if(d) d.style.display=u===unit?'block':'none';
   });
@@ -6790,6 +6899,7 @@ async function cargarDesdeSheets(){
     try{ if(reconstruirEntregablesDesdeSesiones()) actualizado = true; }catch(e){ console.log('[ENTREGABLES] reconstrucción:', e); }
     // Revisiones de calidad (pestaña "Revisiones")
     try{ await cargarRevisiones(); }catch(e){ console.log('[REVISIONES] error:', e); }
+    try{ await cargarComentarios(); }catch(e){ console.log('[COMENTARIOS] error:', e); }
     try{ if(await cargarCalidadEntrada()) calSanar(); calActualizarBadge(); }catch(e){ console.log('[CALIDAD] error:', e); }
     if(actualizado){
       // Check all asignaturas for auto-completion (catches ones completed before this feature)
