@@ -116,7 +116,7 @@ textarea{resize:vertical;min-height:54px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#1a1d2e;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;z-index:50;pointer-events:none}
 .toast.on{opacity:1}
 .mini{font-size:11px;color:var(--muted)}
-.ctab{width:100%;border-collapse:collapse;min-width:1050px}
+.ctab{width:100%;border-collapse:collapse;min-width:1050px}.ctab.atab td{padding:6px 5px;vertical-align:top}.ctab.atab th{padding:8px 5px;white-space:normal;line-height:1.3;min-width:96px;font-size:9.5px}#p-act .card{max-width:calc(100vw - 290px)}#p-act .filters{max-width:calc(100vw - 290px)}.atab input[type=date]{width:122px;padding:3px 4px;font-size:11.5px}.atab input.mal{border-color:#d97706;background:#fff7ed}.atab .ref{font-size:10px;color:var(--muted);margin-top:2px}
 .ctab th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:#f5f6fa;padding:9px 10px;font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap}
 .ctab td{padding:9px 10px;border-top:1px solid var(--border);font-size:12px;vertical-align:top}
 .ctab tr:hover td{background:#fafbfd}
@@ -141,6 +141,7 @@ textarea{resize:vertical;min-height:54px}
     <button class="nav-item" data-p="asig" onclick="goPage('asig')"><span class="dot" style="background:#818cf8"></span> Asignaturas</button>
     <button class="nav-item" data-p="crono" onclick="goPage('crono')"><span class="dot" style="background:#0891b2"></span> Cronograma</button>
     <button class="nav-item" data-p="alar" onclick="goPage('alar')"><span class="dot" style="background:var(--danger)"></span> Alarmas <span class="cnt" id="nav-alar">0</span></button>
+    <button class="nav-item" data-p="act" onclick="goPage('act')"><span class="dot" style="background:#16a34a"></span> Actualizar fechas</button>
     <button class="nav-item" data-p="prox" onclick="goPage('prox')"><span class="dot" style="background:#7c3aed"></span> Próximas fechas</button>
   </nav>
   <div class="sidebar-footer">
@@ -201,6 +202,12 @@ textarea{resize:vertical;min-height:54px}
   <div id="alar-body"></div>
 </div>
 
+<div class="page" id="p-act">
+  <div class="page-header"><h1>Actualizar fechas reales</h1><p>Las fechas en que de verdad pasó cada cosa (no las de UIDE). Se guardan solas en el Sheet. La etapa avanza sola con la última fecha que pongas; nunca se devuelve (para eso está Corregir etapa).</p></div>
+  <div class="filters" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr"><input id="a-q" placeholder="Buscar asignatura o programa" oninput="renderAct()"><select id="a-p" onchange="renderAct()"></select><select id="a-m" onchange="renderAct()"></select><select id="a-fl" onchange="renderAct()"><option value="">Docente UIDE y EIG</option><option value="Autor">Docente UIDE</option><option value="IA">Docente EIG</option></select><select id="a-e" onchange="renderAct()"><option value="">Todas</option><option value="pend">Sin Fábrica</option><option value="vacias">Sin ninguna fecha real</option></select></div>
+  <div class="card" style="overflow:auto"><div id="act-tabla"></div></div>
+  <div class="mini" style="margin:8px 2px 30px;line-height:1.6">Debajo de algunas casillas está la fecha de UIDE como referencia. Si una fecha queda antes que la anterior, la casilla se marca en naranja para revisarla. Para borrar una fecha, bórrala en el calendario. Las rondas se cuentan solas con los envíos al docente.</div>
+</div>
 <div class="page" id="p-prox">
   <div class="page-header"><h1>Próximas fechas</h1><p>Encargos, entregas de docentes y topes de Fábrica de los próximos 21 días (cronograma UIDE)</p></div>
   <div id="prox-body"></div>
@@ -299,7 +306,7 @@ function filasObj(m){if(!m||m.length<2)return[];const h=m[0].map(x=>String(x).tr
 function ymdDe(s){if(!s)return '';if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;const t=Date.parse(s);return isNaN(t)?String(s).slice(0,10):ymd(new Date(t))}
 function estadoSync(msg,err){const el=document.getElementById('sync');if(!el)return;el.className=err?'err':'';
   el.textContent=msg||('✓ Guardado en el Sheet'+(ULTIMA?' · '+ULTIMA.toTimeString().slice(0,5):''))}
-function colsDe(id){const s=ST[id],w=trab(s),A0=DATOS.find(x=>x.id===id)||{};return{'Institucion':A0.institucion||'','Flujo':A0.flujo||'Autor','Responsable':s.responsable||'','Etapa':s.etapa,'Desde':s.desde||'','Rondas':String(s.rondas||0),'Encargo':s.encargo||'',
+function colsDe(id){const s=ST[id],w=trab(s),A0=DATOS.find(x=>x.id===id)||{};const R0={};REAL.forEach(r=>R0[r[1]]=realDe(s,r[0]));return{...R0,'Institucion':A0.institucion||'','Flujo':A0.flujo||'Autor','Responsable':s.responsable||'','Etapa':s.etapa,'Desde':s.desde||'','Rondas':String(s.rondas||0),'Encargo':s.encargo||'',
   'Recordatorios':s.recordatorios===false?'No':'Sí','Marca':s.incompleto?'incompleto':s.aprobCoord?'aprobCoord':'','Entregables':JSON.stringify(s.ent||{}),
   'Reloj inicio':w.ini?new Date(w.ini).toISOString():'','Reloj persona':w.ini?(w.persona||s.responsable||''):'','Reloj categoría':w.ini?(w.cat||''):'','Calidad':s.cal?JSON.stringify(s.cal):''}}
 async function cargarSheet(){
@@ -323,7 +330,7 @@ async function cargarSheet(){
     const ses=sePor[id]||[];const ini=Date.parse(x['Reloj inicio']);
     S[id]={etapa:ET[x['Etapa']]?x['Etapa']:'sin',desde:x['Desde']||null,responsable:x['Responsable']||null,rondas:+x['Rondas']||0,encargo:x['Encargo']||null,
       recordatorios:String(x['Recordatorios']).toLowerCase()!=='no',incompleto:x['Marca']==='incompleto',aprobCoord:x['Marca']==='aprobCoord',ent,cal:(()=>{try{return x['Calidad']?JSON.parse(x['Calidad']):null}catch(e){return null}})(),eventos:evPor[id]||[],
-      trab:{ini:isNaN(ini)?null:ini,persona:x['Reloj persona']||'',cat:x['Reloj categoría']||'',ms:ses.reduce((t,z)=>t+(z.f-z.i),0),ses}};
+      real:Object.fromEntries([['enc','Real encargo'],['ent','Real entrega'],['e1','Real envio R1'],['a1','Real ajustes R1'],['e2','Real envio R2'],['a2','Real ajustes R2'],['e3','Real envio R3'],['a3','Real ajustes R3'],['co','Real a coordinador'],['ap','Real aprobo coordinador'],['fa','Real a Fabrica']].map(([k,c])=>[k,x[c]||''])),trab:{ini:isNaN(ini)?null:ini,persona:x['Reloj persona']||'',cat:x['Reloj categoría']||'',ms:ses.reduce((t,z)=>t+(z.f-z.i),0),ses}};
     D.push(a)});
   DATOS=D;ST=S;SNAP={};DATOS.forEach(a=>SNAP[a.id]=JSON.stringify(colsDe(a.id)));
   ULTIMA=new Date();estadoSync();
@@ -424,7 +431,9 @@ function msHabil(t0,t1){
   return ms}
 function tiemposEtapas(a){
   const s=ST[a.id],r={equipo:0,docente:0,coordinador:0,desde:null};
-  const cambios=s.eventos.filter(e=>e.ts&&e.a&&e.de&&e.a!==e.de).slice().sort((x,y)=>x.ts-y.ts);
+  let cambios=s.eventos.filter(e=>e.ts&&e.a&&e.de&&e.a!==e.de&&e.t!=='fechaAct').slice().sort((x,y)=>x.ts-y.ts);
+  const rs=REAL.filter(x=>realDe(s,x[0])).map(x=>{const f=realDe(s,x[0]);return {ts:new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10),12).getTime(),a:x[3]==='coordA'?'coord':x[3]}});
+  if(rs.length){const fin=Math.max(...rs.map(x=>x.ts));cambios=rs.concat(cambios.filter(e=>e.ts>fin)).sort((x,y)=>x.ts-y.ts)}
   if(!cambios.length)return r;
   r.desde=cambios[0].ts;
   for(let i=0;i<cambios.length;i++){
@@ -772,6 +781,8 @@ const HITO={'Encargo':[1,['encargo','iniciaIA']],'Empezar escritura':[1,['inicia
 /* Fecha REAL en que pasó un hito: la más temprana entre el botón específico y cualquier cambio de etapa que llegue a ese punto.
    Las fechas aproximadas del archivo de UIDE solo se usan si no hay otra (y se marcan con ≈). */
 function fechaReal(a,s,hito){const h=HITO[hito];if(!h)return null;
+  const col={'Encargo':'enc','Empezar escritura':'enc','Entrega docente':'ent','Escritura lista':'ent','Revisión equipo':realDe(s,'e1')?'e1':'co','Corrección docente':'a1','Coordinador':'ap','Entra a Fábrica':'fa'}[hito];
+  if(col&&realDe(s,col))return {f:realDe(s,col),aprox:false};
   const ev=s.eventos.filter(e=>e.ts&&(h[1].includes(e.t)||(e.a&&ORDH[e.a]!==undefined&&ORDH[e.a]>=h[0]&&(!e.de||ORDH[e.de]===undefined||ORDH[e.de]<h[0]))));
   const firmes=ev.filter(e=>!(e.t==='mover'&&/archivo de UIDE/i.test(e.l||'')));
   const cand=(firmes.length?firmes:ev).map(e=>({f:e.f,aprox:!firmes.length}));
@@ -784,6 +795,31 @@ function corregirFecha(id){const a=DATOS.find(x=>x.id===id),s=ST[id];if(s.etapa=
   if(!confirm('¿Confirmas que "'+a.materia+'" llegó a "'+ET[s.etapa].l+'" el '+fmt(FR.f)+'?'))return;
   s.eventos.push({f:FR.f,ts:FR.ts,t:'fechaReal',l:'Fecha real corregida: '+ET[s.etapa].l+' desde el '+fmt(FR.f)+' (corregida el '+fmt(ymd(new Date()))+')',por:s.responsable||'',de:prev,a:s.etapa});
   s.desde=FR.f;guardar();render();toast('Fecha corregida: '+ET[s.etapa].l+' desde el '+fmtc(FR.f))}
+const REAL=[['enc','Real encargo','Encargo enviado / empezó IA','escr'],['ent','Real entrega','Entregó el docente / IA lista','rev'],
+  ['e1','Real envio R1','Enviado al docente · ronda 1','doc'],['a1','Real ajustes R1','Ajustes recibidos · ronda 1','rev'],
+  ['e2','Real envio R2','Enviado al docente · ronda 2','doc'],['a2','Real ajustes R2','Ajustes recibidos · ronda 2','rev'],
+  ['e3','Real envio R3','Enviado al docente · ronda 3','doc'],['a3','Real ajustes R3','Ajustes recibidos · ronda 3','rev'],
+  ['co','Real a coordinador','Enviado al coordinador','coord'],['ap','Real aprobo coordinador','Aprobó el coordinador','coordA'],['fa','Real a Fabrica','Entregada a Fábrica','fab']];
+function realDe(s,k){return (s.real&&s.real[k])||''}
+/* La etapa sale de la ÚLTIMA casilla llenada (en el orden del proceso) */
+/* Paso del proceso en que está hoy la asignatura (mismo orden que REAL) */
+function pasoActual(s){const r=s.rondas||0;return {sin:-1,escr:0,rev:r?2*r+1:1,doc:2*Math.max(r,1),coord:s.aprobCoord?9:8,fab:10}[s.etapa]??-1}
+function aplicarReales(id){const a=DATOS.find(x=>x.id===id),s=ST[id];let ult=null,iu=-1,prevEt=null;
+  REAL.forEach((r,i)=>{if(realDe(s,r[0])){ult=r;iu=i}});
+  const pasoHoy=pasoActual(s);
+  const envios=['e1','e2','e3'].filter(k=>realDe(s,k)).length;if(envios>(s.rondas||0))s.rondas=envios;
+  if(!ult)return;
+  // Solo avanza: si la última fecha es de un paso anterior al que ya va la asignatura, la etapa no se toca
+  if(iu<pasoHoy)return;
+  const et=ult[3]==='coordA'?'coord':ult[3],aprob=ult[3]==='coordA',f=realDe(s,ult[0]);
+  if(s.etapa!==et||s.aprobCoord!==aprob||s.desde!==f){prevEt=s.etapa;
+    s.eventos.push({f,ts:new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10),12).getTime(),t:'fechaAct',l:'Actualización de fechas: '+ult[2]+' el '+fmt(f)+' (registrado el '+fmt(ymd(new Date()))+')',por:s.responsable||'',de:prevEt===et?'':prevEt,a:et});
+    s.etapa=et;s.aprobCoord=aprob;s.desde=f;s.incompleto=false}}
+function setReal(id,k,v,el){const s=ST[id];const hoy=ymd(new Date());
+  if(v&&v>hoy){toast('No se puede poner una fecha futura');el.value=realDe(s,k);return}
+  s.real=s.real||{};s.real[k]=v||'';aplicarReales(id);guardar();
+  const tr=el.closest('tr');if(tr){const a=DATOS.find(x=>x.id===id);tr.outerHTML=filaAct(a)}
+  toast(v?'Guardado: '+REAL.find(r=>r[0]===k)[2]+' '+fmtc(v):'Fecha borrada')}
 function fechaEvento(s,tipos){const e=s.eventos.find(x=>tipos.includes(x.t));return e?e.f:''}
 function celda(plan,real,hecho){
   if(!plan)return '<span class="cp">—</span>';
@@ -826,7 +862,19 @@ function renderCrono(){
     '<div class="mini" style="padding:10px 14px">Arriba de cada celda: la fecha del cronograma UIDE. Abajo: lo que pasó (✓ a tiempo o tarde) o, si aún no pasa, si está vencido o cuántos días faltan. Las fechas reales salen de los botones que registra el equipo; lo anterior al dashboard aparece como "✓ hecho" sin fecha.</div>';
 }
 
-function render(){if(!DATOS.length)return;renderAlar();const p=document.querySelector('.page.active').id;if(p==='p-dash')renderDash();if(p==='p-asig')renderAsig();if(p==='p-prox')renderProx();if(p==='p-crono')renderCrono()}
+function filaAct(a){const s=ST[a.id],F=fechas(a);let prev='';
+  const refs={enc:a.plan&&a.plan.encargoUIDE&&a.plan.encargoUIDE!==F.encargo?'UIDE '+fmtc(F.encargo):'UIDE '+fmtc(F.encargo),ent:'UIDE '+fmtc(F.entregaDocente),co:F.coordDesde?'UIDE '+fmtc(F.coordDesde):'',fa:'tope '+fmtc(F.tope)};
+  const celdas=REAL.map(r=>{const v=realDe(s,r[0]);const mal=v&&prev&&v<prev;if(v)prev=v;
+    return '<td><input type="date" max="'+HOY+'" value="'+v+'" class="'+(mal?'mal':'')+'" title="'+r[2]+'" onchange="setReal(\''+a.id+'\',\''+r[0]+'\',this.value,this)">'+(refs[r[0]]?'<div class="ref">'+refs[r[0]]+'</div>':'')+'</td>'}).join('');
+  return '<tr><td style="min-width:220px"><div style="font-weight:600;font-size:12.5px;cursor:pointer" onclick="abrir(\''+a.id+'\')">'+esc(a.materia)+'</div><div class="cp">'+(docTipo(a)?'Docente '+docTipo(a):'¿UIDE o EIG?')+' · inicia '+fmtc(a.inicio)+' · '+esc(s.responsable||'sin responsable')+'</div></td><td>'+estHtml(a,s)+'<div class="cp">'+(s.rondas||0)+' ronda'+((s.rondas||0)===1?'':'s')+'</div></td>'+celdas+'</tr>'}
+function renderAct(){
+  const sp=document.getElementById('a-p');if(sp.options.length<2){sp.innerHTML='<option value="">Todas las personas</option>'+PERSONAS.map(p=>'<option>'+p+'</option>').join('')+'<option value="__sin">Sin responsable</option>'}
+  const sm=document.getElementById('a-m');if(sm.options.length<2){const N=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];sm.innerHTML='<option value="">Todos los meses de inicio</option>'+[...new Set(DATOS.map(a=>a.inicio.slice(0,7)))].sort().map(m=>'<option value="'+m+'">Inician '+N[+m.slice(5)-1]+' '+m.slice(0,4)+'</option>').join('')}
+  const q=document.getElementById('a-q').value.toLowerCase().trim(),fp=sp.value,fm=sm.value,ff=document.getElementById('a-fl').value,fe=document.getElementById('a-e').value;
+  const l=DATOS.filter(a=>{const s=ST[a.id];if(fp==='__sin'&&s.responsable)return false;if(fp&&fp!=='__sin'&&s.responsable!==fp)return false;if(fm&&!a.inicio.startsWith(fm))return false;if(ff&&a.flujo!==ff)return false;
+    if(fe==='pend'&&s.etapa==='fab')return false;if(fe==='vacias'&&REAL.some(r=>realDe(s,r[0])))return false;if(q&&!(a.materia+' '+a.programa).toLowerCase().includes(q))return false;return true}).sort((x,y)=>x.inicio.localeCompare(y.inicio)||x.materia.localeCompare(y.materia));
+  document.getElementById('act-tabla').innerHTML='<table class="ctab atab"><tr><th>Asignatura ('+l.length+')</th><th>Etapa hoy</th>'+REAL.map(r=>'<th>'+r[2]+'</th>').join('')+'</tr>'+(l.length?l.map(filaAct).join(''):'<tr><td colspan="13" class="empty">Sin asignaturas con esos filtros</td></tr>')+'</table>'}
+function render(){if(!DATOS.length)return;renderAlar();const p=document.querySelector('.page.active').id;if(p==='p-dash')renderDash();if(p==='p-asig')renderAsig();if(p==='p-prox')renderProx();if(p==='p-act')renderAct();if(p==='p-crono')renderCrono()}
 async function iniciar(){
   if(API.indexOf('http')!==0){estadoSync('⚠ Falta pegar la URL del Apps Script en el archivo (const API).',true);return}
   for(let i=0;i<3;i++){if(await cargarSheet())break;await new Promise(r=>setTimeout(r,3000))}
