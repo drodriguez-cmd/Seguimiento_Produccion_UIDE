@@ -820,6 +820,16 @@ textarea{resize:vertical;min-height:70px}
     </div>
   </div>
 </div>
+<div id="modal-cierre" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:24px;max-width:460px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div id="modal-cierre-tit" style="font-family:var(--fhead);font-size:16px;font-weight:700;margin-bottom:8px"></div>
+    <div id="modal-cierre-txt" style="font-size:13px;line-height:1.55;margin-bottom:16px"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn" onclick="cerrarRecordatorioCierre()">Entendido</button>
+      <button class="btn btn-primary" onclick="irAlCierre()">Ir al Cierre</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg"></span></div>
 
 <script>
@@ -1415,6 +1425,82 @@ function faltaCierreTexto(a){
   const r=revisionAsig(a); if(!r.completa) f.push('revisión de calidad '+r.hechos+'/'+r.total);
   return f.join(' y ');
 }
+// ══ RECORDATORIO DE CIERRE (3-nov-2026, pedido del coordinador) ══
+// Cuando una persona completa los entregables de SU frente pero le falta su parte del cierre, se le recuerda.
+// Su parte: video = el punto "video" de la revisión; diseño = el banner y los otros 5 puntos. El plazo sigue
+// corriendo mientras tanto (la revisión es tiempo de trabajo y cuenta).
+function _frenteEntregablesListos(a, esVideo){ return esVideo ? videoCompletoAsig(a) : disenoCompletoAsig(a); }
+// Lo que le falta a ese frente para terminar (lista de textos). Vacía = no le falta nada.
+function faltaCierreFrente(a, esVideo){
+  const f=[], rv=a.revision||{};
+  if(!esVideo && !bannerHechoAsig(a)) f.push('Hacer el banner (timer “Creación de banner”)');
+  REVISION_ITEMS.forEach(([k,lbl])=>{ if(REVISION_ITEMS_FRENTE[esVideo?'video':'diseno'].includes(k) && !(rv[k] && rv[k].ok)) f.push('Marcar en la revisión: “'+lbl+'”'); });
+  if(_timerAbiertoFrente(a, esVideo)) f.push('Cerrar el timer que sigue abierto en esta asignatura');
+  return f;
+}
+// ¿Entregables del frente listos pero aún sin terminar su parte del cierre? (para Tiempos y la tarjeta)
+function frenteFaltaCierre(a, esVideo){
+  if(!a || a.tipo!=='celula' || a.status==='Completada' || a.status==='Pausada') return false;
+  if(!_frenteEntregablesListos(a, esVideo)) return false;
+  return faltaCierreFrente(a, esVideo).length>0;
+}
+let _recordatorioCierre = null;
+// Sonido suave al abrir el recordatorio: dos notas cortas y bajitas, generadas por el navegador (sin archivos).
+// Si el navegador no lo permite, simplemente no suena.
+let _audioCtx = null;
+function sonidoRecordatorio(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+    _audioCtx = _audioCtx || new AC();
+    if(_audioCtx.state==='suspended' && _audioCtx.resume) _audioCtx.resume();
+    const t0 = _audioCtx.currentTime;
+    [[880,0],[1318.5,0.12]].forEach(([freq,desfase])=>{
+      const o=_audioCtx.createOscillator(), g=_audioCtx.createGain();
+      o.type='sine'; o.frequency.value=freq;
+      g.gain.setValueAtTime(0.0001, t0+desfase);
+      g.gain.exponentialRampToValueAtTime(0.08, t0+desfase+0.02);   // volumen bajo
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+desfase+0.35);
+      o.connect(g); g.connect(_audioCtx.destination);
+      o.start(t0+desfase); o.stop(t0+desfase+0.4);
+    });
+  }catch(e){}
+}
+// Se llama al registrar una sesión (timer cerrado o sesión manual). Solo mira el frente de esa sesión.
+function recordarCierreSiToca(asigId, persona, rol){
+  try{
+    const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
+    const esVideo=_esDelFrenteT(persona, rol, true);
+    if(!frenteFaltaCierre(a, esVideo)) return;
+    const falta=faltaCierreFrente(a, esVideo).filter(t=>!/^Cerrar el timer/.test(t)); // si aún tiene otro timer abierto, se le recuerda al cerrarlo
+    if(!falta.length || _timerAbiertoFrente(a, esVideo)) return;
+    const quien = esVideo ? (a.videoPersona||persona) : (CELULA_CFG[a.celula]?.label || persona);
+    _recordatorioCierre = { asigId:a.id, revisor:quien };
+    const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    document.getElementById('modal-cierre-tit').textContent = '✅ '+(esVideo?'Videos':'Entregables de diseño')+' completos';
+    document.getElementById('modal-cierre-txt').innerHTML =
+      'Completaste '+(esVideo?'los videos':'los entregables de diseño')+' de <b>'+esc(a.nombre)+'</b>. '+
+      'Para terminar tu parte, no olvides la pestaña <b>Cierre</b>:<ul style="margin:8px 0 8px 18px;padding:0">'+
+      falta.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>'+
+      '<span style="font-size:12px;color:var(--muted)">Mientras falte, el dashboard no te da por terminada esta asignatura y el tiempo sigue contando.</span>';
+    document.getElementById('modal-cierre').style.display='flex';
+    sonidoRecordatorio();
+  }catch(e){ console.log('[RECORDATORIO CIERRE] error:', e); }
+}
+function cerrarRecordatorioCierre(){ document.getElementById('modal-cierre').style.display='none'; }
+function irAlCierre(){
+  const r=_recordatorioCierre; cerrarRecordatorioCierre(); if(!r) return;
+  const a=STATE.asignaturas.find(x=>x.id===r.asigId); if(!a) return;
+  if(r.revisor && _revisoresPosibles().includes(r.revisor)) setRevisor(r.revisor); // su nombre ya elegido en "Revisa:"
+  const buscador=document.getElementById('asig-search'); if(buscador) buscador.value=a.nombre;
+  _asigQuery=String(a.nombre||'').toLowerCase().trim(); _asigCelula='all';
+  const fc=document.getElementById('asig-celula-filter'); if(fc) fc.value='all';
+  goPage('asignaturas', document.querySelector(`.nav-item[onclick*="'asignaturas'"]`));
+  renderAsignaturas('all');
+  const body=document.getElementById('body-'+a.id); if(body && !body.classList.contains('open')) toggleAsigBody(a.id);
+  const tab=body && [...body.querySelectorAll('.utab')].find(b=>(b.getAttribute('onclick')||'').includes("'cierre'"));
+  if(tab) showUnit(a.id,'cierre',tab);
+  const sec=document.getElementById('unit-'+a.id+'-cierre'); if(sec && sec.scrollIntoView) sec.scrollIntoView({behavior:'smooth',block:'center'});
+}
 async function cargarRevisiones(){
   const r = await jsonp(API+'?hoja='+encodeURIComponent('Revisiones'));
   // Si la lectura falló, se conserva lo local (una lista vacía por error borraría revisiones ya hechas)
@@ -2009,7 +2095,9 @@ function calcularFilasTiempos(){
       inicioMs, inicioAuto, sinArrancar: !info.iniciado,
       diasTranscurridos, diasProduccion: info.diasProduccion||0,
       objetivo, fechaEsperada, completo, sobreObjetivo, fechaVencida,
-      prioridad: a.prioridad||'media', fechaLimite: a.fechaLimite||''
+      prioridad: a.prioridad||'media', fechaLimite: a.fechaLimite||'',
+      faltaCierre: !completo && frenteFaltaCierre(a, g.esVideo),
+      faltaCierreTxt: !completo ? faltaCierreFrente(a, g.esVideo).join(' · ') : ''
     });
   };
   Object.values(grupos).forEach(g=>{
@@ -4117,6 +4205,7 @@ function completarTimer(id,nota='',minsManual=null){
   );
   sheetTimerActivo('completar', t);
   renderTimers(); renderDashboardTimers(); toast('Sesión guardada · '+minsToStr(mins));
+  recordarCierreSiToca(sesion.asigId, sesion.persona, sesion.rol);
 }
 
 function completarTimerRemoto(id, persona){
@@ -4207,6 +4296,7 @@ function guardarManual(){
   STATE.sesiones.unshift(sesion);
   autoMarcarEntregable(asigId,tarea);
   guardarEstadoLocal();
+  setTimeout(()=>recordarCierreSiToca(asigId, persona, rol), 0);
   setSyncStatus('sync');
   sheetGuardar('Sesiones',
     ['ID','Asignatura','Programa','Rol','Tarea','Clase','Minutos','Dias','Fecha Inicio','Fecha Fin','Notas','Manual','Persona','ID Asignatura'],
@@ -4639,6 +4729,7 @@ function renderAsignaturas(filtro){
           <span class="badge ${stBadgeDisplay}">${statusDisplay}</span>
           ${alertaHTML}
           ${esVencida(a)?`<span title="Pasó el tope de fábrica: lanzamiento menos ${TOPE_HABILES} días hábiles (lo que necesita la carga en Canvas). Va primero en la cola." style="font-size:10px;font-weight:700;color:#b91c1c;background:rgba(239,68,68,.12);padding:2px 8px;border-radius:99px">VENCIDA · tope ${fmtFecha(fechaTopeFabrica(a.fechaLimite))}</span>`:''}
+          ${[[false,'🎨 Diseño'],[true,'🎬 Video']].filter(([v])=>frenteFaltaCierre(a,v)).map(([v,lbl])=>`<span title="${lbl.slice(3)}: le falta ${faltaCierreFrente(a,v).join(' · ').replace(/"/g,'&quot;')}" style="font-size:10px;font-weight:700;color:#b45309;background:rgba(217,119,6,.10);border:1px dashed rgba(217,119,6,.5);padding:2px 8px;border-radius:99px">${lbl} listo · falta su cierre</span>`).join('')}
           ${(a.status!=='Completada' && progAsig(a)===100 && !cierreCompletoAsig(a))?`<span title="Todo el avance está listo; falta para cerrarla: ${faltaCierreTexto(a)}" style="font-size:10px;font-weight:700;color:#b45309;background:rgba(217,119,6,.14);padding:2px 8px;border-radius:99px">FALTA CIERRE</span>`:''}
           <select onclick="event.stopPropagation()" onchange="event.stopPropagation();cambiarPrioridad('${a.id}',this.value)" style="font-size:10px;color:${priColor2};font-weight:600;border:1px solid var(--border2);border-radius:4px;padding:2px 4px;background:white">
             <option value="alta" ${a.prioridad==='alta'?'selected':''}>🔴 Alta</option>
@@ -6589,6 +6680,7 @@ function renderTiempos(){
     const frenteCfg = f.esVideo ? {icon:'🎬', label:'Video', color:'#2563eb'} : {icon:'🎨', label:'Diseño', color:'#ea6c1a'};
     const estadoTxt = f.completo
       ? (f.sobreObjetivo ? `⚠️ Terminó sobre el objetivo (+${(f.diasProduccion-f.objetivo).toFixed(1)}d)` : '✅ Terminó en plazo')
+      : f.faltaCierre ? (f.fechaVencida ? '🔴 Atrasada · entregables listos, falta su cierre' : '🟡 Entregables listos · falta su cierre')
       : f.sinArrancar ? (f.fechaVencida ? '🔴 Atrasada · sin arrancar' : '⏳ Asignada, sin arrancar')
       : (f.fechaVencida ? '🔴 Atrasada (venció la fecha esperada)'
          : f.sobreObjetivo ? '🟠 Sobre las horas objetivo' : '🟢 En plazo');
@@ -6605,7 +6697,7 @@ function renderTiempos(){
       <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
       <td style="font-size:12px">${fmtFechaHora(f.fechaEsperada.getTime())}</td>
       <td style="font-size:12px">${f.fechaLimite?fmtFecha(f.fechaLimite):'—'}</td>
-      <td style="color:${estadoColor};font-weight:600;font-size:12px">${estadoTxt}</td>
+      <td style="color:${f.faltaCierre&&!f.fechaVencida?'#b45309':estadoColor};font-weight:600;font-size:12px"${f.faltaCierre?` title="Le falta: ${String(f.faltaCierreTxt).replace(/"/g,'&quot;')}"`:''}>${estadoTxt}</td>
     </tr>`;
   };
 
