@@ -923,6 +923,7 @@ async function borrarDatosAsignatura(nombre, id){
   const r3 = await sheetBorrar('Timers_Activos', 5, nombre); // col 5 = Asignatura
   if(id) await sheetBorrar('Revisiones', 1, id);              // col 1 = ID Asignatura (la revisión también vuelve a cero)
   if(id) await sheetBorrar('Comentarios', 1, id);             // col 1 = ID Asignatura (sus comentarios)
+  if(id) await sheetBorrar('Asignaciones_Video', 1, id);      // col 1 = ID Asignatura (cuándo se asignó el video)
   console.log('🗑 Borrado en Sheet para "'+nombre+'":',
     'Sesiones='+(r1&&r1.borradas||0),
     'Entregables='+(r2&&r2.borradas||0),
@@ -1909,7 +1910,42 @@ function infoFrente(a, esVideo){
 // REPORTE "TIEMPOS" — cuánto tarda cada persona en cada frente (diseño/video)
 // ════════════════════════════════════════════
 const OBJETIVO_DIAS_FRENTE = { diseno: 3, video: 1 }; // días hábiles de 8h, según lo acordado
+// ── Inicio automático del plazo en Tiempos (3-nov-2026, pedido del coordinador; decisiones de Derly) ──
+// Diseño: Inicio = la asignación a esa persona o el fin del diseño de lo que ella estaba haciendo antes (lo que sea más tarde).
+//   Si arrancó el timer antes (p. ej. avanzó su reserva), cuenta el timer. Sin timer, solo sale la que debería estar
+//   trabajando ahora (su activa o, si no tiene, su primera reserva), como en la regla de "sin movimiento".
+// Video: Inicio = la asignación a esa editora (pestaña Asignaciones_Video, se registra desde ahora).
+// Solo desde ahora: lo que terminó antes del corte se queda como estaba.
+const TIEMPOS_INICIO_AUTO_DESDE = Date.parse('2026-11-03T00:00:00-05:00');
+let _cacheTiempos = {};
+function _ultimaAsignacionMs(log, asigId, persona){ const arr=(log||{})[asigId]||[]; for(let i=arr.length-1;i>=0;i--) if(arr[i].persona===persona) return arr[i].ms; return null; }
+function inicioAutomaticoFrente(a, esVideo, info, completo, cache){
+  const ahora=Date.now(); cache=cache||{};
+  if(completo && !(info.iniciado && info.ultimoFin>=TIEMPOS_INICIO_AUTO_DESDE)) return null;
+  if(a.status===ST_REVISION || a.status==='Pausada') return null;
+  if(esVideo){
+    if(!a.videoPersona) return null;
+    const ms=_ultimaAsignacionMs(_asignacionesVideoLog, a.id, a.videoPersona);
+    return (ms && ms<=ahora) ? ms : null;
+  }
+  const P=a.celula; if(!P) return null;
+  if(!info.iniciado){
+    if(!cache.cands) cache.cands=new Set(_candidatasSinMovimiento().map(x=>x.a.id));
+    if(!cache.cands.has(a.id)) return null;
+  }
+  const asig=_ultimaAsignacionMs(_asignacionesLog, a.id, P); if(!asig) return null;
+  const limite = info.iniciado ? info.fechaMs : ahora;
+  cache.trabajos=cache.trabajos||{};
+  if(!cache.trabajos[P]) cache.trabajos[P]=STATE.asignaturas
+    .filter(x=>x.celula===P && x.tipo==='celula' && (x.status==='Completada' || disenoCompletoAsig(x)))
+    .map(x=>{ const i=infoFrente(x,false); return i.iniciado ? { id:x.id, ini:i.fechaMs, fin:i.ultimoFin } : null; }).filter(Boolean);
+  // Lo que ella empezó antes que esta: esta no podía arrancar hasta terminar eso
+  let finAnt=0; cache.trabajos[P].forEach(t=>{ if(t.id!==a.id && t.ini<limite && t.fin>finAnt) finAnt=t.fin; });
+  const auto=Math.max(asig, finAnt);
+  return auto<=ahora ? auto : null;
+}
 function calcularFilasTiempos(){
+  _cacheTiempos = {};
   const filas = [];
   STATE.asignaturas.forEach(a=>{
     if(a.tipo!=='celula') return;
@@ -1919,26 +1955,31 @@ function calcularFilasTiempos(){
     ].forEach(({esVideo, key, persona})=>{
       if(!persona) return; // no tiene a nadie asignado en ese frente, nada que mostrar
       const info = infoFrente(a, esVideo);
-      if(!info.iniciado) return; // aún no arranca ese frente, no hay tiempo que medir
       // Si la asignatura ya quedó "Completada" en general (ej. el correo de entrega ya
       // salió), la damos por completa aquí también — antes esto solo miraba el detalle
       // fino de entregables marcados uno por uno, y podía quedar "atrasada" en esta
       // página aunque ya estuviera cerrada de verdad.
       const completo = a.status==='Completada' || (esVideo ? videoCompletoAsig(a) : disenoCompletoAsig(a));
+      // Inicio automático (3-nov-2026): el reloj del PLAZO arranca cuando la asignatura pasa a ser de esa persona
+      // (al terminar la anterior o al asignarse), no con el primer timer. Las horas trabajadas siguen saliendo solo de los timers.
+      const auto = inicioAutomaticoFrente(a, esVideo, info, completo, _cacheTiempos);
+      if(!info.iniciado && auto===null) return; // aún no arranca ese frente, no hay tiempo que medir
+      const inicioMs = info.iniciado ? (auto!==null ? Math.min(info.fechaMs, auto) : info.fechaMs) : auto;
+      const sinArrancar = !info.iniciado;
       const objetivo = OBJETIVO_DIAS_FRENTE[key];
       const finParaTranscurridos = completo ? new Date(info.ultimoFin) : new Date();
-      const ymdInicio = (()=>{ const d=new Date(info.fechaMs); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+      const ymdInicio = (()=>{ const d=new Date(inicioMs); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
       const diasTranscurridos = diasHabilesEntre(ymdInicio, finParaTranscurridos);
-      const fechaEsperada = sumarDiasHabiles(info.fechaMs, objetivo);
-      const sobreObjetivo = info.diasProduccion > objetivo;
+      const fechaEsperada = sumarDiasHabiles(inicioMs, objetivo);
+      const sobreObjetivo = (info.diasProduccion||0) > objetivo;
       // La fecha vencida es la señal MÁS fuerte: si ya pasó el calendario y no está
       // completo, es atraso real sin importar cuántas horas de trabajo lleve acumuladas.
       const fechaVencida = !completo && Date.now() > fechaEsperada.getTime();
       filas.push({
         asigId: a.id, asigNombre: a.nombre, prog: a.prog,
         persona, frente: key, esVideo,
-        inicioMs: info.fechaMs,
-        diasTranscurridos, diasProduccion: info.diasProduccion,
+        inicioMs, inicioAuto: inicioMs!==info.fechaMs, sinArrancar,
+        diasTranscurridos, diasProduccion: info.diasProduccion||0,
         objetivo, fechaEsperada, completo, sobreObjetivo, fechaVencida,
         prioridad: a.prioridad||'media', fechaLimite: a.fechaLimite||''
       });
@@ -3243,6 +3284,37 @@ async function registrarAsignaciones(){
     return [a.id+'|'+a.celula+'|'+new Date(ahora).toISOString().slice(0,13), a.id, a.celula, new Date(ahora).toISOString()];
   });
   for(const f of filas) await sheetGuardar('Asignaciones', ENC_ASIGNACIONES, f);
+}
+// Asignaciones de VIDEO (3-nov-2026): cuándo se le asignó cada asignatura a cada editora. Hoja aparte para no mezclarla
+// con la de diseño (que usa la regla de "sin movimiento"). Alimenta el Inicio automático de la página Tiempos.
+const ENC_ASIGNACIONES_VIDEO = ['ID','ID Asignatura','Persona','Fecha'];
+let _asignacionesVideoLog = {}, _asignacionesVideoLogOk = false;
+async function cargarAsignacionesVideoLog(){
+  _asignacionesVideoLogOk = false;
+  const r = await jsonp(API+'?hoja='+encodeURIComponent('Asignaciones_Video'));
+  if(!r || r.ok===false || !Array.isArray(r.filas)) return;   // lectura fallida: no se registra nada (evita duplicar)
+  const log = {};
+  r.filas.slice(1).forEach(f=>{
+    const id=String(f[1]||''), persona=String(f[2]||''), ms=Date.parse(String(f[3]||''));
+    if(!id || !persona || isNaN(ms)) return;
+    (log[id]=log[id]||[]).push({ persona, ms });
+  });
+  Object.values(log).forEach(a=>a.sort((x,y)=>x.ms-y.ms));
+  _asignacionesVideoLog = log; _asignacionesVideoLogOk = true;
+}
+async function registrarAsignacionesVideo(){
+  if(!_asignacionesVideoLogOk) return;
+  const nuevas = STATE.asignaturas.filter(a=>{
+    if(a.tipo!=='celula' || !a.videoPersona || a.status==='Completada' || a.status==='Pausada' || a.status===ST_REVISION || videoCompletoAsig(a)) return false;
+    const arr=_asignacionesVideoLog[a.id]||[], ult=arr[arr.length-1];
+    return !ult || ult.persona!==a.videoPersona;
+  });
+  const ahora=Date.now();
+  const filas = nuevas.map(a=>{
+    (_asignacionesVideoLog[a.id]=_asignacionesVideoLog[a.id]||[]).push({ persona:a.videoPersona, ms:ahora });
+    return [a.id+'|'+a.videoPersona+'|'+new Date(ahora).toISOString().slice(0,13), a.id, a.videoPersona, new Date(ahora).toISOString()];
+  });
+  for(const f of filas) await sheetGuardar('Asignaciones_Video', ENC_ASIGNACIONES_VIDEO, f);
 }
 function _diaHabilAnterior(ymd, n){ let d=ymd, c=0; while(c<n){ d=_topeSumarDias(d,-1); if(_topeEsHabil(d)) c++; } return d; }
 // Lo que debería estar trabajando cada persona: su activa (En producción) o, si no tiene, su reserva
@@ -6458,6 +6530,7 @@ function renderTiempos(){
     const frenteCfg = f.esVideo ? {icon:'🎬', label:'Video', color:'#2563eb'} : {icon:'🎨', label:'Diseño', color:'#ea6c1a'};
     const estadoTxt = f.completo
       ? (f.sobreObjetivo ? `⚠️ Terminó sobre el objetivo (+${(f.diasProduccion-f.objetivo).toFixed(1)}d)` : '✅ Terminó en plazo')
+      : f.sinArrancar ? (f.fechaVencida ? '🔴 Atrasada · sin arrancar' : '⏳ Asignada, sin arrancar')
       : (f.fechaVencida ? '🔴 Atrasada (venció la fecha esperada)'
          : f.sobreObjetivo ? '🟠 Sobre las horas objetivo' : '🟢 En plazo');
     const estadoColor = (f.fechaVencida || f.sobreObjetivo) ? 'var(--danger)' : 'var(--ok)';
@@ -6467,7 +6540,7 @@ function renderTiempos(){
       <td>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div></td>
       <td><span class="role-pill" style="background:${frenteCfg.color}18;color:${frenteCfg.color};font-size:11px;padding:3px 10px">${frenteCfg.icon} ${frenteCfg.label}</span></td>
       <td style="font-size:11px;font-weight:600;color:${PCOL[f.prioridad]||PCOL.media}">${PRIORIDAD_EMOJI[f.prioridad]||'🟡'} ${f.prioridad.charAt(0).toUpperCase()+f.prioridad.slice(1)}</td>
-      <td style="font-size:12px">${fmtFechaHora(f.inicioMs)}</td>
+      <td style="font-size:12px">${fmtFechaHora(f.inicioMs)}${f.inicioAuto?`<div style="font-size:10px;color:var(--muted)" title="El plazo arrancó cuando la asignatura pasó a ser de esta persona, antes del primer timer">${f.sinArrancar?'sin timer aún':'antes del 1.er timer'}</div>`:''}</td>
       <td style="text-align:center" title="Días de calendario hábiles (lun-vie, sin festivos) desde que arrancó — no son horas trabajadas">${f.diasTranscurridos}d cal.</td>
       <td style="text-align:center;font-weight:700" title="Horas de trabajo real acumuladas, convertidas a jornadas de 8h">${f.diasProduccion.toFixed(2)}d</td>
       <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
@@ -6491,6 +6564,7 @@ function renderTiempos(){
     </div>`;
 
   el.innerHTML =
+    `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6"><b>Inicio</b> = cuando la asignatura pasó a ser de esa persona: en diseño, al terminar la anterior o al asignársela; en video, al asignársela. Si el primer timer fue antes, cuenta el timer. La <b>producción real</b> sigue saliendo solo de los timers.</div>` +
     tabla('Frentes activos ahora mismo', '🔴', activas, 'Nada activo en este momento') +
     tabla('Historial de frentes completados', '📗', completadas, 'Todavía no hay ninguno completado');
 }
@@ -6952,6 +7026,7 @@ async function cargarDesdeSheets(){
     limpiarReservasDuplicadas();
     // Sin movimiento: anotar cuándo se asignó cada una y soltar las que llevan un día hábil sin diseño
     try{ await cargarAsignacionesLog(); registrarAsignaciones().catch(e=>console.log('[ASIGNACIONES] error:', e)); await liberarSinMovimiento(); }catch(e){ console.log('[SIN MOVIMIENTO] error:', e); }
+    try{ await cargarAsignacionesVideoLog(); registrarAsignacionesVideo().catch(e=>console.log('[ASIGNACIONES VIDEO] error:', e)); }catch(e){ console.log('[ASIGNACIONES VIDEO] error:', e); }
     // Reordenar reservas ya asignadas si algo más urgente quedó esperando en la cola —
     // MÁXIMO una vez al día (por navegador). Como todo el equipo tiene el dashboard
     // abierto a la vez, correr esto en cada sincronización (cada 15 min, en cada refresco)
