@@ -1880,13 +1880,17 @@ function infoFrente(a, esVideo){
   STATE.sesiones.forEach(s=>{
     if(s.asigId===a.id || s.asigNombre===a.nombre) considerar(Number(s.inicio), Number(s.fin), s.persona, s.rol);
   });
-  Object.values(STATE.timers||{}).forEach(t=>{
-    if((t.asigId===a.id || t.asigNombre===a.nombre) && t.running) considerar(Number(t.inicio), Date.now(), t.persona, t.rol);
-  });
-  const localIds=Object.keys(STATE.timers||{});
-  (STATE.timersSheets||[]).forEach(t=>{
-    if(!localIds.includes(t.id) && (t.asigId===a.id || t.asigNombre===a.nombre)) considerar(Number(t.inicio), Date.now(), t.persona, t.rol);
-  });
+  // Una asignatura Completada ya terminó: un timer que haya quedado abierto en ella es un resto (bug visual) y no
+  // cuenta, ni para sus días ni para decir que la persona sigue trabajando en ella (3-nov-2026, Juan Diego).
+  if(a.status!=='Completada'){
+    Object.values(STATE.timers||{}).forEach(t=>{
+      if((t.asigId===a.id || t.asigNombre===a.nombre) && t.running) considerar(Number(t.inicio), Date.now(), t.persona, t.rol);
+    });
+    const localIds=Object.keys(STATE.timers||{});
+    (STATE.timersSheets||[]).forEach(t=>{
+      if(!localIds.includes(t.id) && (t.asigId===a.id || t.asigNombre===a.nombre)) considerar(Number(t.inicio), Date.now(), t.persona, t.rol);
+    });
+  }
   if(!intervalos.length || primerInicio===null) return { iniciado:false };
   intervalos.sort((x,y)=>x[0]-y[0]);
   let totalMs=0, ci=intervalos[0][0], cf=intervalos[0][1];
@@ -1957,6 +1961,12 @@ function finFrenteTiempos(a, esVideo, info){
   }
   let fin = info.iniciado ? info.ultimoFin : 0;
   items.forEach(k=>{ const ms = rv[k] && rv[k].ok ? Date.parse(rv[k].fecha||'') : NaN; if(!isNaN(ms) && ms>fin) fin=ms; });
+  // Una Completada terminó, a más tardar, cuando se cerró: una sesión registrada después (p. ej. al cerrar un timer
+  // olvidado) no la "reabre" ni le corre el término a la persona.
+  if(a.status==='Completada' && a.fechaCompletado){
+    const fc = String(a.fechaCompletado).length===10 ? Date.parse(a.fechaCompletado+'T23:59:59-05:00') : Date.parse(a.fechaCompletado);
+    if(!isNaN(fc) && (!fin || fin>fc)) fin = fc;
+  }
   return fin || null;
 }
 function calcularFilasTiempos(){
