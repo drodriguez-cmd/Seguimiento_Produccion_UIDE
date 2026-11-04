@@ -388,6 +388,7 @@ function alarmas(a){
   if(ACTIVAS.includes(s.etapa)&&!(s.etapa==='escr'&&a.flujo==='Autor')){
     if(s.desde==null){out.push({n:1,q:quien(a,s),txt:'Sin fecha de último movimiento (falta registrar)',d:null})}
     else if(s.etapa==='escr'&&dh>META.iaEscribe)out.push({n:dh>META.iaEscribe+2?3:2,q:'equipo',txt:'Escritura con IA lleva '+dh+' días hábiles (meta '+META.iaEscribe+')',d:dh});
+    else if(s.etapa==='rev'&&a.flujo==='IA'&&!(s.rondas>0)){const F2=fechas(a);if(F2.entregaDocente&&HOY>F2.entregaDocente)out.push({n:3,q:'equipo',txt:'Lista pero sin enviar al profesor: la fecha de UIDE era el '+fmtc(F2.entregaDocente),d:diasCal(F2.entregaDocente,HOY)})}
     else if(s.etapa==='rev'&&dh>META.equipoRevisa)out.push({n:dh>META.equipoRevisa+2?3:2,q:'equipo',txt:etiquetaEtapa(a,s).split(' · ')[0]+': '+dh+' días hábiles (meta '+META.equipoRevisa+')',d:dh});
     else if(s.etapa==='doc'&&dc>META.docenteAjustes)out.push({n:dc>META.docenteAjustes*2?3:2,q:'docente',txt:'El docente lleva '+dc+' días sin responder',d:dc});
     else if(s.etapa==='coord'&&dh>META.coordinador)out.push({n:dh>META.coordinador*2?3:2,q:'coordinador',txt:'El coordinador lleva '+dh+' días hábiles sin responder',d:dh});
@@ -418,6 +419,7 @@ function esc(t){return String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt
 function estHtml(a,s){return '<span class="est"><i style="background:'+ET[s.etapa].c+'"></i>'+etiquetaEtapa(a,s)+'</span>'}
 function reloj(a){const s=ST[a.id];
   if(s.etapa==='escr'&&a.flujo==='Autor'){const F=fechas(a);const d=diasCal(HOY,F.entregaDocente);return d<0?{txt:(-d)+' d tarde',ord:1000-d}:{txt:'faltan '+d+' d',ord:-d}}
+  if(s.etapa==='rev'&&a.flujo==='IA'&&!(s.rondas>0)){const F=fechas(a);const d=diasCal(HOY,F.entregaDocente);return d<0?{txt:(-d)+' d tarde',ord:1000-d}:{txt:'enviar en '+d+' d',ord:-d}}
   if(!ACTIVAS.includes(s.etapa))return {txt:'—',ord:-9999};
   if(!s.desde)return {txt:'s/f',ord:-1};
   const d=diasCal(s.desde,HOY);return {txt:d+' d',ord:d}}
@@ -594,7 +596,8 @@ function pasoSiguiente(a,s){
   else if(s.etapa==='rev'){quienT='Le toca al equipo';
     if(!s.cal)pasos=['Pulsar <b>1 · Preparar para Claude</b> (el reloj arranca solo) y pegar el texto en Claude.','Copiar toda la respuesta de Claude y pulsar <b>2 · Pegar resultado</b> → <b>Importar resultado</b>.','Según el resultado: devolver al docente con el correo listo, o pasar al coordinador.'];
     else if(cal9(s))pasos=['La revisión quedó en 9/9: pasarla al coordinador desde la caja de Revisión de calidad.'];
-    else pasos=['Ya hay revisión con puntos por corregir: <b>Devolver al docente</b> (copia el correo listo y envíalo).','Si las corrige el equipo, volver a <b>Preparar para Claude</b> para una nueva ronda.']}
+    else pasos=['Ya hay revisión con puntos por corregir: <b>Devolver al docente</b> (copia el correo listo y envíalo).','Si las corrige el equipo, volver a <b>Preparar para Claude</b> para una nueva ronda.'];
+    if(a.flujo==='IA'&&!(s.rondas>0))pasos=['Ya está escrita: envíala al profesor para que la revise. Fecha de UIDE para entregársela: <b>'+fmt(fechas(a).entregaDocente)+'</b> (puede ir antes).'].concat(!cal9(s)?['Si quieres, pásala antes por la revisión de calidad (1 · Preparar para Claude).']:[])}
   else if(s.etapa==='doc'){quienT='Le toca al profesor';pasos=['El profesor está haciendo ajustes; los recordatorios salen solos a los 7 y 10 días.','Cuando respondan, registrar <b>Ajustes recibidos</b> o <b>Aprobado por el docente</b>.']}
   else if(s.etapa==='coord'){quienT=s.aprobCoord?'Le toca al equipo':'Le toca al coordinador';pasos=s.aprobCoord?['El coordinador ya aprobó: abajo, pulsar <b>Aprobado por coordinador → entregado a Fábrica</b>.','Cargarla en el dashboard de digitalización (Fábrica).']:['Esperando la respuesta del coordinador.','Si aprobó: pulsar <b>Aprobado por coordinador → entregado a Fábrica</b>. Si pidió cambios: <b>El coordinador pidió cambios</b>.']}
   else return '';
@@ -611,7 +614,7 @@ function detalle(a){
   const tl='<div class="tl">'+pts.map(p=>{let c='';if(hecho[p[0]])c='ok';else if(!actualPuesto){actualPuesto=true;c=HOY>p[1]?'tarde':'aqui'}else if(HOY>p[1])c='tarde';
     return '<div class="p '+c+'" title="'+(c==='ok'?'Ya pasó':c==='aqui'?'Es lo que toca ahora':c==='tarde'?'Atrasado: la fecha ya pasó y no se ha hecho':'Todavía no')+'"><i></i>'+p[0]+'<b>'+fmt(p[1])+'</b>'+((p[0]==='Encargo enviado'||p[0]==='Empezamos a escribir')&&a.plan&&a.plan.encargoUIDE&&a.plan.encargoUIDE!==p[1]?'<span class="real" style="color:var(--muted);font-weight:400" title="UIDE lo pone en fin de semana o festivo; sale el siguiente día hábil">UIDE: '+['dom','lun','mar','mié','jue','vie','sáb'][new Date(a.plan.encargoUIDE+'T12:00').getDay()]+' '+fmtc(a.plan.encargoUIDE)+'</span>':'')+realTxt(p[1],fechaReal(a,s,p[0]))+'</div>'}).join('')+'</div>'+
     '<div class="tl-ley"><span style="--c:var(--ok)">Hecho</span><span style="--c:#3b8be0">Lo que toca ahora</span><span style="--c:var(--danger)">Atrasado</span><span style="--c:#fff;--b:var(--border2)">Todavía no</span></div>';
-  const posibles=Object.entries(EVENTOS).filter(([k,e])=>e.de.includes(s.etapa)&&(!e.flujo||e.flujo===a.flujo)&&!(s.etapa==='rev'&&(k==='alDocente'||k==='aCoord')));
+  const posibles=Object.entries(EVENTOS).filter(([k,e])=>e.de.includes(s.etapa)&&(!e.flujo||e.flujo===a.flujo)&&!(s.etapa==='rev'&&(k==='aCoord'||(k==='alDocente'&&!(a.flujo==='IA'&&!(s.rondas>0))))));
   const acts=posibles.map(([k,e],i)=>'<button class="btn'+(i===0?' pri':'')+'" onclick="event.stopPropagation();registrar(\''+a.id+'\',\''+k+'\')">'+e.l+'</button>').join('');
   const al=alarmas(a);
   const evs=s.eventos.slice().sort((x,y)=>(x.ts||0)-(y.ts||0)).reverse().map(e=>'<div class="ev"><span class="f">'+fmt(e.f)+'</span><div>'+esc(e.l)+(e.nota?'<div class="w">'+esc(e.nota)+'</div>':'')+'<div class="w">'+esc(e.por||'')+'</div></div></div>').join('');
