@@ -125,6 +125,36 @@ textarea{resize:vertical;min-height:54px}
 .cr.ok{background:#e7f6ec;color:var(--ok)}.cr.mal{background:#fde8e8;color:var(--danger)}.cr.esp{background:var(--bg3);color:var(--muted)}.cr.hoy{background:#fdf3e1;color:#b45309}
 #sync.err{color:var(--danger);font-weight:600}
 .row2{display:flex;gap:8px;align-items:center;margin-top:8px}
+.ay-btn{position:fixed;right:22px;bottom:22px;z-index:60;background:#1f2937;color:#fff;border:0;border-radius:99px;padding:11px 18px;font:600 13.5px inherit;font-family:inherit;box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer}
+.ay-panel{position:fixed;right:22px;bottom:76px;z-index:61;width:380px;max-width:calc(100vw - 44px);max-height:70vh;overflow:auto;background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:14px 16px;display:none}
+.ay-panel.show{display:block}.ay-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.ay-panel input{flex:1}.ay-sug{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.ay-sug span{font-size:11.5px;background:#f1f3f8;border-radius:99px;padding:3px 10px;cursor:pointer}
+.ay-item{border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px;cursor:pointer}.ay-t{font-weight:600;font-size:13px}.ay-a{display:none;font-size:12.8px;line-height:1.55;margin-top:6px}.ay-item.open .ay-a{display:block}
+.ay-btn{display:flex;align-items:center;gap:8px;padding:6px 18px 6px 8px!important;animation:ayBrinco 9s ease-in-out infinite}
+.ay-btn:hover{animation:none;transform:translateY(-2px)}
+@keyframes ayBrinco{0%,88%,100%{transform:translateY(0)}91%{transform:translateY(-9px)}94%{transform:translateY(0)}96%{transform:translateY(-4px)}}
+.masc{display:inline-block;width:34px;height:34px;flex-shrink:0}.masc.grande{width:52px;height:52px}.masc svg{width:100%;height:100%;overflow:visible}
+.masc .m-cuerpo{fill:#e8336d}.masc .m-chispa{fill:#ffc94d;animation:ayChispa 2.4s ease-in-out infinite;transform-origin:49px 9px}
+.masc .m-ojos ellipse{fill:#fff;animation:ayParpadeo 5s infinite;transform-box:fill-box;transform-origin:center}
+.masc .m-pup circle{fill:#1f2937}.masc .m-pup{transition:transform .3s}
+.masc .m-mej ellipse{fill:#ff8fb1;opacity:.85}
+.masc .b{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;display:none}.masc .b-feliz{fill:#fff;stroke-linejoin:round}.masc .b-ups{fill:#fff;stroke:none}
+.masc .m-felizojos{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;display:none}
+.masc .m-gota{fill:#7cc4ff;display:none}.masc .m-puntos{fill:#c9cfdc;display:none}
+.masc .b-normal{display:inline}
+.masc.pensando .b-normal{display:none}.masc.pensando .b-piensa{display:inline}.masc.pensando .m-pup{transform:translate(2px,-3px)}
+.masc.pensando .m-puntos{display:inline}.masc.pensando .m-puntos circle{animation:ayPunto 1s infinite}
+.masc.pensando .m-puntos circle:nth-child(2){animation-delay:.2s}.masc.pensando .m-puntos circle:nth-child(3){animation-delay:.4s}
+.masc.feliz .b-normal,.masc.feliz .m-ojos{display:none}.masc.feliz .b-feliz,.masc.feliz .m-felizojos{display:inline}.masc.feliz svg{animation:aySalto .6s ease-out}
+.masc.ups .b-normal{display:none}.masc.ups .b-ups,.masc.ups .m-gota{display:inline}.masc.ups .m-pup{transform:translate(-1px,1px)}.masc.ups svg{animation:ayDuda .5s ease-in-out}
+.masc.saluda svg{animation:ayLado 9s ease-in-out infinite;transform-origin:50% 90%}
+@keyframes ayParpadeo{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes ayChispa{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.6);opacity:.6}}
+@keyframes ayPunto{0%,100%{opacity:.3}50%{opacity:1}}
+@keyframes aySalto{0%{transform:translateY(0)}40%{transform:translateY(-6px)}100%{transform:translateY(0)}}
+@keyframes ayDuda{0%,100%{transform:rotate(0)}30%{transform:rotate(-8deg)}70%{transform:rotate(6deg)}}
+@keyframes ayLado{0%,88%,100%{transform:rotate(0)}91%{transform:rotate(-10deg)}94%{transform:rotate(8deg)}}
+@media (prefers-reduced-motion:reduce){.ay-btn,.masc svg,.masc *{animation:none!important}}
 </style>
 </head>
 <body>
@@ -215,6 +245,38 @@ textarea{resize:vertical;min-height:54px}
 </div>
 </div>
 <div class="toast" id="toast"></div>
+<button class="ay-btn" type="button" onclick="abrirAyuda()" title="¿Dudas sobre el dashboard?"><span class="masc saluda" id="ay-masc-btn"><svg viewBox="0 0 64 64" aria-hidden="true">
+<path class="m-cuerpo" d="M32 6c14.4 0 25 9.6 25 23s-10.6 23-25 23c-2.6 0-5-.3-7.3-.9L13 57l2.6-9.6C10 43.3 7 36.6 7 29 7 15.6 17.6 6 32 6z"/>
+<circle class="m-chispa" cx="49" cy="9" r="3.2"/>
+<g class="m-mej"><ellipse cx="17.5" cy="35" rx="4" ry="2.4"/><ellipse cx="46.5" cy="35" rx="4" ry="2.4"/></g>
+<g class="m-ojos"><ellipse cx="24" cy="26" rx="5.2" ry="6"/><ellipse cx="40" cy="26" rx="5.2" ry="6"/>
+<g class="m-pup"><circle cx="25" cy="27" r="2.6"/><circle cx="41" cy="27" r="2.6"/></g></g>
+<path class="m-felizojos" d="M19 27q5-6 10 0M35 27q5-6 10 0"/>
+<path class="b b-normal" d="M26 38q6 5 12 0"/>
+<path class="b b-feliz" d="M23 36q9 11 18 0z"/>
+<ellipse class="b b-ups" cx="32" cy="40" rx="3.6" ry="4.4"/>
+<path class="b b-piensa" d="M28 40h8"/>
+<path class="m-gota" d="M51 20c2 3 3 4.6 3 6a3 3 0 0 1-6 0c0-1.4 1-3 3-6z"/>
+<g class="m-puntos"><circle cx="50" cy="52" r="2"/><circle cx="56" cy="47" r="2.6"/><circle cx="60" cy="40" r="3.2"/></g>
+</svg></span><span>Pregúntame</span></button>
+<div class="ay-panel" id="ayuda"><div class="ay-head"><div style="display:flex;align-items:center;gap:10px"><span class="masc grande" id="ay-masc"><svg viewBox="0 0 64 64" aria-hidden="true">
+<path class="m-cuerpo" d="M32 6c14.4 0 25 9.6 25 23s-10.6 23-25 23c-2.6 0-5-.3-7.3-.9L13 57l2.6-9.6C10 43.3 7 36.6 7 29 7 15.6 17.6 6 32 6z"/>
+<circle class="m-chispa" cx="49" cy="9" r="3.2"/>
+<g class="m-mej"><ellipse cx="17.5" cy="35" rx="4" ry="2.4"/><ellipse cx="46.5" cy="35" rx="4" ry="2.4"/></g>
+<g class="m-ojos"><ellipse cx="24" cy="26" rx="5.2" ry="6"/><ellipse cx="40" cy="26" rx="5.2" ry="6"/>
+<g class="m-pup"><circle cx="25" cy="27" r="2.6"/><circle cx="41" cy="27" r="2.6"/></g></g>
+<path class="m-felizojos" d="M19 27q5-6 10 0M35 27q5-6 10 0"/>
+<path class="b b-normal" d="M26 38q6 5 12 0"/>
+<path class="b b-feliz" d="M23 36q9 11 18 0z"/>
+<ellipse class="b b-ups" cx="32" cy="40" rx="3.6" ry="4.4"/>
+<path class="b b-piensa" d="M28 40h8"/>
+<path class="m-gota" d="M51 20c2 3 3 4.6 3 6a3 3 0 0 1-6 0c0-1.4 1-3 3-6z"/>
+<g class="m-puntos"><circle cx="50" cy="52" r="2"/><circle cx="56" cy="47" r="2.6"/><circle cx="60" cy="40" r="3.2"/></g>
+</svg></span><div><b>¡Hola! ¿En qué te ayudo?</b><div class="mini" id="ay-estado" style="margin:2px 0 0">Pregúntame lo que quieras del dashboard.</div></div></div><span onclick="abrirAyuda()" style="cursor:pointer;font-size:18px">×</span></div>
+  <div class="mini" style="margin:6px 0 8px">Escribe tu duda con tus palabras.</div>
+  <div style="display:flex;gap:6px"><input id="ay-q" placeholder="Ej.: el profe me devolvió los ajustes" onkeydown="if(event.key==='Enter')preguntar()"><button class="btn pri" type="button" onclick="preguntar()">Preguntar</button></div>
+  <div class="ay-sug"><span onclick="preguntar(this.textContent)">El profesor entregó</span><span onclick="preguntar(this.textContent)">Más de 3 rondas</span><span onclick="preguntar(this.textContent)">Registré algo tarde</span><span onclick="preguntar(this.textContent)">Le di a un botón por error</span><span onclick="preguntar(this.textContent)">¿Qué categoría pongo?</span><span onclick="preguntar(this.textContent)">Video de presentación</span></div>
+  <div id="ay-r"></div></div>
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbxd1oF2JdSWrLt68OxXOd57Si431kXArkJRoENQLpcSOCxv0bFc95c-GkF6dYtDzK_VAQ/exec';   /* ← URL de la App web del Apps Script (termina en /exec) */
@@ -306,7 +368,7 @@ function filasObj(m){if(!m||m.length<2)return[];const h=m[0].map(x=>String(x).tr
 function ymdDe(s){if(!s)return '';if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;const t=Date.parse(s);return isNaN(t)?String(s).slice(0,10):ymd(new Date(t))}
 function estadoSync(msg,err){const el=document.getElementById('sync');if(!el)return;el.className=err?'err':'';
   el.textContent=msg||('✓ Guardado en el Sheet'+(ULTIMA?' · '+ULTIMA.toTimeString().slice(0,5):''))}
-function colsDe(id){const s=ST[id],w=trab(s),A0=DATOS.find(x=>x.id===id)||{};const R0={},V0=vidDe(s);R0['Video docente']=V0.e==='pend'&&!V0.n?'':V0.e+'|'+(V0.f||'')+'|'+(V0.n||0);REAL.forEach(r=>R0[r[1]]=realDe(s,r[0]));return{...R0,'Institucion':A0.institucion||'','Flujo':A0.flujo||'Autor','Responsable':s.responsable||'','Etapa':s.etapa,'Desde':s.desde||'','Rondas':String(s.rondas||0),'Encargo':s.encargo||'',
+function colsDe(id){const s=ST[id],w=trab(s),A0=DATOS.find(x=>x.id===id)||{};const R0={},V0=vidDe(s);R0['Docente']=A0.docente||'';R0['Contacto']=A0.contacto||'';R0['Video docente']=V0.e==='pend'&&!V0.n?'':V0.e+'|'+(V0.f||'')+'|'+(V0.n||0);REAL.forEach(r=>R0[r[1]]=realDe(s,r[0]));return{...R0,'Institucion':A0.institucion||'','Flujo':A0.flujo||'Autor','Responsable':s.responsable||'','Etapa':s.etapa,'Desde':s.desde||'','Rondas':String(s.rondas||0),'Encargo':s.encargo||'',
   'Recordatorios':s.recordatorios===false?'No':'Sí','Marca':s.incompleto?'incompleto':s.aprobCoord?'aprobCoord':'','Entregables':JSON.stringify(s.ent||{}),
   'Reloj inicio':w.ini?new Date(w.ini).toISOString():'','Reloj persona':w.ini?(w.persona||s.responsable||''):'','Reloj categoría':w.ini?(w.cat||''):'','Calidad':s.cal?JSON.stringify(s.cal):''}}
 async function cargarSheet(){
@@ -629,7 +691,7 @@ function detalle(a){
       '<div class="row2"><button class="btn" onclick="registrar(\''+a.id+'\',\'nota\')">Guardar solo la nota</button>'+
       '<select style="width:auto" onchange="cambiarResp(\''+a.id+'\',this.value)"><option value="">Responsable: '+(s.responsable||'sin asignar')+'</option>'+PERSONAS.map(p=>'<option>'+p+'</option>').join('')+'</select>'+
       '<select style="width:auto" onchange="moverEtapa(\''+a.id+'\',this.value)"><option value="">Corregir etapa…</option>'+ETAPAS.map(e=>'<option value="'+e.k+'">'+e.l+'</option>').join('')+'</select></div></div>'+
-    '<div class="box"><h4>Datos</h4><div style="font-size:12.5px;line-height:1.8"><b>Docente:</b> '+esc(a.docente||'—')+' · <select style="width:auto;padding:2px 6px;font-size:12px" onchange="setDocTipo(\''+a.id+'\',this.value)"><option value="">'+(docTipo(a)?'Docente '+docTipo(a):'¿UIDE o EIG?')+'</option><option value="UIDE">Docente UIDE (escribe el profesor)</option><option value="EIG">Docente EIG (escribe el equipo)</option></select> · <select style="width:auto;padding:2px 6px;font-size:12px" onchange="setFlujo(\''+a.id+'\',this.value)"><option value="">'+(a.flujo==='IA'?'Escribe: el equipo con IA':'Escribe: el profesor')+'</option><option value="Autor">Escribe el profesor</option><option value="IA">Escribe el equipo con IA</option></select><br><b>Contacto:</b> '+esc(a.contacto||'—')+'<br><b>Programa:</b> '+esc(a.programa)+(a.metodologia?' · '+a.metodologia:'')+(a.facultad?'<br><b>Facultad:</b> '+esc(a.facultad)+(a.escuela?' · '+esc(a.escuela):''):'')+
+    '<div class="box"><h4>Datos</h4><div style="font-size:12.5px;line-height:1.8"><b>Docente:</b> '+esc(a.docente||'—')+' · <select style="width:auto;padding:2px 6px;font-size:12px" onchange="setDocTipo(\''+a.id+'\',this.value)">'+(docTipo(a)?'':'<option value="" selected>¿UIDE o EIG?</option>')+'<option value="UIDE"'+(docTipo(a)==='UIDE'?' selected':'')+'>Docente UIDE</option><option value="EIG"'+(docTipo(a)==='EIG'?' selected':'')+'>Docente EIG</option></select> · <select style="width:auto;padding:2px 6px;font-size:12px" onchange="setFlujo(\''+a.id+'\',this.value)"><option value="Autor"'+(a.flujo!=='IA'?' selected':'')+'>Escribe el profesor</option><option value="IA"'+(a.flujo==='IA'?' selected':'')+'>Escribe el equipo con IA</option></select><br><b>Contacto:</b> '+(a.contacto?esc(a.contacto):'<span style="color:var(--warn)">sin correo</span>')+' <button class="btn" style="padding:1px 8px;font-size:11px;margin-left:4px" onclick="editarDocente(\''+a.id+'\')">✎ Cambiar docente o correo</button><br><b>Programa:</b> '+esc(a.programa)+(a.metodologia?' · '+a.metodologia:'')+(a.facultad?'<br><b>Facultad:</b> '+esc(a.facultad)+(a.escuela?' · '+esc(a.escuela):''):'')+
       '<br><b>Coordinador:</b> '+(a.coordinador?esc(a.coordinador)+(a.correoCoord?' · '+esc(a.correoCoord):' · <span style="color:var(--warn)">sin correo</span>'):'<span style="color:var(--warn)">sin dato</span>')+
       '<br><b>Carpeta:</b> '+(a.drive?'<a href="'+esc(a.drive)+'" target="_blank" rel="noopener">Abrir carpeta de Drive ↗</a>':'<span style="color:var(--warn)">sin enlace</span>')+
       (a.novedad&&a.novedad.toUpperCase().startsWith('SI')?'<br><b style="color:var(--danger)">Novedad UIDE:</b> '+esc(a.novedad):'')+
@@ -783,6 +845,13 @@ let CRONO_MES='';
 function docTipo(a){return a.institucion==='EIG'?'EIG':a.institucion==='UIDE'?'UIDE':''}
 function chipDoc(a){const d=docTipo(a),ia=a.flujo==='IA';if(!d)return '<b style="color:var(--warn)">¿Docente UIDE o EIG?</b>';
   return '<b style="color:'+(ia?'#6d28d9':'#1f5fa8')+'">Docente '+d+' · '+(ia?'escribe el equipo'+(d==='UIDE'?' (IA autorizada por UIDE)':''):'escribe el profesor')+'</b>'}
+function editarDocente(id){const a=DATOS.find(x=>x.id===id),s=ST[id];
+  const n=prompt('Nombre del docente:',a.docente||'');if(n===null)return;
+  const c=prompt('Correo del docente (si son varios, sepáralos con ;):',a.contacto||'');if(c===null)return;
+  const nn=n.trim(),cc=c.trim();if(nn===(a.docente||'')&&cc===(a.contacto||'')){toast('Sin cambios');return}
+  if(cc&&!/^[^@\s;]+@[^@\s;]+\.[^@\s;]+(\s*;\s*[^@\s;]+@[^@\s;]+\.[^@\s;]+)*$/.test(cc)){toast('Ese correo no parece válido; revísalo');return}
+  s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'nota',l:'Docente actualizado: '+(a.docente||'—')+(a.contacto?' ('+a.contacto+')':'')+' → '+(nn||'—')+(cc?' ('+cc+')':''),nota:'',por:s.responsable||''});
+  a.docente=nn;a.contacto=cc;guardar();render();toast('Docente actualizado')}
 function setFlujo(id,v){const a=DATOS.find(x=>x.id===id),s=ST[id];if(!v||a.flujo===v)return;
   let nota='';if(v==='IA'){nota=prompt('Esta asignatura pasará a escribirla el equipo con IA.\n¿Quién lo autorizó y cuándo? (queda en la trazabilidad)','Autorizado por UIDE');if(nota===null){render();return}}
   a.flujo=v;s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'nota',l:v==='IA'?'Pasa a escribirla el equipo con IA (sin encargo ni recordatorios de entrega al profesor)':'Vuelve a escribirla el profesor',nota:nota||'',por:s.responsable||''});
@@ -918,6 +987,53 @@ async function iniciar(){
   setInterval(()=>{if(document.hidden)return;const ta=document.querySelector('.det textarea');if(ta&&(ta===document.activeElement||ta.value))return;
     cargarSheet().then(ok=>{if(ok){render()}})},120000);
 }
+const FAQ=[
+['¿Cómo me asigno una asignatura?','asignar asignarme responsable tomar mia quien tiene','Abre la asignatura y, en la caja azul <b>Siguiente paso</b> o abajo en <b>Responsable</b>, elige tu nombre. Las asignaturas ya vienen repartidas por carga: filtra <b>Todas las personas → tu nombre</b> para ver las tuyas.'],
+['El profesor ya entregó el material','entrego entregó llego llegó material recibido mando contenido profesor docente','En la asignatura, caja <b>Registrar lo que pasó</b>: dale <b>Material recibido del docente</b>. Si llegó otro día, primero pon esa fecha en <b>¿Cuándo pasó?</b>. La asignatura pasa a <b>Por revisar</b>.'],
+['¿Cómo hago la revisión de calidad?','revision calidad claude chatgpt 9 puntos pauta revisar material preparar pegar resultado importar','1) <b>1 · Preparar para Claude</b> (copia el texto y el reloj arranca solo) y pégalo en Claude con la carpeta y la matriz. 2) Copia TODA la respuesta de Claude y dale <b>2 · Pegar resultado</b> → <b>Importar resultado</b>. Quedan los 9 puntos. Revisa tú también el documento antes de decidir.'],
+['¿Cómo le devuelvo la asignatura al profesor?','devolver devolucion enviar profesor docente ajustes correcciones informe correo','Desde la caja de calidad: <b>Devolver al docente con el informe</b>. Copia el correo listo, pégalo en Outlook respondiendo en el mismo hilo y envíalo. El dashboard registra el envío, suma una ronda y la pasa a <b>Con el docente</b>.'],
+['El profesor me devolvió los ajustes','ajustes recibidos devolvio devolvió correcciones respondio respondió volvio volvió segunda ronda','En <b>Registrar lo que pasó</b>: <b>Ajustes recibidos del docente</b> (con la fecha real en ¿Cuándo pasó? si fue otro día). Vuelve a <b>Por revisar</b> y se hace una nueva revisión (2.ª ronda).'],
+['Ya van más de 3 rondas con el profesor','mas más tres 3 rondas cuarta 4 muchas devoluciones','Sigue usando los botones de la asignatura: <b>Enviado al docente</b> y <b>Ajustes recibidos del docente</b> no tienen límite. El dashboard cuenta todas las devoluciones y saca una alarma si pasan de 3. En el reloj usa la categoría de <b>3.ª ronda</b>.'],
+['¿Cómo la paso al coordinador?','coordinador coordinacion coordinación pasar aprobar 9/9 enviar coordinador','Cuando la revisión de calidad está en <b>9/9</b>, usa <b>Aprobar → coordinador</b> en la caja de calidad. Si no está en 9/9, te pide un motivo obligatorio que queda en la trazabilidad.'],
+['El coordinador aprobó','coordinador aprobo aprobó aprobada fabrica fábrica entregar pasar fabrica','En <b>Registrar lo que pasó</b>: <b>Aprobado por coordinador → entregado a Fábrica</b>. Ojo: eso no la crea sola en el dashboard de la Fábrica.'],
+['El coordinador pidió cambios','coordinador pidio pidió cambios rechazo devolvio devolvió coordinador','En <b>Registrar lo que pasó</b>: <b>El coordinador pidió cambios</b>. Vuelve a <b>Por revisar</b>.'],
+['Estoy registrando algo que pasó otro día','fecha real otro dia día tarde atrasado registrar despues después antes pasado cuando paso pasó','Antes de dar clic al botón, cambia la fecha en <b>¿Cuándo pasó?</b> (no acepta fechas futuras). Así los tiempos quedan con la fecha real.'],
+['La fecha de una etapa quedó mal','corregir fecha mal equivocada cambiar fecha llego llegó','Pon la fecha correcta en <b>¿Cuándo pasó?</b> y dale <b>Corregir fecha: llegó a … ese día</b>. La asignatura queda en su etapa desde ese día.'],
+['Le di a un botón por error','error equivoque equivoqué boton botón mal clic devolver etapa deshacer corregir etapa','Abajo, en <b>Corregir etapa…</b>, elige la etapa en la que estaba. Queda anotado en la trazabilidad.'],
+['No encuentro una asignatura','no encuentro buscar desaparecio desapareció perdi perdí no aparece filtro','Revisa los filtros de arriba: pon <b>Todas</b> y borra la búsqueda. Las que ya pasaron a Fábrica salen en el filtro <b>En Fábrica</b>.'],
+['¿Cómo uso el reloj?','reloj timer cronometro cronómetro empezar pausar terminar tiempo trabajar','<b>Empezar</b> al sentarte (elige antes la categoría), <b>Pausar</b> si te paras y la retomas después, <b>✓ Terminar</b> cuando acabaste esa tarea. Se pausa solo si empiezas otra asignatura o la envías al docente o al coordinador.'],
+['¿Qué categoría pongo en el reloj?','categoria categoría reloj cual cuál revision revisión material escritura guiones comunicacion comunicación ajustes','Viene sugerida según el momento. <b>Escribe el profesor</b>: Revisión del material · 1.ª/2.ª/3.ª ronda (incluye pasarlo por Claude o ChatGPT y tu lectura), Guiones, Comunicación. <b>Escribe el equipo con IA</b>: Escritura con IA, Ajustes tras revisión del profesor · 1.ª/2.ª/3.ª ronda, Guiones, Comunicación.'],
+['Se me olvidó pausar el reloj','olvide olvidé pausar reloj corriendo toda la noche dejé deje prendido','Páusalo y escríbele a Derly cuánto tiempo real fue, para corregirlo.'],
+['¿Docente UIDE o docente EIG?','uide eig docente tipo diferencia quien quién escribe','<b>Docente UIDE</b>: escribe el profesor, lleva encargo y recordatorios. <b>Docente EIG</b>: escribimos nosotras con IA y el profesor solo revisa, sin encargo. Si una no tiene el dato, elígelo en la caja <b>Datos</b>.'],
+['UIDE autorizó hacerla con IA','autorizo autorizó ia inteligencia artificial escribir nosotras equipo juanito cambiar a ia','En <b>Datos</b>, cambia <b>Escribe el profesor</b> a <b>Escribe el equipo con IA</b> y anota quién lo autorizó y cuándo. Desde ahí no hay encargo ni recordatorios de entrega.'],
+['Cambió el docente o su correo','cambio cambió docente profesor nuevo correo email mail contacto nombre','En <b>Datos</b>, botón <b>✎ Cambiar docente o correo</b>. Si cambia de EIG a UIDE (o al revés), elige el tipo en el selector: quién escribe se acomoda solo.'],
+['Le mandé un correo de seguimiento al profesor','seguimiento recordatorio correo mail email escribi escribí profesor coordinador recordar','Usa el botón <b>Recordatorio enviado al docente</b> (o <b>Recordatorio al coordinador</b>). Si quieres dejar el detalle, escríbelo en la nota antes del clic. El tiempo va en la categoría <b>Comunicación</b>.'],
+['Video de presentación del docente','video presentacion presentación grabar pedir pedi pedí recibido','En la caja <b>Video de presentación del docente</b>: <b>Pedí el video al profesor</b> cuando se lo pidas, <b>✓ Recibido</b> cuando llegue, <b>No aplica</b> si no lleva. A los 5 días hábiles sin llegar sale una alarma. Filtro <b>🎬 Video pendiente</b> en Asignaturas.'],
+['¿Para qué es Actualizar fechas?','actualizar fechas tabla pagina página reales ponerse al dia día','Es la tabla para poner las fechas <b>reales</b> de cada asignatura (encargo, entrega, envíos y ajustes de cada ronda, coordinador, Fábrica). Se guarda sola, cuenta las rondas y la etapa avanza sola con la última fecha.'],
+['¿Qué significa tarde, vencido, hecho?','tarde vencido hecho significa rojo naranja verde en dias días cronograma colores','<b>tarde N d</b>: ya pasó, N días después de la fecha de UIDE. <b>vencido N d</b>: todavía no pasa y la fecha ya se venció. <b>✓ dd/mm</b>: pasó a tiempo. <b>✓ hecho</b>: pasó pero falta su fecha real. <b>en N d</b>: faltan N días.'],
+['¿Cómo leo la línea de tiempo?','linea línea tiempo puntos arriba abajo fecha uide real colores azul verde rojo','Arriba la fecha de UIDE, abajo la real. 🟢 hecho · 🔵 lo que toca ahora · 🔴 atrasado · ⚪ todavía no. "≈" es una fecha aproximada que vino del archivo de UIDE.'],
+['¿Qué son las alarmas?','alarma alarmas rojo meta dias días habiles hábiles','Avisan lo que se está atrasando y a quién le toca. Ejemplo: "Por revisar: 4 días hábiles (meta 2)" = el equipo tiene el material hace 4 días y la meta interna es 2. Las ves en la página <b>Alarmas</b> y en cada asignatura.'],
+['Ya la escribí con IA y sale "enviar en N d"','lista para enviar ia escrita antes adelantada enviar en','Está bien: la escribiste antes de tiempo. "enviar en N d" cuenta los días que faltan para la fecha de UIDE de entregársela al profesor. Puedes enviarla antes con <b>Enviado al docente</b>.'],
+['¿Qué adelanto en mis tiempos libres?','tiempo libre libres tiempos muertos adelantar desocupada desocupado sin trabajo que hago qué hago nada pendiente','En el Dashboard, tarjeta <b>Para adelantar en tiempos libres</b>: las asignaturas que escribe el equipo con IA, ordenadas por la fecha en que conviene empezar.'],
+['¿Cuándo se envía el encargo docente?','encargo enviar cuando cuándo fecha docente sabado sábado domingo','El día que dice UIDE (no se negocia). Si cae en sábado, domingo o festivo, el siguiente día hábil. Al enviarlo, registra <b>Encargo docente enviado</b>.'],
+['Dice "cambios sin guardar"','guardar guardado sin guardar no guarda sheet error conexion conexión','Espera unos segundos: se reintenta solo. No cierres la pestaña hasta ver el ✓ abajo a la izquierda; si no aparece, revisa tu internet.'],
+['¿Cómo dejo una nota?','nota comentario anotar observacion observación escribir trazabilidad','Escribe en <b>Nota opcional</b> y dale <b>Guardar solo la nota</b>, o déjala escrita antes de cualquier botón y queda pegada a ese registro.']
+];
+const STOP=new Set('el la los las un una unos unas de del al a y o que en con por para se me mi lo le les su es ya no si como cómo qué que cual cuál hay esta está este esto pero mas ese esa eso yo tengo hago hacer hace debo puedo'.split(' '));
+const SIN={profe:'profesor',docente:'profesor',maestro:'profesor',timer:'reloj',cronometro:'reloj',mail:'correo',email:'correo',equivoque:'error',equivocacion:'error',devolvi:'devolver',regreso:'devolver',corregir:'corregir',retraso:'tarde',atrasada:'tarde',atrasado:'tarde',coordi:'coordinador',coordinacion:'coordinador'};
+function normA(s){return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9/ ]/g,' ')}
+function toks(s){return normA(s).split(/\s+/).filter(w=>w&&!STOP.has(w)).map(w=>SIN[w]||w)}
+function buscarAyuda(q){const qt=toks(q);if(!qt.length)return [];
+  return FAQ.map((f,i)=>{const kt=new Set(toks(f[0]+' '+f[1]));let sc=0;qt.forEach(w=>{if(kt.has(w))sc+=2;else if(w.length>4&&[...kt].some(k=>k.startsWith(w.slice(0,5))))sc+=1});return {i,sc}}).filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc).slice(0,3)}
+function ayEstado(e,txt){const m=document.getElementById('ay-masc');if(m)m.className='masc grande'+(e?' '+e:'');const s=document.getElementById('ay-estado');if(s&&txt)s.textContent=txt}
+function abrirAyuda(){if(!document.getElementById('ayuda').classList.contains('show'))ayEstado('','Pregúntame lo que quieras del dashboard.');document.getElementById('ayuda').classList.toggle('show');const i=document.getElementById('ay-q');if(i)i.focus()}
+function preguntar(qq){const inp=document.getElementById('ay-q');const q=(qq||inp.value||'').trim();if(!q)return;inp.value=q;
+  const r=buscarAyuda(q),out=document.getElementById('ay-r');
+  ayEstado('pensando','Buscando en la guía…');out.innerHTML='';
+  clearTimeout(window._ayT);window._ayT=setTimeout(()=>{ayEstado(r.length?'feliz':'ups',r.length?'¡Encontré esto para ti!':'Ups, esa no me la sé todavía.');out.innerHTML=r.length?r.map((x,k)=>'<div class="ay-item'+(k===0?' open':'')+'" onclick="this.classList.toggle(\'open\')"><div class="ay-t">'+FAQ[x.i][0]+'</div><div class="ay-a">'+FAQ[x.i][2]+'</div></div>').join('')+'<div class="mini" style="margin-top:6px">¿No era eso? Escríbelo con otras palabras o pregúntale a Derly.</div>'
+    :'<div class="ay-item open"><div class="ay-a">No encontré esa respuesta en la guía. Escríbelo con otras palabras o pregúntale a Derly (ya quedó anotada tu pregunta para agregarla).</div></div>'},700);
+  try{COLA.push({accion:'guardar',hoja:'Preguntas',enc:JSON.stringify(['ID','Fecha','Pregunta','Respuesta mostrada','Encontrada']),fila:JSON.stringify(['pq'+Date.now(),new Date().toISOString(),q.slice(0,300),r.length?FAQ[r[0].i][0]:'',r.length?'Sí':'No'])});procesarCola()}catch(e){}}
+
 iniciar();
 </script>
 </body>
