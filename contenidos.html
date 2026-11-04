@@ -306,7 +306,7 @@ function filasObj(m){if(!m||m.length<2)return[];const h=m[0].map(x=>String(x).tr
 function ymdDe(s){if(!s)return '';if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;const t=Date.parse(s);return isNaN(t)?String(s).slice(0,10):ymd(new Date(t))}
 function estadoSync(msg,err){const el=document.getElementById('sync');if(!el)return;el.className=err?'err':'';
   el.textContent=msg||('✓ Guardado en el Sheet'+(ULTIMA?' · '+ULTIMA.toTimeString().slice(0,5):''))}
-function colsDe(id){const s=ST[id],w=trab(s),A0=DATOS.find(x=>x.id===id)||{};const R0={};REAL.forEach(r=>R0[r[1]]=realDe(s,r[0]));return{...R0,'Institucion':A0.institucion||'','Flujo':A0.flujo||'Autor','Responsable':s.responsable||'','Etapa':s.etapa,'Desde':s.desde||'','Rondas':String(s.rondas||0),'Encargo':s.encargo||'',
+function colsDe(id){const s=ST[id],w=trab(s),A0=DATOS.find(x=>x.id===id)||{};const R0={},V0=vidDe(s);R0['Video docente']=V0.e==='pend'&&!V0.n?'':V0.e+'|'+(V0.f||'')+'|'+(V0.n||0);REAL.forEach(r=>R0[r[1]]=realDe(s,r[0]));return{...R0,'Institucion':A0.institucion||'','Flujo':A0.flujo||'Autor','Responsable':s.responsable||'','Etapa':s.etapa,'Desde':s.desde||'','Rondas':String(s.rondas||0),'Encargo':s.encargo||'',
   'Recordatorios':s.recordatorios===false?'No':'Sí','Marca':s.incompleto?'incompleto':s.aprobCoord?'aprobCoord':'','Entregables':JSON.stringify(s.ent||{}),
   'Reloj inicio':w.ini?new Date(w.ini).toISOString():'','Reloj persona':w.ini?(w.persona||s.responsable||''):'','Reloj categoría':w.ini?(w.cat||''):'','Calidad':s.cal?JSON.stringify(s.cal):''}}
 async function cargarSheet(){
@@ -330,7 +330,7 @@ async function cargarSheet(){
     const ses=sePor[id]||[];const ini=Date.parse(x['Reloj inicio']);
     S[id]={etapa:ET[x['Etapa']]?x['Etapa']:'sin',desde:x['Desde']||null,responsable:x['Responsable']||null,rondas:+x['Rondas']||0,encargo:x['Encargo']||null,
       recordatorios:String(x['Recordatorios']).toLowerCase()!=='no',incompleto:x['Marca']==='incompleto',aprobCoord:x['Marca']==='aprobCoord',ent,cal:(()=>{try{return x['Calidad']?JSON.parse(x['Calidad']):null}catch(e){return null}})(),eventos:evPor[id]||[],
-      real:Object.fromEntries([['enc','Real encargo'],['ent','Real entrega'],['e1','Real envio R1'],['a1','Real ajustes R1'],['e2','Real envio R2'],['a2','Real ajustes R2'],['e3','Real envio R3'],['a3','Real ajustes R3'],['co','Real a coordinador'],['ap','Real aprobo coordinador'],['fa','Real a Fabrica']].map(([k,c])=>[k,x[c]||''])),trab:{ini:isNaN(ini)?null:ini,persona:x['Reloj persona']||'',cat:x['Reloj categoría']||'',ms:ses.reduce((t,z)=>t+(z.f-z.i),0),ses}};
+      real:Object.fromEntries([['enc','Real encargo'],['ent','Real entrega'],['e1','Real envio R1'],['a1','Real ajustes R1'],['e2','Real envio R2'],['a2','Real ajustes R2'],['e3','Real envio R3'],['a3','Real ajustes R3'],['co','Real a coordinador'],['ap','Real aprobo coordinador'],['fa','Real a Fabrica']].map(([k,c])=>[k,x[c]||''])),video:(()=>{const p=String(x['Video docente']||'').split('|');return VID[p[0]]?{e:p[0],f:p[1]||'',n:+p[2]||0}:{e:'pend',f:'',n:0}})(),trab:{ini:isNaN(ini)?null:ini,persona:x['Reloj persona']||'',cat:x['Reloj categoría']||'',ms:ses.reduce((t,z)=>t+(z.f-z.i),0),ses}};
     D.push(a)});
   DATOS=D;ST=S;SNAP={};DATOS.forEach(a=>SNAP[a.id]=JSON.stringify(colsDe(a.id)));
   ULTIMA=new Date();estadoSync();
@@ -393,6 +393,7 @@ function alarmas(a){
     else if(s.etapa==='coord'&&dh>META.coordinador)out.push({n:dh>META.coordinador*2?3:2,q:'coordinador',txt:'El coordinador lleva '+dh+' días hábiles sin responder',d:dh});
   }
   if((s.rondas||0)>3&&s.etapa!=='fab')out.push({n:2,q:'equipo',txt:'Se ha devuelto '+s.rondas+' veces al docente (máximo 3)',d:null});
+  {const v=vidDe(s);if(v.e==='sol'&&v.f&&s.etapa!=='fab'){const d=diasHab(v.f,HOY);if(d>=5)out.push({n:2,q:'docente',txt:'Video de presentación pedido hace '+d+' días hábiles: volver a pedirlo',d:null})}}
   if(s.incompleto&&s.etapa==='rev')out.push({n:2,q:'equipo',txt:'Documentos incompletos / incidencia en la matriz',d:null});
   if(s.aprobCoord&&s.etapa==='coord')out.push({n:2,q:'equipo',txt:'Ya aprobó el coordinador: falta pasarla a Fábrica',d:null});
   return out.sort((x,y)=>y.n-x.n);
@@ -553,13 +554,14 @@ function initFiltros(){
 }
 function renderAsig(){
   const fq=document.getElementById('f-q').value.toLowerCase().trim(),fp=document.getElementById('f-p').value,ff=document.getElementById('f-fl').value,fm=document.getElementById('f-m').value,ffac=document.getElementById('f-fac').value;
-  const ch=[['','Todas'],['curso','En curso'],['alarma','Con alarma']].concat(ETAPAS.map(e=>[e.k,e.l]));
+  const ch=[['','Todas'],['curso','En curso'],['alarma','Con alarma']].concat(ETAPAS.map(e=>[e.k,e.l]),[['video','🎬 Video pendiente']]);
   document.getElementById('chips').innerHTML=ch.map(c=>'<span class="chip'+(FILTRO.etapa===c[0]?' on':'')+'" onclick="FILTRO.etapa=\''+c[0]+'\';renderAsig()">'+c[1]+'</span>').join('');
   let l=DATOS.filter(a=>{
     const s=ST[a.id];
     if(FILTRO.etapa==='curso'&&!ACTIVAS.includes(s.etapa))return false;
     if(FILTRO.etapa==='alarma'&&nivel(a)<2)return false;
-    if(FILTRO.etapa&&!['curso','alarma'].includes(FILTRO.etapa)&&s.etapa!==FILTRO.etapa)return false;
+    if(FILTRO.etapa==='video'&&(!vidPendiente(s)||s.etapa==='fab'))return false;
+    if(FILTRO.etapa&&!['curso','alarma','video'].includes(FILTRO.etapa)&&s.etapa!==FILTRO.etapa)return false;
     if(fp==='__sin'&&s.responsable)return false;
     if(fp&&fp!=='__sin'&&s.responsable!==fp)return false;
     if(ff&&(ff==='__sin'?!!docTipo(a):a.flujo!==ff))return false;
@@ -572,7 +574,7 @@ function renderAsig(){
   document.getElementById('lista').innerHTML=h+(l.length?l.map(a=>{
     const s=ST[a.id],F=fechas(a),al=alarmas(a),n=al.length?al[0].n:0;
     const alH=n?'<div class="t2" style="color:'+(n>=3?'var(--danger)':n==2?'var(--warn)':'var(--muted)')+'">'+esc(al[0].txt)+(al.length>1?' · +'+(al.length-1):'')+'</div>':'';
-    return '<div class="arow'+(ABIERTA===a.id?' open':'')+'" onclick="toggle(\''+a.id+'\')"><div><div class="t1">'+esc(a.materia)+'</div><div class="t2">'+esc(a.programa)+' · '+a.metodologia+' · '+chipDoc(a)+(a.facultad?' · '+esc(facCorta(a.facultad)):'')+(a.novedad&&a.novedad.toUpperCase().startsWith('SI')?' · <b style="color:var(--danger)">Novedad UIDE</b>':'')+(trab(s).ini?' · <span style="color:var(--ok);font-weight:600">● trabajando</span>':msTrab(s)>0?' · trabajado '+fmtH(msTrab(s)):'')+'</div>'+alH+'</div><span>'+(s.responsable?esc(s.responsable):'<span class="badge b-warn">Sin asignar</span>')+'</span><span style="font-size:12px">'+fmt(a.inicio)+'<div class="t2">tope '+fmtc(F.tope)+'</div></span><span>'+estHtml(a,s)+(s.rondas?'<div class="t2">'+s.rondas+' ronda'+(s.rondas>1?'s':'')+'</div>':'')+chipCal(a,s)+'</span><span class="dd" style="color:'+(n>=3?'var(--danger)':n==2?'var(--warn)':'var(--text)')+'">'+diasTxt(s,a)+'</span></div>'+(ABIERTA===a.id?detalle(a):'');
+    return '<div class="arow'+(ABIERTA===a.id?' open':'')+'" onclick="toggle(\''+a.id+'\')"><div><div class="t1">'+esc(a.materia)+'</div><div class="t2">'+esc(a.programa)+' · '+a.metodologia+' · '+chipDoc(a)+(a.facultad?' · '+esc(facCorta(a.facultad)):'')+(a.novedad&&a.novedad.toUpperCase().startsWith('SI')?' · <b style="color:var(--danger)">Novedad UIDE</b>':'')+(vidDe(s).e==='sol'?' · 🎬 video pedido':'')+(trab(s).ini?' · <span style="color:var(--ok);font-weight:600">● trabajando</span>':msTrab(s)>0?' · trabajado '+fmtH(msTrab(s)):'')+'</div>'+alH+'</div><span>'+(s.responsable?esc(s.responsable):'<span class="badge b-warn">Sin asignar</span>')+'</span><span style="font-size:12px">'+fmt(a.inicio)+'<div class="t2">tope '+fmtc(F.tope)+'</div></span><span>'+estHtml(a,s)+(s.rondas?'<div class="t2">'+s.rondas+' ronda'+(s.rondas>1?'s':'')+'</div>':'')+chipCal(a,s)+'</span><span class="dd" style="color:'+(n>=3?'var(--danger)':n==2?'var(--warn)':'var(--text)')+'">'+diasTxt(s,a)+'</span></div>'+(ABIERTA===a.id?detalle(a):'');
   }).join(''):'<div class="empty">Sin resultados</div>');
 }
 function toggle(id){ABIERTA=ABIERTA===id?null:id;renderAsig()}
@@ -618,7 +620,7 @@ function detalle(a){
     '<div class="box"><h4>Fechas del cronograma UIDE · '+(a.flujo==='IA'?'IA':'Autor')+(F.dePlan?'':' · calculadas (sin fila en el cronograma)')+'</h4>'+tl+'<div class="mini" style="margin-top:8px">Arriba: fecha del cronograma UIDE · abajo: fecha real en que pasó (≈ = aproximada del archivo de UIDE). Hoy '+fmt(HOY)+(s.encargo&&a.flujo==='Autor'?' · encargo enviado '+(/^\d{4}-\d{2}-\d{2}$/.test(s.encargo)?fmt(s.encargo):'(sin fecha)'):'')+'</div></div>'+
     pasoSiguiente(a,s)+
     (al.length?'<div class="box" style="border-color:#f5c2c2"><h4 style="color:var(--danger)">Alarmas</h4>'+al.map(x=>'<div style="font-size:13px;padding:3px 0"><span class="sq" style="background:'+(x.n>=3?'var(--danger)':x.n==2?'var(--warn)':'var(--dim)')+'"></span>'+esc(x.txt)+' <span class="mini">· le toca al '+x.q+'</span></div>').join('')+'</div>':'')+
-    cajaCalidad(a)+
+    cajaCalidad(a)+cajaVideo(a)+
     '<div class="box"><h4>Registrar lo que pasó · '+etiquetaEtapa(a,s)+'</h4><div class="row2" style="margin:0 0 10px"><span class="mini">¿Cuándo pasó?</span><input type="date" id="fecha-'+a.id+'" value="'+HOY+'" max="'+HOY+'" style="width:auto"><span class="mini">cámbiala si estás registrando algo de días anteriores</span>'+(s.etapa!=='sin'?'<button class="btn" style="margin-left:auto" onclick="corregirFecha(\''+a.id+'\')" title="Usa la fecha de ¿Cuándo pasó?">Corregir fecha: llegó a '+ET[s.etapa].l+' ese día</button>':'')+'</div>'+(acts?'<div class="acts">'+acts+'</div>':'<div class="mini">'+(s.etapa==='rev'?'Para devolver al docente o aprobar, usa la caja de Revisión de calidad de arriba.':'Entregada a Fábrica. No hay más pasos.')+'</div>')+
       '<textarea id="nota-'+a.id+'" placeholder="Nota opcional (se guarda con el próximo registro)" style="margin-top:10px"></textarea>'+
       '<div class="row2"><button class="btn" onclick="registrar(\''+a.id+'\',\'nota\')">Guardar solo la nota</button>'+
@@ -684,7 +686,7 @@ function calImportar(id){const a=DATOS.find(x=>x.id===id),s=ST[id];const el=docu
   if(j.asignatura_id&&j.asignatura_id!==id&&!confirm('Ese resultado dice ser de otra asignatura ('+j.asignatura_id+' · '+(j.materia||'')+'). ¿Usarlo igual para "'+a.materia+'"?'))return;
   const p=[];for(let n=1;n<=9;n++){const x=j.puntos.find(q=>+q.n===n);p.push(x?{n,e:calEstado(x.estado),f:x.falla||x.bien||'',a:x.accion||''}:{n,e:'revisar',f:'Este punto no vino en el resultado',a:''})}
   const c=calCompactar({r:calRonda(s),f:ymd(new Date()),por:s.responsable||'',dev:false,p,ac:(j.acciones||[]).map(String),nc:(j.no_corresponden||[]).slice(0,4).map(x=>({ar:String(x.archivo||'').slice(0,80),m:String(x.motivo||'').slice(0,120)}))});
-  s.cal=c;const r=calResumen(c);
+  s.cal=c;calAjVideo(s);const r=calResumen(c);
   s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'calidad',l:'Revisión de calidad ronda '+c.r+': '+r.bien+' bien · '+r.revisar+' por revisar · '+r.corregir+' por corregir',nota:c.ac.slice(0,3).join(' · ').slice(0,300),por:s.responsable||''});
   CAL_PEGAR[id]=false;guardar();render();toast(cal9(s)?'Calidad 9/9: lista para pasar al coordinador':'Resultado guardado: '+(r.corregir+r.revisar)+' punto(s) por ajustar')}
 function calCiclo(id,n){const s=ST[id];if(!s.cal)return;const x=s.cal.p.find(q=>q.n===n);const o=['bien','revisar','corregir'];x.e=o[(o.indexOf(x.e)+1)%3];x.m=1;guardar();renderAsig()}
@@ -838,6 +840,23 @@ function setReal(id,k,v,el){const s=ST[id];const hoy=ymd(new Date());
   s.real=s.real||{};s.real[k]=v||'';aplicarReales(id);guardar();
   const tr=el.closest('tr');if(tr){const a=DATOS.find(x=>x.id===id);tr.outerHTML=filaAct(a)}
   toast(v?'Guardado: '+REAL.find(r=>r[0]===k)[2]+' '+fmtc(v):'Fecha borrada')}
+const VID={pend:'Pendiente',sol:'Solicitado',rec:'Recibido',na:'No aplica'};
+function vidDe(s){return s.video||{e:'pend',f:'',n:0}}
+function vidPendiente(s){const v=vidDe(s);return v.e==='pend'||v.e==='sol'}
+/* Si el video ya llegó, el punto 7 de la revisión de calidad queda en Bien */
+function calAjVideo(s){if(vidDe(s).e==='rec'&&s.cal&&s.cal.p){const x=s.cal.p.find(q=>q.n===7);if(x&&x.e!=='bien'){x.e='bien';x.f='Video recibido (registrado en el dashboard)';x.a='';x.m=1}}}
+function setVideo(id,e){const s=ST[id],FR=fechaRegistro(id),v=Object.assign({},vidDe(s));
+  if(e==='sol'){v.e='sol';v.f=FR.f;v.n=(v.n||0)+1}else{v.e=e;v.f=e==='pend'?'':FR.f}
+  s.video=v;calAjVideo(s);
+  s.eventos.push({f:FR.f,ts:FR.ts,t:'video',l:e==='sol'?'Video de presentación: se le pidió al profesor'+(v.n>1?' (vez '+v.n+')':''):'Video de presentación: '+VID[e],nota:'',por:s.responsable||''});
+  guardar();render();toast('Video de presentación: '+(e==='sol'?'pedido el '+fmtc(FR.f):VID[e]))}
+function cajaVideo(a){const s=ST[a.id],v=vidDe(s),d=v.e==='sol'&&v.f?diasHab(v.f,HOY):0;
+  const col={pend:'var(--warn)',sol:d>=5?'var(--danger)':'#1f5fa8',rec:'var(--ok)',na:'var(--muted)'}[v.e];
+  const txt=v.e==='sol'?'Solicitado el '+fmt(v.f)+(v.n>1?' ('+v.n+' veces)':'')+' · hace '+d+' día'+(d===1?'':'s')+' hábil'+(d===1?'':'es'):v.e==='rec'?'Recibido el '+fmt(v.f):v.e==='na'?'No aplica':'Pendiente: todavía no se ha pedido';
+  const b=(e,l)=>'<button class="btn" style="padding:4px 10px;font-size:12px" onclick="setVideo(\''+a.id+'\',\''+e+'\')">'+l+'</button>';
+  return '<div class="box"><h4>Video de presentación del docente</h4><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:'+col+';font-size:13px">'+txt+'</b><span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'+
+    (v.e!=='rec'?b('sol',v.e==='sol'?'Lo volví a pedir':'Pedí el video al profesor')+b('rec','✓ Recibido'):'')+(v.e!=='na'&&v.e!=='rec'?b('na','No aplica'):'')+(v.e!=='pend'?b('pend','Deshacer'):'')+'</span></div>'+
+    '<div class="mini" style="margin-top:6px">Usa la fecha de ¿Cuándo pasó? (abajo) si lo registras después. Al pedirlo, si en 5 días hábiles no llega, sale una alarma para volver a pedirlo.</div></div>'}
 function fechaEvento(s,tipos){const e=s.eventos.find(x=>tipos.includes(x.t));return e?e.f:''}
 function celda(plan,real,hecho){
   if(!plan)return '<span class="cp">—</span>';
