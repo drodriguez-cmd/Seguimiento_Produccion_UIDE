@@ -1308,32 +1308,45 @@ const ST_REVISION = 'En revisión de calidad';
 
 // Editores de video ACTIVOS (reciben asignaturas y aparecen en la vista inicial).
 // Oct 2026: Juan Diego Cruz pasó a Coordinador de Operación y Cristina Alisente a Coordinadora de Calidad.
-const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Alejandra Barco'];
+// Nov 2026: entra Juliana Gutiérrez (activa desde ya; solo recibe asignaturas que se lanzan desde el 1-dic).
+const VIDEO_PERSONAS = ['Valentina Rodríguez', 'Alejandra Barco', 'Juliana Gutiérrez'];
+// Editoras que SOLO pueden recibir asignaturas cuyo lanzamiento (Fecha Limite) es desde cierta fecha (adaptación).
+// Lo que se lanza antes se queda con las demás. Para quitar el límite, borrar su línea.
+const VIDEO_LANZAMIENTO_DESDE = { 'Juliana Gutiérrez': '2026-12-01' };
+function puedeRecibirVideo(persona, a){
+  const desde = VIDEO_LANZAMIENTO_DESDE[persona]; if(!desde) return true;
+  const f = String((a && a.fechaLimite) || '').slice(0,10);
+  return !!f && f >= desde;   // sin fecha de lanzamiento no se le da (no se sabe si cumple)
+}
 // Quienes salieron de video: su historial sigue contando como video, y siguen pudiendo revisar la calidad.
 const VIDEO_EXEDITORES = ['Juan Diego Cruz', 'Cristina Alisente'];
 const COORDINACION = ['Juan Diego Cruz', 'Cristina Alisente'];
 // El turno se calcula desde los DATOS compartidos (no de localStorage), para que la
 // alternancia sea consistente entre todos los equipos: se mira a quién le tocó la
 // ÚLTIMA asignatura de video y se devuelve al otro.
-function siguienteVideoPersona(){
+function siguienteVideoPersona(asig){
   // Solo rota entre quienes estén Activos en el Sheet "Equipo" (mismo mecanismo que diseño).
   // Si por algún motivo TODOS quedaran pausados, se usa la lista completa para no romper el flujo.
   const activos = VIDEO_PERSONAS.filter(p=>celulaActiva(p));
   const pool = activos.length ? activos : VIDEO_PERSONAS;
+  // Quien tiene límite de lanzamiento (VIDEO_LANZAMIENTO_DESDE) se salta si esta asignatura se lanza antes
+  const puede = p => !asig || puedeRecibirVideo(p, asig);
+  if(!pool.some(puede)) return pool[0];
   const conVideo = (STATE.asignaturas||[])
     .filter(a => a.tipo==='celula' && a.videoPersona && pool.includes(a.videoPersona))
     .sort((a,b)=> String(a.id).localeCompare(String(b.id))); // id lleva timestamp de creación
   const ultima = conVideo[conVideo.length-1];
-  if(!ultima) return pool[0]; // la primera de todas
-  // Rotación real en orden (funciona con 2, 3 o más): después de la última, la siguiente del pool activo
+  if(!ultima) return pool.find(puede); // la primera de todas
+  // Rotación real en orden (funciona con 2, 3 o más): después de la última, la siguiente del pool activo que pueda recibirla
   const idx = pool.indexOf(ultima.videoPersona);
-  return pool[(idx + 1) % pool.length];
+  for(let k=1;k<=pool.length;k++){ const p=pool[(idx + k) % pool.length]; if(puede(p)) return p; }
+  return pool[0];
 }
-function getTurnoVideo(){ return siguienteVideoPersona(); }
-function avanzarTurnoVideo(){
+function getTurnoVideo(asig){ return siguienteVideoPersona(asig); }
+function avanzarTurnoVideo(asig){
   // Devuelve a quién le toca AHORA según los datos. No hay que "avanzar" nada:
   // al guardar la nueva asignatura con su videoPersona, la siguiente llamada ya ve el cambio.
-  return siguienteVideoPersona();
+  return siguienteVideoPersona(asig);
 }
 
 // Paleta por rol
@@ -2783,7 +2796,7 @@ function crearAsignatura(){
   // Asignar videoPersona SIEMPRE al crear (directo o en cola).
   // El video es independiente y va más rápido, así el editor sabe su carga desde el minuto 0.
   if(esCelula){
-    asig.videoPersona = avanzarTurnoVideo();
+    asig.videoPersona = avanzarTurnoVideo(asig);
   }
   // Si puso fecha de lanzamiento, calculamos la prioridad real de una vez
   // (no la que quedó seleccionada por defecto en el formulario) — así ya nace correcta.
@@ -3113,7 +3126,7 @@ async function intentarAutoAsignar(){
     const esPreAsignacion = disponible.tipo === 'preasignacion';
     siguiente.status = esPreAsignacion ? 'En espera' : 'En producción';
     if(!siguiente.tareasCelula) siguiente.tareasCelula = iniciarTareasCelula(disponible.celulaId);
-    if(!siguiente.videoPersona) siguiente.videoPersona = avanzarTurnoVideo();
+    if(!siguiente.videoPersona) siguiente.videoPersona = avanzarTurnoVideo(siguiente);
 
     guardarEstadoLocal();
 
@@ -3288,7 +3301,7 @@ function reordenarReservasPorPrioridad(){
     if(!asig) return;
     asig.celula = celulaId;
     if(!asig.tareasCelula) asig.tareasCelula = iniciarTareasCelula(celulaId);
-    if(!asig.videoPersona) asig.videoPersona = avanzarTurnoVideo();
+    if(!asig.videoPersona) asig.videoPersona = avanzarTurnoVideo(asig);
   });
   pool.slice(slots.length).forEach(a=>{ a.celula=''; }); // el resto queda sin célula (cola)
 
@@ -3578,8 +3591,16 @@ function rebalancearVideoEquipo(){
 
   let huboCambios = false;
   const cambios = [], filasSheet = [];
+  // Por urgencia, cada una va a quien menos lleva en este reparto ENTRE QUIENES PUEDEN recibirla
+  // (VIDEO_LANZAMIENTO_DESDE: p. ej. lo que se lanza en noviembre no va a quien entra para diciembre).
+  const carga = {}; pool.forEach(p=>carga[p]=0);
   movibles.forEach((asig, i)=>{
-    const nuevo = pool[i % pool.length];
+    const aptas = pool.filter(p=>puedeRecibirVideo(p, asig));
+    const opciones = aptas.length ? aptas : pool;
+    const minimo = Math.min(...opciones.map(p=>carga[p]));
+    const empatadas = opciones.filter(p=>carga[p]===minimo);
+    const nuevo = empatadas.includes(asig.videoPersona) ? asig.videoPersona : empatadas[0]; // en empate se queda con quien la tenía (menos movimientos)
+    carga[nuevo]++;
     if(asig.videoPersona === nuevo) return; // ya le tocaba a esa misma persona, no mover
     const anterior = asig.videoPersona;
     asig.videoPersona = nuevo;
@@ -3671,7 +3692,7 @@ async function asignarCelulaManual(asigId, celulaId){
   asig.status = nuevoStatus;
   if(!asig.tareasCelula) asig.tareasCelula = iniciarTareasCelula(celulaId);
   // Editor de video por turno (desde datos), solo si aún no tiene
-  if(!asig.videoPersona) asig.videoPersona = siguienteVideoPersona();
+  if(!asig.videoPersona) asig.videoPersona = siguienteVideoPersona(asig);
 
   guardarEstadoLocal();
   setSyncStatus('sync');
@@ -5515,7 +5536,7 @@ function crearAsignaturaCelula(){
   renderCelula();
   toast('✅ Asignatura creada en célula '+CELULA_CFG[celula]?.label);
   // Asignar persona de video por turno y notificar
-  asig.videoPersona = avanzarTurnoVideo();
+  asig.videoPersona = avanzarTurnoVideo(asig);
   notificarAsignacion(asig, celula, false);
 }
 
@@ -6909,8 +6930,9 @@ async function cargarDesdeSheets(){
           .sort((a,b) => String(a.id).localeCompare(String(b.id)));
         let turnoIdx = conVideo.length % pool.length;
         sinVideo.forEach(a => {
-          a.videoPersona = pool[turnoIdx % pool.length];
-          turnoIdx++;
+          let k=0; while(k<pool.length && !puedeRecibirVideo(pool[(turnoIdx+k) % pool.length], a)) k++;
+          a.videoPersona = pool[(turnoIdx + (k<pool.length?k:0)) % pool.length];
+          turnoIdx += (k<pool.length?k:0) + 1;
           actualizado = true;
           // Persistir en Sheets para que quede asignado de forma permanente
           sheetActualizar('Asignaturas',
