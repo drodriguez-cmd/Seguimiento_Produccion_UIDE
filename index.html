@@ -830,6 +830,17 @@ textarea{resize:vertical;min-height:70px}
     </div>
   </div>
 </div>
+<div id="modal-felicidades" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:26px;max-width:460px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+    <div style="font-size:40px;line-height:1;margin-bottom:8px">🎉</div>
+    <div id="modal-felicidades-tit" style="font-family:var(--fhead);font-size:18px;font-weight:700;margin-bottom:8px"></div>
+    <div id="modal-felicidades-txt" style="font-size:13px;line-height:1.6;margin-bottom:18px"></div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn" onclick="cerrarFelicitacion()">¡Gracias!</button>
+      <button class="btn btn-primary" id="modal-felicidades-sig" onclick="irALaSiguiente()">Ver la siguiente</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg"></span></div>
 
 <script>
@@ -845,6 +856,35 @@ textarea{resize:vertical;min-height:70px}
 // ══════════════════════════════════════
 const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9lDpQrh1AUBB1ozFYiq2JF_NvKqhUUIC6fcVB9tHcIw/exec';
 
+// ══ VERSIÓN DEL DASHBOARD (4-nov-2026) ══
+// Cada llamada al Apps Script lleva este número (&v=). El Apps Script RECHAZA los cambios a la hoja Asignaturas
+// que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
+// puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
+// AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
+const DASHBOARD_VERSION = 2026110401;
+let _versionVieja = false;
+function avisarVersionVieja(motivo){
+  _versionVieja = true;
+  let b = document.getElementById('aviso-version');
+  if(!b){
+    b = document.createElement('div'); b.id='aviso-version';
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:10000;background:#b91c1c;color:white;padding:10px 16px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.25)';
+    document.body.appendChild(b);
+  }
+  b.innerHTML = '⚠️ '+(motivo||'Este dashboard está desactualizado.')+' Refresca la página con <b>Ctrl+Shift+R</b> (en Mac, <b>Cmd+Shift+R</b>). Mientras tanto no puede cambiar asignaturas.';
+}
+// Revisa cada 10 min si se publicó una versión nueva (lee el index.html publicado). No recarga sola: recargar
+// pausaría los timers que estén corriendo; solo avisa.
+async function revisarVersionPublicada(){
+  try{
+    if(document.hidden || _versionVieja) return;
+    const r = await fetch(location.href.split('#')[0], { cache:'no-store' }); if(!r.ok) return;
+    const m = /const DASHBOARD_VERSION = (\d+);/.exec(await r.text());
+    if(m && Number(m[1]) > DASHBOARD_VERSION) avisarVersionVieja('Hay una versión nueva del dashboard.');
+  }catch(e){}
+}
+setInterval(revisarVersionPublicada, 10*60*1000);
+
 function jsonp(url){
   return new Promise((resolve)=>{
     const cb = 'cb_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
@@ -857,9 +897,9 @@ function jsonp(url){
       window[cb] = ()=>{};
       if(script.parentNode) script.parentNode.removeChild(script);
     }
-    window[cb] = (data)=>{ cleanup(); resolve(data); };
+    window[cb] = (data)=>{ cleanup(); if(data && data.versionVieja) avisarVersionVieja(); resolve(data); };
     script.onerror = ()=>{ cleanup(); resolve({ok:false,filas:[]}); };
-    script.src = url + (url.includes('?')?'&':'?') + 'callback='+cb;
+    script.src = url + (url.includes('?')?'&':'?') + 'v='+DASHBOARD_VERSION + '&callback='+cb;
     document.head.appendChild(script);
   });
 }
@@ -1489,15 +1529,91 @@ function recordarCierreSiToca(asigId, persona, rol){
     const quien = esVideo ? (a.videoPersona||persona) : (CELULA_CFG[a.celula]?.label || persona);
     _recordatorioCierre = { asigId:a.id, revisor:quien };
     const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    document.getElementById('modal-cierre-tit').textContent = '✅ '+(esVideo?'Videos':'Entregables de diseño')+' completos';
+    document.getElementById('modal-cierre-tit').textContent = '🙌 ¡Muy bien! '+(esVideo?'Videos completos':'Diseño completo');
     document.getElementById('modal-cierre-txt').innerHTML =
-      'Completaste '+(esVideo?'los videos':'los entregables de diseño')+' de <b>'+esc(a.nombre)+'</b>. '+
-      'Para terminar tu parte, no olvides la pestaña <b>Cierre</b>:<ul style="margin:8px 0 8px 18px;padding:0">'+
+      '¡Ya casi! Terminaste '+(esVideo?'los videos':'los entregables de diseño')+' de <b>'+esc(a.nombre)+'</b>. '+
+      'Para cerrar tu parte solo falta la pestaña <b>Cierre</b>:<ul style="margin:8px 0 8px 18px;padding:0">'+
       falta.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>'+
       '<span style="font-size:12px;color:var(--muted)">Mientras falte, el dashboard no te da por terminada esta asignatura y el tiempo sigue contando.</span>';
     document.getElementById('modal-cierre').style.display='flex';
     sonidoRecordatorio();
   }catch(e){ console.log('[RECORDATORIO CIERRE] error:', e); }
+}
+// ══ FELICITACIÓN AL TERMINAR SU PARTE (4-nov-2026, pedido del coordinador) ══
+// Sale cuando el frente de una persona pasa de "sin terminar" a "terminado" (entregables + su parte del cierre +
+// sin timers abiertos), ya sea al marcar el último punto de la revisión o al cerrar el último timer.
+function _frentesTerminados(a){ return a ? { d: finFrenteTiempos(a,false)!==null, v: finFrenteTiempos(a,true)!==null } : {d:false,v:false}; }
+// Lo que debería hacer después esa persona (mismo criterio que la página Tiempos): una empezada sin terminar;
+// si no tiene, diseño = su En producción o su primera En espera; video = la más urgente de su fila.
+function siguienteDePersona(P, esVideo, salvoId){
+  const mias = STATE.asignaturas.filter(x=>x.tipo==='celula' && x.id!==salvoId && (esVideo ? x.videoPersona===P : x.celula===P) &&
+    x.status!=='Completada' && x.status!=='Pausada' && x.status!==ST_REVISION && finFrenteTiempos(x, esVideo)===null);
+  const empezada = mias.filter(x=>infoFrente(x, esVideo).iniciado).sort((p,q)=>compararPorUrgencia(p,q))[0];
+  if(empezada) return empezada;
+  if(esVideo) return mias.filter(x=>!_frenteEntregablesListos(x,true)).sort((p,q)=>compararPorUrgencia(p,q))[0] || null;
+  const pend = mias.filter(x=>!_frenteEntregablesListos(x,false));
+  return pend.find(x=>x.status==='En producción') || pend.find(x=>x.status==='En espera') || null;
+}
+let _felicitacion = null, _felicitado = {};
+// preferVideo: el frente de quien hizo la acción (su timer o el punto marcado); si ese terminó, se felicita ese.
+function felicitarSiTermino(a, antes, preferVideo){
+  try{
+    if(!a || a.tipo!=='celula') return;
+    const ahora=_frentesTerminados(a);
+    const flipV = !antes.v && ahora.v, flipD = !antes.d && ahora.d;
+    const frente = (preferVideo===true && flipV) ? true : (preferVideo===false && flipD) ? false : flipV ? true : flipD ? false : null;
+    if(frente===null) return;
+    const clave=a.id+'|'+(frente?'v':'d'); if(_felicitado[clave]) return; _felicitado[clave]=true; // una vez por pestaña
+    const esVideo=frente, P = esVideo ? a.videoPersona : a.celula; if(!P) return;
+    const nombre = esVideo ? P : (CELULA_CFG[P]?.label || P);
+    const yo = (localStorage.getItem('revisorNombre')||'') === nombre || !localStorage.getItem('revisorNombre');
+    const pila = nombre.split(' ')[0];
+    const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const sig = siguienteDePersona(P, esVideo, a.id);
+    _felicitacion = { sigId: sig ? sig.id : null };
+    document.getElementById('modal-felicidades-tit').textContent = yo ? '¡Felicidades, '+pila+'! 🥳' : '¡'+pila+' terminó su parte! 🥳';
+    document.getElementById('modal-felicidades-txt').innerHTML =
+      (yo ? 'Completaste tu parte de '+(esVideo?'video':'diseño')+' de ' : 'Completó su parte de '+(esVideo?'video':'diseño')+' de ')+'<b>'+esc(a.nombre)+'</b> ✨'+
+      (cierreCompletoAsig(a) ? '<br>🎓 Con esto la materia quedó lista para entregar.' : '')+
+      '<div style="margin-top:12px;padding:10px;border-radius:10px;background:rgba(34,197,94,.10)">'+
+      (sig ? '👉 '+(yo?'Ahora puedes continuar con':'Ahora puede continuar con')+' <b>'+esc(sig.nombre)+'</b>'+(sig.fechaLimite?' <span style="color:var(--muted);font-size:12px">(lanzamiento '+fmtFecha(sig.fechaLimite)+')</span>':'')
+           : '☕ '+(yo?'Por ahora no tienes':'Por ahora no tiene')+' otra asignatura en '+(esVideo?'video':'diseño')+'. ¡Buen trabajo!')+'</div>';
+    document.getElementById('modal-felicidades-sig').style.display = sig ? '' : 'none';
+    cerrarRecordatorioCierre();
+    document.getElementById('modal-felicidades').style.display='flex';
+    sonidoFelicitacion();
+  }catch(e){ console.log('[FELICITACION] error:', e); }
+}
+function cerrarFelicitacion(){ document.getElementById('modal-felicidades').style.display='none'; }
+function irALaSiguiente(){
+  const id=_felicitacion && _felicitacion.sigId; cerrarFelicitacion(); if(!id) return;
+  const a=STATE.asignaturas.find(x=>x.id===id); if(!a) return;
+  const buscador=document.getElementById('asig-search'); if(buscador) buscador.value=a.nombre;
+  _asigQuery=String(a.nombre||'').toLowerCase().trim(); _asigCelula='all';
+  const fc=document.getElementById('asig-celula-filter'); if(fc) fc.value='all';
+  goPage('asignaturas', document.querySelector(`.nav-item[onclick*="'asignaturas'"]`));
+  renderAsignaturas('all');
+  const body=document.getElementById('body-'+a.id); if(body && !body.classList.contains('open')) toggleAsigBody(a.id);
+  if(body && body.scrollIntoView) body.scrollIntoView({behavior:'smooth',block:'center'});
+}
+// Sonido de felicitación: cuatro notas subiendo (do-mi-sol-do), suave y un poco más alegre que el del recordatorio.
+function sonidoFelicitacion(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+    _audioCtx = _audioCtx || new AC();
+    if(_audioCtx.state==='suspended' && _audioCtx.resume) _audioCtx.resume();
+    const t0=_audioCtx.currentTime;
+    [[523.25,0],[659.25,0.11],[783.99,0.22],[1046.5,0.33]].forEach(([freq,desfase],i)=>{
+      const o=_audioCtx.createOscillator(), g=_audioCtx.createGain();
+      o.type='triangle'; o.frequency.value=freq;
+      const dur = i===3 ? 0.6 : 0.25;
+      g.gain.setValueAtTime(0.0001, t0+desfase);
+      g.gain.exponentialRampToValueAtTime(0.07, t0+desfase+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+desfase+dur);
+      o.connect(g); g.connect(_audioCtx.destination);
+      o.start(t0+desfase); o.stop(t0+desfase+dur+0.05);
+    });
+  }catch(e){}
 }
 function cerrarRecordatorioCierre(){ document.getElementById('modal-cierre').style.display='none'; }
 function irAlCierre(){
@@ -1532,6 +1648,7 @@ function toggleRevision(asigId, item, el){
   const revisor=localStorage.getItem('revisorNombre')||'';
   if(!revisor){ toast('Primero elige quién revisa (arriba de la lista)'); return; }
   a.revision=a.revision||{};
+  const antesFelic=_frentesTerminados(a);
   const nuevo=!(a.revision[item] && a.revision[item].ok), fecha=new Date().toISOString();
   a.revision[item]={ ok:nuevo, revisor:nuevo?revisor:'', fecha:nuevo?fecha:'' };
   guardarEstadoLocal();
@@ -1543,6 +1660,7 @@ function toggleRevision(asigId, item, el){
     const cnt=document.getElementById('rev-count-'+asigId); if(cnt) cnt.textContent=revisionAsig(a).hechos+'/'+REVISION_ITEMS.length;
   }
   if(nuevo) verificarAutoCompletado(asigId);
+  if(nuevo) felicitarSiTermino(a, antesFelic, REVISION_ITEMS_FRENTE.video.includes(item));
 }
 function _revisoresPosibles(){
   // Revisar no depende de estar recibiendo asignaturas: salen todos, estén activos o en pausa en la hoja Equipo
@@ -2068,6 +2186,22 @@ function finFrenteTiempos(a, esVideo, info){
   }
   return fin || null;
 }
+// Milisegundos entre dos momentos contando solo días hábiles (lun-vie, sin festivos de Colombia), a reloj de 24 h.
+function msHabilesEntre(iniMs, finMs){
+  if(!(finMs>iniMs)) return 0;
+  let total=0; const cur=new Date(iniMs); cur.setHours(0,0,0,0);
+  while(cur.getTime()<finMs){
+    const sig=new Date(cur); sig.setDate(sig.getDate()+1);
+    const ymd=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
+    const dow=cur.getDay();
+    if(dow!==0 && dow!==6 && !festivosColombia(cur.getFullYear()).has(ymd)){
+      total += Math.max(0, Math.min(finMs, sig.getTime()) - Math.max(iniMs, cur.getTime()));
+    }
+    cur.setTime(sig.getTime());
+  }
+  return total;
+}
+function fmtTranscurrido(d){ const h=d*24; return h<24 ? Math.round(h)+' h' : d.toFixed(1).replace('.',',')+' d'; }
 function calcularFilasTiempos(){
   _cacheTiempos = {};
   const ahora = Date.now(), filas = [], grupos = {};
@@ -2097,7 +2231,10 @@ function calcularFilasTiempos(){
     const objetivo = OBJETIVO_DIAS_FRENTE[g.key];
     const finParaTranscurridos = completo ? new Date(fin || info.ultimoFin || ahora) : new Date();
     const ymdInicio = (()=>{ const d=new Date(inicioMs); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
-    const diasTranscurridos = diasHabilesEntre(ymdInicio, finParaTranscurridos);
+    // Tiempo REAL transcurrido en días hábiles (4-nov-2026, caso de Valentina): 1 día = 24 h; fines de semana y
+    // festivos no cuentan. Antes se contaban las FECHAS tocadas (de 2:33 p. m. de un día a 6:33 a. m. del siguiente
+    // salían "2 días" con solo 16 h). Así cuadra con la fecha esperada: pasa del objetivo justo cuando se atrasa.
+    const diasTranscurridos = msHabilesEntre(inicioMs, finParaTranscurridos.getTime()) / 86400000;
     const fechaEsperada = sumarDiasHabiles(inicioMs, objetivo);
     const sobreObjetivo = (info.diasProduccion||0) > objetivo;
     // La fecha vencida es la señal MÁS fuerte: si ya pasó el calendario y no está completo, es atraso real.
@@ -3578,6 +3715,7 @@ function equipoVideoActivoCambio(){
 // Se dispara solo cuando cambia quién está activo (se pausa alguien o alguien vuelve),
 // no en cada sincronización. Lo que YA tiene trabajo real de video empezado no se toca.
 function rebalancearVideoEquipo(){
+  if(_versionVieja) return; // una versión desactualizada no reparte (el Apps Script tampoco se lo guardaría)
   const pool = VIDEO_PERSONAS.filter(p=>celulaActiva(p));
   if(!pool.length) return; // nadie activo, no hay a quién repartirle
 
@@ -4214,6 +4352,7 @@ function completarTimer(id,nota='',minsManual=null){
   const mins=minsManual!==null ? minsManual : Math.round(elapsed/60000);
   const dias=parseFloat((mins/480).toFixed(4)); // 480 min = 8h laborales
   const sesion={id:uid(),asigId:t.asigId,asigNombre:t.asigNombre,rol:t.rol,persona:t.persona,tarea:t.tarea,unidad:t.unidad,inicio:t.inicio,fin:Date.now(),mins,dias,notas:nota};
+  const antesFelic=_frentesTerminados(STATE.asignaturas.find(x=>x.id===sesion.asigId));
   STATE.sesiones.unshift(sesion);
   delete STATE.timers[id]; delete STATE.intervals[id];
   if(STATE.timersSheets) STATE.timersSheets=STATE.timersSheets.filter(x=>x.id!==id); // desaparece de la vista al instante
@@ -4227,6 +4366,7 @@ function completarTimer(id,nota='',minsManual=null){
   sheetTimerActivo('completar', t);
   renderTimers(); renderDashboardTimers(); toast('Sesión guardada · '+minsToStr(mins));
   recordarCierreSiToca(sesion.asigId, sesion.persona, sesion.rol);
+  felicitarSiTermino(STATE.asignaturas.find(x=>x.id===sesion.asigId), antesFelic, _esDelFrenteT(sesion.persona, sesion.rol, true));
 }
 
 function completarTimerRemoto(id, persona){
@@ -4314,10 +4454,11 @@ function guardarManual(){
   const dias=parseFloat((mins/480).toFixed(4));
   const persona=nombre||ROL_CFG[rol]?.label||rol;
   const sesion={id:uid(),asigId,asigNombre:asig?.nombre||'',rol,persona,tarea,unidad,inicio,fin,mins,dias,notas,manual:true};
+  const antesFelicM=_frentesTerminados(asig);
   STATE.sesiones.unshift(sesion);
   autoMarcarEntregable(asigId,tarea);
   guardarEstadoLocal();
-  setTimeout(()=>recordarCierreSiToca(asigId, persona, rol), 0);
+  setTimeout(()=>{ recordarCierreSiToca(asigId, persona, rol); felicitarSiTermino(asig, antesFelicM, _esDelFrenteT(persona, rol, true)); }, 0);
   setSyncStatus('sync');
   sheetGuardar('Sesiones',
     ['ID','Asignatura','Programa','Rol','Tarea','Clase','Minutos','Dias','Fecha Inicio','Fecha Fin','Notas','Manual','Persona','ID Asignatura'],
@@ -6713,7 +6854,7 @@ function renderTiempos(){
       <td><span class="role-pill" style="background:${frenteCfg.color}18;color:${frenteCfg.color};font-size:11px;padding:3px 10px">${frenteCfg.icon} ${frenteCfg.label}</span></td>
       <td style="font-size:11px;font-weight:600;color:${PCOL[f.prioridad]||PCOL.media}">${PRIORIDAD_EMOJI[f.prioridad]||'🟡'} ${f.prioridad.charAt(0).toUpperCase()+f.prioridad.slice(1)}</td>
       <td style="font-size:12px">${fmtFechaHora(f.inicioMs)}${f.inicioAuto?`<div style="font-size:10px;color:var(--muted)" title="El plazo arrancó cuando la persona terminó su asignatura anterior (o cuando se le asignó), antes del primer timer">${f.sinArrancar?'sin timer aún':'antes del 1.er timer'}</div>`:''}</td>
-      <td style="text-align:center" title="Días de calendario hábiles (lun-vie, sin festivos) desde que arrancó — no son horas trabajadas">${f.diasTranscurridos}d cal.</td>
+      <td style="text-align:center" title="Tiempo real desde el Inicio, contando solo días hábiles (lun-vie, sin festivos; 1 día = 24 h) — no son horas trabajadas">${fmtTranscurrido(f.diasTranscurridos)}</td>
       <td style="text-align:center;font-weight:700" title="Horas de trabajo real acumuladas, convertidas a jornadas de 8h">${f.diasProduccion.toFixed(2)}d</td>
       <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
       <td style="font-size:12px">${fmtFechaHora(f.fechaEsperada.getTime())}</td>
@@ -6728,7 +6869,7 @@ function renderTiempos(){
       ${lista.length ? `<div style="overflow-x:auto"><table>
         <thead><tr>
           <th>Persona</th><th>Asignatura</th><th>Frente</th><th>Prioridad</th><th>Inicio</th>
-          <th>Días calendario<br>transcurridos</th><th>Producción real<br>(jornadas 8h)</th><th>Objetivo</th>
+          <th>Tiempo transcurrido<br>(días hábiles)</th><th>Producción real<br>(jornadas 8h)</th><th>Objetivo</th>
           <th>Fecha esperada término</th><th>Lanzamiento</th><th>Estado</th>
         </tr></thead>
         <tbody>${lista.map(filaHTML).join('')}</tbody>
