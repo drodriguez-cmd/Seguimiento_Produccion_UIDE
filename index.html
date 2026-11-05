@@ -2094,7 +2094,13 @@ function diasAsig(a){
 // - diasTranscurridos: días hábiles (festivos Colombia) desde ese primer trabajo hasta hoy
 // - diasProduccion: días de producción efectivos (tiempo real ÷ jornada 8h), fusionando paralelos
 // Video = los editores de video (o rol 'video'). Diseño = todo lo demás.
-function infoFrente(a, esVideo){
+// ¿Dos nombres son la misma persona? Se compara el primer nombre sin tildes ("Gabriel" = "Gabriel Villarejo",
+// "Valentina Chacón" = "Valentina Rodríguez"). Dentro de un mismo frente los primeros nombres no se repiten.
+function _primerNombre(n){ return String(n||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().split(/\s+/)[0]||''; }
+function mismaPersona(a, b){ const x=_primerNombre(a), y=_primerNombre(b); return !!x && x===y; }
+// soloPersona (opcional, 5-nov-2026): cuenta solo los timers de esa persona. Lo usa Tiempos para que quien recibe
+// una asignatura ya empezada por otra persona no herede su Inicio ni sus horas (caso Daniela → Gabriel).
+function infoFrente(a, esVideo, soloPersona){
   if(!a) return { iniciado:false };
   const MIN_JORNADA = 480;
   const esDelFrente = (persona, rol) => {
@@ -2109,6 +2115,7 @@ function infoFrente(a, esVideo){
   let primerInicio = null, ultimoFin = null;
   const considerar = (ini, fin, persona, rol) => {
     if(!esDelFrente(persona, rol)) return;
+    if(soloPersona && persona && !mismaPersona(persona, soloPersona)) return;
     if(ini>0 && fin>ini){
       intervalos.push([ini,fin]);
       if(primerInicio===null||ini<primerInicio) primerInicio=ini;
@@ -2234,7 +2241,12 @@ function calcularFilasTiempos(){
      {esVideo:true,  key:'video',  P:a.videoPersona||null}
     ].forEach(({esVideo, key, P})=>{
       if(!P) return; // no tiene a nadie asignado en ese frente
-      const info = infoFrente(a, esVideo);
+      // Solo el trabajo de ESA persona en ese frente: si otra la empezó antes (reasignada), no se le cuenta.
+      // Excepciones (se cuenta todo, como antes): las células viejas de varias personas ("Célula Fabián"...) y las
+      // Completadas en las que la persona a cargo no registró timers propios (historial de antes).
+      const quien = esVideo ? P : (CELULA_CFG[P]?.label || P);
+      let info = /^c[eé]lula/i.test(quien) ? infoFrente(a, esVideo) : infoFrente(a, esVideo, quien);
+      if(!info.iniciado && a.status==='Completada') info = infoFrente(a, esVideo);
       const fin = finFrenteTiempos(a, esVideo, info);
       // Completada en general (p. ej. ya salió el correo) cuenta como completa aquí también
       const completo = a.status==='Completada' || fin!==null;
