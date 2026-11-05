@@ -321,7 +321,7 @@ function pd(s){if(!s)return null;const [y,m,d]=s.split('-').map(Number);return n
 function addD(s,n){const d=pd(s);d.setDate(d.getDate()+n);return ymd(d)}
 function fmt(s){if(!s)return '—';const d=pd(s);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getFullYear()).slice(2)}
 function fmtc(s){if(!s)return '—';const d=pd(s);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')}
-const HOY = ymd(new Date());
+let HOY = ymd(new Date());
 const _fest = {};
 function festivos(y){
   if(_fest[y])return _fest[y];
@@ -553,6 +553,10 @@ function promPersona(p){
   return {trab:tr.length?tr.reduce((x,y)=>x+y,0)/tr.length:0,nT:tr.length,manos:mn.length?mn.reduce((x,y)=>x+y,0)/mn.length:0,nM:mn.length}}
 function tick(){document.querySelectorAll('[data-clk]').forEach(el=>{const s=ST[el.dataset.clk];if(s)el.textContent=fmtClk(msTrab(s))})}
 setInterval(tick,1000);
+/* Si la pestaña quedó abierta de un día para otro, "hoy" se actualiza solo (fecha de ¿Cuándo pasó?, alarmas y días) */
+setInterval(()=>{const h=ymd(new Date());if(h===HOY)return;const ta=document.querySelector('.det textarea');if(ta&&(ta===document.activeElement||ta.value))return;
+  HOY=h;try{render()}catch(e){}},30000);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)return;const h=ymd(new Date());if(h!==HOY){HOY=h;try{render()}catch(e){}}});
 
 /* ── Dashboard ── */
 function renderDash(){
@@ -670,13 +674,13 @@ function pasoSiguiente(a,s){
   return '<div class="box paso"><h4>Siguiente paso · '+quienT+'</h4><div style="font-size:13px">'+est+'</div>'+(tocaEquipo&&!r?selR:'')+'<ol>'+pasos.map(p=>'<li>'+p+'</li>').join('')+'</ol></div>'}
 function detalle(a){
   const s=ST[a.id],F=fechas(a);
-  const pts=hitos(a);
+  const pts=hitosTl(a,s);
   let hoyPuesto=false;
   const O={sin:0,escr:1,rev:2,doc:3,coord:4,fab:5}[s.etapa]||0;
   const hecho=Object.fromEntries(pts.map(p=>[p[0],hechoHito(a,s,p[0])]));
   let actualPuesto=false;
-  const tl='<div class="tl">'+pts.map(p=>{let c='';if(hecho[p[0]])c='ok';else if(!actualPuesto){actualPuesto=true;c=HOY>p[1]?'tarde':'aqui'}else if(HOY>p[1])c='tarde';
-    return '<div class="p '+c+'" title="'+(c==='ok'?'Ya pasó':c==='aqui'?'Es lo que toca ahora':c==='tarde'?'Atrasado: la fecha ya pasó y no se ha hecho':'Todavía no')+'"><i></i>'+p[0]+'<b>'+fmt(p[1])+'</b>'+((p[0]==='Encargo enviado'||p[0]==='Empezamos a escribir')&&a.plan&&a.plan.encargoUIDE&&a.plan.encargoUIDE!==p[1]?'<span class="real" style="color:var(--muted);font-weight:400" title="UIDE lo pone en fin de semana o festivo; sale el siguiente día hábil">UIDE: '+['dom','lun','mar','mié','jue','vie','sáb'][new Date(a.plan.encargoUIDE+'T12:00').getDay()]+' '+fmtc(a.plan.encargoUIDE)+'</span>':'')+realTxt(p[1],fechaReal(a,s,p[0]))+'</div>'}).join('')+'</div>'+
+  const tl='<div class="tl">'+pts.map(p=>{let c='';if(hecho[p[0]])c='ok';else if(!actualPuesto){actualPuesto=true;c=p[1]&&HOY>p[1]?'tarde':'aqui'}else if(p[1]&&HOY>p[1])c='tarde';
+    return '<div class="p '+c+'" title="'+(c==='ok'?'Ya pasó':c==='aqui'?'Es lo que toca ahora':c==='tarde'?'Atrasado: la fecha ya pasó y no se ha hecho':'Todavía no')+'"><i></i>'+p[0]+(p[1]?'<b>'+fmt(p[1])+'</b>':'<b style="color:var(--muted);font-weight:400">sin fecha UIDE</b>')+((p[0]==='Encargo enviado'||p[0]==='Empezamos a escribir')&&a.plan&&a.plan.encargoUIDE&&a.plan.encargoUIDE!==p[1]?'<span class="real" style="color:var(--muted);font-weight:400" title="UIDE lo pone en fin de semana o festivo; sale el siguiente día hábil">UIDE: '+['dom','lun','mar','mié','jue','vie','sáb'][new Date(a.plan.encargoUIDE+'T12:00').getDay()]+' '+fmtc(a.plan.encargoUIDE)+'</span>':'')+realTxt(p[1],fechaReal(a,s,p[0]))+'</div>'}).join('')+'</div>'+
     '<div class="tl-ley"><span style="--c:var(--ok)">Hecho</span><span style="--c:#3b8be0">Lo que toca ahora</span><span style="--c:var(--danger)">Atrasado</span><span style="--c:#fff;--b:var(--border2)">Todavía no</span></div>';
   const posibles=Object.entries(EVENTOS).filter(([k,e])=>e.de.includes(s.etapa)&&(!e.flujo||e.flujo===a.flujo)&&!(s.etapa==='rev'&&(k==='aCoord'||(k==='alDocente'&&!(a.flujo==='IA'&&!(s.rondas>0))))));
   const acts=posibles.map(([k,e],i)=>'<button class="btn'+(i===0?' pri':'')+'" onclick="event.stopPropagation();registrar(\''+a.id+'\',\''+k+'\')">'+e.l+'</button>').join('');
@@ -870,6 +874,10 @@ function setDocTipo(id,v){if(!v)return;const a=DATOS.find(x=>x.id===id),s=ST[id]
 const ORDH={sin:0,escr:1,rev:2,doc:3,coord:4,fab:5};
 const HITO={'Encargo enviado':[1,['encargo']],'Empezamos a escribir':[1,['iniciaIA']],'Profesor entrega':[2,['recibido']],'Entregamos al profesor':[3,['alDocente']],'Enviamos revisión al profesor':[3,['alDocente']],'Profesor devuelve ajustes':[4,['ajustes']],'Profesor devuelve revisión':[4,['ajustes']],'Enviamos a coordinación':[4,['aCoord']],'Coordinador aprueba':[5,['aFabrica']],'Entra a Fábrica':[5,['aFabrica']]};
 /* Los puntos de cada asignatura: [nombre, fecha UIDE]. Docente UIDE: escribe el profesor. Docente EIG: escribimos nosotras. */
+function hitosTl(a,s){const F=fechas(a),coord=F.coordDesde||'';
+  const L=a.flujo==='IA'?[['Empezamos a escribir',F.encargo],['Entregamos al profesor',F.entregaDocente],['Profesor devuelve revisión',F.revHasta]]
+    :[['Encargo enviado',F.encargo],['Profesor entrega',F.entregaDocente],['Enviamos revisión al profesor',F.revHasta],['Profesor devuelve ajustes',F.correccion]];
+  return L.concat([['Enviamos a coordinación',coord],['Coordinador aprueba',F.coordHasta],['Entra a Fábrica',F.tope],['Inicio',F.inicio]]).filter(p=>p[1]||fechaReal(a,s,p[0]))}
 function hitos(a){const F=fechas(a),coord=F.coordDesde||'';
   const L=a.flujo==='IA'?[['Empezamos a escribir',F.encargo],['Entregamos al profesor',F.entregaDocente],['Profesor devuelve revisión',F.revHasta]]
     :[['Encargo enviado',F.encargo],['Profesor entrega',F.entregaDocente],['Enviamos revisión al profesor',F.revHasta],['Profesor devuelve ajustes',F.correccion]];
@@ -888,7 +896,7 @@ function fechaReal(a,s,hito){const h=HITO[hito];if(!h)return null;
   if(hito==='Encargo enviado'&&a.flujo==='Autor'&&s.encargo&&/^\d{4}-\d{2}-\d{2}$/.test(s.encargo))cand.push({f:s.encargo,aprox:false});
   if(!cand.length)return null;
   const exactas=cand.filter(c=>!c.aprox),L=(exactas.length?exactas:cand).sort((x,y)=>x.f.localeCompare(y.f));return L[0]}
-function realTxt(plan,r){if(!r)return '';const d=diasCal(plan,r.f);return '<span class="real" style="color:'+(d<=0?'var(--ok)':'#b45309')+'">'+(r.aprox?'≈ ':'real ')+fmtc(r.f)+(d>0?' (+'+d+' d)':'')+'</span>'}
+function realTxt(plan,r){if(!r)return '';if(!plan)return '<span class="real" style="color:var(--ok)">'+(r.aprox?'≈ ':'real ')+fmtc(r.f)+'</span>';const d=diasCal(plan,r.f);return '<span class="real" style="color:'+(d<=0?'var(--ok)':'#b45309')+'">'+(r.aprox?'≈ ':'real ')+fmtc(r.f)+(d>0?' (+'+d+' d)':'')+'</span>'}
 function corregirFecha(id){const a=DATOS.find(x=>x.id===id),s=ST[id];if(s.etapa==='sin'){toast('Esta asignatura todavía no ha empezado');return}
   const FR=fechaRegistro(id);const prev=(s.eventos.filter(e=>e.a===s.etapa&&e.de&&e.de!==s.etapa).pop()||{}).de||ETAPAS[Math.max(0,ETAPAS.findIndex(e=>e.k===s.etapa)-1)].k;
   if(!confirm('¿Confirmas que "'+a.materia+'" llegó a "'+ET[s.etapa].l+'" el '+fmt(FR.f)+'?'))return;
