@@ -841,6 +841,9 @@ textarea{resize:vertical;min-height:70px}
     </div>
   </div>
 </div>
+<div id="modal-reporte" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9997;align-items:center;justify-content:center" onclick="if(event.target===this)calCerrarReporte()">
+  <div id="modal-reporte-caja" style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:22px 24px;max-width:620px;width:92%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)"></div>
+</div>
 <div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg"></span></div>
 
 <script>
@@ -861,7 +864,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026110602;
+const DASHBOARD_VERSION = 2026110605;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1130,42 +1133,92 @@ function renderCelulasDir(){
     </div>`;
   }).join('');
 
-  // Video cell
+  // Video cell — con la misma información que diseño (6-nov-2026, Juan Diego): en qué materia está avanzando, avance de
+  // sus videos, días transcurridos (igual que en Tiempos), cierre y un estado claro (En producción / Por arrancar /
+  // En cierre / Libre / Pausado). Antes solo decía "N activas" y parecía que no estaban trabajando.
+  const VIDEO_KEYS = ['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'];
+  const videosHechos = a => VIDEO_KEYS.filter(k=>a?.assets?.global?.[k]).length;
+  let filasTiemposV = [];
+  try{ filasTiemposV = calcularFilasTiempos().filter(f=>f.esVideo && !f.completo); }catch(e){}
+  // Timers de VIDEO de esa persona en esa materia. Ojo: hay primeros nombres repetidos entre frentes (Juliana Zarate en
+  // diseño y Juliana Gutiérrez en video; Alejandra Gonzales y Alejandra Barco), por eso se exige que el timer sea de video.
+  const esTimerVideo = t => String(t.rol||'').toLowerCase()==='video' || VIDEO_PERSONAS.includes(t.persona);
+  const timersVideoDe = (persona, a) => {
+    const locales = Object.values(STATE.timers||{}), ids = Object.keys(STATE.timers||{});
+    return [...locales, ...(STATE.timersSheets||[]).filter(t=>!ids.includes(t.id))]
+      .filter(t=>esTimerVideo(t) && mismaPersona(t.persona,persona) && (t.asigId===a.id || t.asigNombre===a.nombre));
+  };
+  const timerCorre = t => t.running!==false && t.estado!=='Pausado';
+  const timerVideoVivo = (persona, a) => timersVideoDe(persona,a).some(timerCorre);
+  const timerVideoPausado = (persona, a) => { const l=timersVideoDe(persona,a); return l.length>0 && !l.some(timerCorre); };
   const videoPersonas = VIDEO_PERSONAS;
   const videoHTML = videoPersonas.map(persona=>{
     const asigs = ordenarPorPrioridad(todas.filter(a=>a.videoPersona===persona && a.status==='En producción' && !videoCompletoAsig(a)));
     const enCola = ordenarPorPrioridad(todas.filter(a=>a.videoPersona===persona && a.status==='En espera'));
-    const enCierreV = todas.filter(a=>a.videoPersona===persona && frenteFaltaCierre(a,true));
+    const enCierreV = todas.filter(a=>a.videoPersona===persona && frenteFaltaCierre(a,true)).sort((p,q)=>compararPorUrgencia(p,q));
     const esperandoDiseno = todas.filter(a=>a.videoPersona===persona && a.status==='En producción' && videoCompletoAsig(a) && !disenoCompletoAsig(a) && !enCierreV.includes(a));
     const completadasV = todas.filter(a=>a.videoPersona===persona && a.status==='Completada' && a.tipo==='celula');
     const promV = completadasV.length>0
       ? (completadasV.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasV.length).toFixed(1)
       : null;
+    // ¿En cuál está avanzando? 1) la que tiene el timer prendido; 2) la última que trabajó; 3) la siguiente por prioridad
+    const cand = asigs.map((a,k)=>{ const inf=infoFrente(a,true,persona); return { a, k, vivo:timerVideoVivo(persona,a), pausa:timerVideoPausado(persona,a), iniciado:!!inf.iniciado, ultimo:inf.ultimoFin||0, inf }; });
+    cand.sort((x,y)=> (y.vivo-x.vivo) || (y.pausa-x.pausa) || (y.iniciado-x.iniciado) || (y.ultimo-x.ultimo) || (x.k-y.k));
+    const P = cand[0] || null;
+    const otras = cand.slice(1).map(c=>c.a);
+    const cierreV = !P ? enCierreV[0] : null;
+    const otrosCierreV = enCierreV.filter(a=>a!==cierreV);
+    const avC = cierreV ? avanceCierreFrente(cierreV,true) : null;
+    const hechos = P ? videosHechos(P.a) : 0;
+    const pct = P ? Math.round(hechos/VIDEO_KEYS.length*100) : cierreV ? avC.pct : 0;
+    // Días: el mismo tiempo transcurrido que muestra Tiempos para esa materia
+    const filaT = P ? filasTiemposV.find(f=>f.asigId===P.a.id && mismaPersona(f.persona,persona)) : null;
+    const diasTxt = filaT ? fmtTranscurrido(filaT.diasTranscurridos) : (P && P.iniciado && P.inf.diasTranscurridos!=null) ? P.inf.diasTranscurridos+' d' : cierreV ? diasAsig(cierreV).toFixed(1)+'d' : '—';
+    const vencida = !!(filaT && filaT.fechaVencida);
+    const activaEnEquipoV = celulaActiva(persona);
+    const arrancada = P && (P.vivo || P.pausa || P.iniciado);
+    const [stLbl, stCol, stBg] = !activaEnEquipoV ? ['⏸ Pausado','#6b7280','rgba(107,114,128,.12)']
+      : P ? (arrancada ? ['En producción','#d97706','rgba(217,119,6,.1)'] : ['Por arrancar','#6366f1','rgba(99,102,241,.12)'])
+      : cierreV ? ['En cierre','#b45309','rgba(234,179,8,.16)'] : ['Libre','#16a34a','rgba(22,163,74,.1)'];
+    const barColor = cierreV ? '#ca8a04' : pct>=60 ? '#16a34a' : pct>=30 ? '#d97706' : '#2563eb';
+    const principalTxt = P
+      ? `<div style="font-size:11px;color:var(--text);margin-top:1px">${prioMarca(P.a)} ${P.a.nombre}${P.vivo?' <span style="color:#16a34a;font-weight:600">● timer corriendo</span>':P.pausa?' <span style="color:#6b7280">⏸ timer en pausa</span>':(!arrancada?' <span style="color:#6366f1">· sin timer aún</span>':'')}</div>`
+      : cierreV ? `<div style="font-size:11px;color:#b45309;margin-top:1px;font-weight:600" title="Videos listos; faltan puntos de la pestaña Cierre Video">📋 En cierre: ${cierreV.nombre}</div>`
+      : `<div style="font-size:11px;color:var(--muted);margin-top:1px">Sin asignatura activa</div>`;
+    const otrasTxt = otras.length ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">También activa${otras.length===1?'':'s'}: ${otras.map(a=>prioMarca(a)+' '+a.nombre).join(' · ')}</div>` : '';
+    const otrosCierreTxt = otrosCierreV.length ? `<div style="font-size:11px;color:#b45309;margin-top:2px;font-weight:500">📋 Cierre pendiente: ${otrosCierreV.map(a=>a.nombre).join(' · ')}</div>` : '';
     const colaTxt = enCola.length>0
       ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>prioMarca(a)+' '+a.nombre).join(' · ')}</div>`
       : '';
     const esperandoDisenoTxt = esperandoDiseno.length>0
       ? `<div style="font-size:11px;color:#a855f7;margin-top:2px;font-weight:500">✅🎨 Video listo, esperando diseño: ${esperandoDiseno.map(a=>a.nombre).join(' · ')}</div>`
       : '';
-    const activaEnEquipoV = celulaActiva(persona);
-    const statusVLabel = !activaEnEquipoV ? '⏸ Pausado' : (!asigs.length && enCierreV.length) ? 'En cierre' : `${asigs.length} activas`;
-    const statusVColor = !activaEnEquipoV ? '#6b7280' : '#2563eb';
-    const statusVBg = !activaEnEquipoV ? 'rgba(107,114,128,.12)' : 'rgba(37,99,235,.1)';
     return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);opacity:${activaEnEquipoV?1:.55}">
       <div style="width:12px;height:12px;border-radius:50%;background:#2563eb;flex-shrink:0"></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">🎬 ${persona}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${asigs.length} activa${asigs.length!==1?'s':''} · ${enCola.length} en cola</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:1px">${asigs.map(a=>prioMarca(a)+' '+a.nombre).join(' · ')||'Sin asignaturas activas'}</div>
-        ${enCierreV.length ? `<div style="font-size:11px;color:#b45309;margin-top:3px;font-weight:600" title="Videos listos; falta marcar su punto en la pestaña Cierre">📋 En cierre: ${enCierreV.map(a=>a.nombre).join(' · ')}</div>` : ''}
+        ${principalTxt}
+        ${otrasTxt}
+        ${otrosCierreTxt}
         ${colaTxt}
         ${esperandoDisenoTxt}
+      </div>
+      <div style="width:100px;flex-shrink:0">
+        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px">
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:${barColor};text-align:right">${cierreV ? 'cierre '+avC.hechos+'/'+avC.total : P ? 'videos '+hechos+'/'+VIDEO_KEYS.length : '0%'}</div>
+      </div>
+      <div style="text-align:center;min-width:60px">
+        <div style="font-size:11px;color:var(--muted)">Días</div>
+        <div style="font-size:14px;font-weight:700;color:${vencida?'#dc2626':'var(--text)'}" title="${filaT?'Tiempo transcurrido en días hábiles, igual que en Tiempos':''}">${diasTxt}</div>
       </div>
       <div style="text-align:center;min-width:70px">
         <div style="font-size:11px;color:var(--muted)">Velocidad prom.</div>
         <div style="font-size:14px;font-weight:700;color:${promV?'#16a34a':'var(--muted)'}">${promV?promV+'d':'—'}</div>
       </div>
-      <div style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:${statusVBg};color:${statusVColor};flex-shrink:0">${statusVLabel}</div>
+      <div style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:${stBg};color:${stCol};flex-shrink:0">${stLbl}</div>
     </div>`;
   }).join('');
 
@@ -1462,16 +1515,39 @@ const TAREA_ASSET_MAP = {
 // ═══ CIERRE DE UNA ASIGNATURA: banner + revisión de calidad (decisión del equipo, oct 2026) ═══
 // Antes de marcarse Completada (y de que salga el correo a UIDE), la asignatura necesita:
 //   1) el BANNER: se completa solo con el timer "Creación de banner" (o una sesión pasada de esa tarea);
-//   2) la REVISIÓN DE CALIDAD: lista de 6 puntos, todos obligatorios, que marca cualquiera del equipo.
+//   2) la REVISIÓN DE CALIDAD: lista de 9 puntos (5 de diseño en Cierre Diseño, 4 de video en Cierre Video), todos obligatorios, que marca cualquiera del equipo.
 // La revisión se guarda en la pestaña "Revisiones" del Sheet (se crea sola), una fila por punto.
+// 6-nov-2026 (Juan Diego): el cierre se separa en dos pestañas, "Cierre Diseño" (banner + 5 puntos) y "Cierre Video"
+// (4 puntos). El antiguo punto único de video ('video') se reemplaza por los 4 de video; quien ya lo había marcado
+// antes del cambio no tiene que volver a marcar (ver _heredarRevisionVideo).
 const REVISION_ITEMS = [
   ['imagenes','Imágenes completas y de esta materia'],
-  ['video','Título del video igual al de la clase, sin logo de Synthesia y con el enlace abierto'],
   ['genially','Cada Genially corresponde a la materia y a la semana'],
   ['banner','Banner cargado con los nombres de maestría y de materia vigentes'],
   ['nombres','Nombres de infografías y de temas sin errores'],
-  ['html','HTML con su estructura completa']
+  ['html','HTML con su estructura completa'],
+  ['v_intro','Video intro: el título de la materia aparece en el guion y en la primera escena'],
+  ['v_clase','Videos de clase: el título de cada clase aparece en el guion y en la primera escena'],
+  ['v_rda','Genially de RDA: la información coincide con la matriz de arranque'],
+  ['v_embed','Códigos embed: todos funcionan (enlace abierto) y ningún video muestra el logo de Synthesia']
 ];
+const REVISION_VIDEO_ANTIGUO = 'video';
+const REVISION_VIDEO_HEREDAR_HASTA = Date.parse('2026-11-07T00:00:00-05:00');
+// Si el punto antiguo de video quedó marcado ANTES del cambio, cuenta como hechos los 4 nuevos que nadie haya tocado
+// (solo en memoria; no se escribe en el Sheet). Lo marcado después (p. ej. desde una pestaña vieja) no hereda.
+function _heredarRevisionVideo(rv){
+  if(!rv) return rv;
+  const v=rv[REVISION_VIDEO_ANTIGUO], ms=Date.parse((v&&v.fecha)||'');
+  const vale = !!(v && v.ok) && !(!isNaN(ms) && ms>=REVISION_VIDEO_HEREDAR_HASTA);
+  REVISION_ITEMS_FRENTE.video.forEach(k=>{
+    if(rv[k] && rv[k].heredado && !vale) delete rv[k];
+    else if(vale && !rv[k]) rv[k]={ ok:true, revisor:v.revisor, fecha:v.fecha, heredado:true };
+  });
+  return rv;
+}
+// La revisión de una asignatura, con la herencia del punto antiguo de video ya aplicada (sirve también para lo que
+// venga de la copia local del navegador, antes de leer el Sheet)
+function _revDe(a){ if(!a) return {}; a.revision=_heredarRevisionVideo(a.revision||{}); return a.revision; }
 const ENC_REVISIONES = ['ID','ID Asignatura','Item','Estado','Revisor','Fecha'];
 const _bannerCache = { firma:'', ids:new Set(), noms:new Set() };
 function _bannerIdx(){
@@ -1487,7 +1563,7 @@ function _bannerIdx(){
 }
 function bannerHechoAsig(a){ const c=_bannerIdx(); return c.ids.has(a.id) || c.noms.has(a.nombre); }
 function revisionAsig(a){
-  const rv=a.revision||{}, hechos=REVISION_ITEMS.filter(([k])=>rv[k] && rv[k].ok).length;
+  const rv=_revDe(a), hechos=REVISION_ITEMS.filter(([k])=>rv[k] && rv[k].ok).length;
   return { hechos, total:REVISION_ITEMS.length, completa:hechos===REVISION_ITEMS.length };
 }
 function cierreCompletoAsig(a){ return bannerHechoAsig(a) && revisionAsig(a).completa; }
@@ -1498,12 +1574,12 @@ function faltaCierreTexto(a){
 }
 // ══ RECORDATORIO DE CIERRE (3-nov-2026, pedido del coordinador) ══
 // Cuando una persona completa los entregables de SU frente pero le falta su parte del cierre, se le recuerda.
-// Su parte: video = el punto "video" de la revisión; diseño = el banner y los otros 5 puntos. El plazo sigue
+// Su parte: video = los 4 puntos de Cierre Video; diseño = el banner y los 5 puntos de Cierre Diseño. El plazo sigue
 // corriendo mientras tanto (la revisión es tiempo de trabajo y cuenta).
 function _frenteEntregablesListos(a, esVideo){ return esVideo ? videoCompletoAsig(a) : disenoCompletoAsig(a); }
 // Lo que le falta a ese frente para terminar (lista de textos). Vacía = no le falta nada.
 function faltaCierreFrente(a, esVideo){
-  const f=[], rv=a.revision||{};
+  const f=[], rv=_revDe(a);
   if(!esVideo && !bannerHechoAsig(a)) f.push('Hacer el banner (timer “Creación de banner”)');
   REVISION_ITEMS.forEach(([k,lbl])=>{ if(REVISION_ITEMS_FRENTE[esVideo?'video':'diseno'].includes(k) && !(rv[k] && rv[k].ok)) f.push('Marcar en la revisión: “'+lbl+'”'); });
   if(_timerAbiertoFrente(a, esVideo)) f.push('Cerrar el timer que sigue abierto en esta asignatura');
@@ -1516,9 +1592,9 @@ function frenteFaltaCierre(a, esVideo){
   return faltaCierreFrente(a, esVideo).length>0;
 }
 let _recordatorioCierre = null;
-// Avance del cierre de un frente: cuántos de sus pasos lleva (diseño = banner + 5 puntos; video = 1 punto)
+// Avance del cierre de un frente: cuántos de sus pasos lleva (diseño = banner + 5 puntos; video = 4 puntos)
 function avanceCierreFrente(a, esVideo){
-  const items=REVISION_ITEMS_FRENTE[esVideo?'video':'diseno'], rv=a.revision||{};
+  const items=REVISION_ITEMS_FRENTE[esVideo?'video':'diseno'], rv=_revDe(a);
   const total = items.length + (esVideo?0:1);
   const hechos = items.filter(k=>rv[k] && rv[k].ok).length + (!esVideo && bannerHechoAsig(a) ? 1 : 0);
   return { hechos, total, pct: Math.round(hechos/total*100) };
@@ -1552,12 +1628,12 @@ function recordarCierreSiToca(asigId, persona, rol){
     const falta=faltaCierreFrente(a, esVideo).filter(t=>!/^Cerrar el timer/.test(t)); // si aún tiene otro timer abierto, se le recuerda al cerrarlo
     if(!falta.length || _timerAbiertoFrente(a, esVideo)) return;
     const quien = esVideo ? (a.videoPersona||persona) : (CELULA_CFG[a.celula]?.label || persona);
-    _recordatorioCierre = { asigId:a.id, revisor:quien };
+    _recordatorioCierre = { asigId:a.id, revisor:quien, esVideo };
     const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     document.getElementById('modal-cierre-tit').textContent = '🙌 ¡Muy bien! '+(esVideo?'Videos completos':'Diseño completo');
     document.getElementById('modal-cierre-txt').innerHTML =
       '¡Ya casi! Terminaste '+(esVideo?'los videos':'los entregables de diseño')+' de <b>'+esc(a.nombre)+'</b>. '+
-      'Para cerrar tu parte solo falta la pestaña <b>Cierre</b>:<ul style="margin:8px 0 8px 18px;padding:0">'+
+      'Para cerrar tu parte solo falta la pestaña <b>'+(esVideo?'Cierre Video':'Cierre Diseño')+'</b>:<ul style="margin:8px 0 8px 18px;padding:0">'+
       falta.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>'+
       '<span style="font-size:12px;color:var(--muted)">Mientras falte, el dashboard no te da por terminada esta asignatura y el tiempo sigue contando.</span>';
     document.getElementById('modal-cierre').style.display='flex';
@@ -1651,9 +1727,10 @@ function irAlCierre(){
   goPage('asignaturas', document.querySelector(`.nav-item[onclick*="'asignaturas'"]`));
   renderAsignaturas('all');
   const body=document.getElementById('body-'+a.id); if(body && !body.classList.contains('open')) toggleAsigBody(a.id);
-  const tab=body && [...body.querySelectorAll('.utab')].find(b=>(b.getAttribute('onclick')||'').includes("'cierre'"));
-  if(tab) showUnit(a.id,'cierre',tab);
-  const sec=document.getElementById('unit-'+a.id+'-cierre'); if(sec && sec.scrollIntoView) sec.scrollIntoView({behavior:'smooth',block:'center'});
+  const u = r.esVideo ? 'cierrev' : 'cierre';
+  const tab=body && [...body.querySelectorAll('.utab')].find(b=>(b.getAttribute('onclick')||'').includes("'"+u+"'"));
+  if(tab) showUnit(a.id,u,tab);
+  const sec=document.getElementById('unit-'+a.id+'-'+u); if(sec && sec.scrollIntoView) sec.scrollIntoView({behavior:'smooth',block:'center'});
 }
 async function cargarRevisiones(){
   const r = await jsonp(API+'?hoja='+encodeURIComponent('Revisiones'));
@@ -1664,25 +1741,45 @@ async function cargarRevisiones(){
     const id=String(f[1]||''), item=String(f[2]||''); if(!id||!item) return;
     (mapa[id]=mapa[id]||{})[item]={ ok:String(f[3]||'').toLowerCase().includes('complet'), revisor:String(f[4]||''), fecha:String(f[5]||'') };
   });
-  STATE.asignaturas.forEach(a=>{ a.revision = mapa[a.id] || {}; });
+  STATE.asignaturas.forEach(a=>{ a.revision = _heredarRevisionVideo(mapa[a.id] || {}); });
   return true;
+}
+// Lista de puntos de revisión de un frente (pestañas Cierre Diseño / Cierre Video)
+function _revisionFrenteHTML(a, frente){
+  const it=REVISION_ITEMS_FRENTE[frente], rv=_revDe(a), hechos=it.filter(k=>rv[k]&&rv[k].ok).length;
+  const yo=localStorage.getItem('revisorNombre')||'';
+  return `<div class="ind-title" style="margin:0 0 8px">Revisión de calidad · ${frente==='video'?'video':'diseño'} <span id="rev-count-${frente}-${a.id}">${hechos}/${it.length}</span></div>
+    <div style="font-size:12px;margin-bottom:8px">Revisa:
+      <select onclick="event.stopPropagation()" onchange="setRevisor(this.value)" style="font-size:12px;padding:4px 8px;margin-left:6px">
+        <option value="">Elige quién revisa…</option>
+        ${_revisoresPosibles().map(n=>`<option value="${n}" ${yo===n?'selected':''}>${n}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${REVISION_ITEMS.filter(([k])=>it.includes(k)).map(([k,lbl])=>{ const r=rv[k]||{}; const ok=!!r.ok;
+        return `<div class="asset-chk${ok?' done':''}" onclick="event.stopPropagation();toggleRevision('${a.id}','${k}',this)">
+          <input type="checkbox" ${ok?'checked':''} style="pointer-events:none">
+          <span>${lbl}<div class="rev-info" style="font-size:10px;color:var(--ok)">${ok?('✓ '+(r.revisor||'')+' · '+fmtFecha(r.fecha)+(r.heredado?' (marcado antes en el punto único de video)':'')):''}</div></span>
+        </div>`; }).join('')}
+    </div>`;
 }
 function setRevisor(v){ localStorage.setItem('revisorNombre', v||''); }
 function toggleRevision(asigId, item, el){
   const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
   const revisor=localStorage.getItem('revisorNombre')||'';
   if(!revisor){ toast('Primero elige quién revisa (arriba de la lista)'); return; }
-  a.revision=a.revision||{};
+  _revDe(a);
   const antesFelic=_frentesTerminados(a);
   const nuevo=!(a.revision[item] && a.revision[item].ok), fecha=new Date().toISOString();
-  a.revision[item]={ ok:nuevo, revisor:nuevo?revisor:'', fecha:nuevo?fecha:'' };
+  a.revision[item]={ ok:nuevo, revisor:nuevo?revisor:'', fecha:nuevo?fecha:'' };   // al tocarlo deja de ser heredado
   guardarEstadoLocal();
   sheetActualizar('Revisiones', ENC_REVISIONES, [asigId+'|'+item, asigId, item, nuevo?'Completado':'Pendiente', nuevo?revisor:'', nuevo?fecha:'']);
   if(el){ // se actualiza ahí mismo, sin cerrar la tarjeta
     el.classList.toggle('done',nuevo);
     const chk=el.querySelector('input[type=checkbox]'); if(chk) chk.checked=nuevo;
     const info=el.querySelector('.rev-info'); if(info) info.textContent = nuevo ? ('✓ '+revisor+' · '+fmtFecha(fecha)) : '';
-    const cnt=document.getElementById('rev-count-'+asigId); if(cnt) cnt.textContent=revisionAsig(a).hechos+'/'+REVISION_ITEMS.length;
+    const fv=REVISION_ITEMS_FRENTE.video.includes(item)?'video':'diseno', it=REVISION_ITEMS_FRENTE[fv];
+    const cnt=document.getElementById('rev-count-'+fv+'-'+asigId); if(cnt) cnt.textContent=it.filter(k=>a.revision[k]&&a.revision[k].ok).length+'/'+it.length;
   }
   if(nuevo) verificarAutoCompletado(asigId);
   if(nuevo) felicitarSiTermino(a, antesFelic, REVISION_ITEMS_FRENTE.video.includes(item));
@@ -2167,7 +2264,7 @@ const OBJETIVO_DIAS_FRENTE = { diseno: 3, video: 1 }; // días hábiles de 8h, s
 // Objetivo: medir a todos con la misma vara, sin depender de que prendan el timer.
 // Regla (igual para diseño y video, que trabajan independientes):
 //  1) Una persona TERMINA su frente de una asignatura cuando: sus entregables están completos, su parte de la
-//     revisión de cierre está marcada (video: el punto "video"; diseño: los otros 5 puntos y además el banner) y no
+//     revisión de cierre está marcada (video: los 4 puntos de Cierre Video; diseño: los 5 de Cierre Diseño y además el banner) y no
 //     tiene timers abiertos en ella. Hora de término = lo último entre su último timer y la marca de su revisión.
 //  2) Su siguiente asignatura arranca el reloj a esa hora exacta (si se la asignaron después, a la hora de asignación),
 //     aunque prenda el timer más tarde. Va a la que REALMENTE trabajó después; si arrancó otra mientras aún tenía una
@@ -2181,7 +2278,7 @@ const TIEMPOS_RELOJ_MINIMO = Date.parse('2026-11-03T08:00:00-05:00');
 // Las asignaciones de video que se anotaron el primer día (3-nov) son las que ya existían antes: no se sabe cuándo
 // se hicieron, así que no se usan como hora de asignación.
 const TIEMPOS_VIDEO_LOG_DESDE = Date.parse('2026-11-04T00:00:00-05:00');
-const REVISION_ITEMS_FRENTE = { video:['video'], diseno:['imagenes','genially','banner','nombres','html'] };
+const REVISION_ITEMS_FRENTE = { video:['v_intro','v_clase','v_rda','v_embed'], diseno:['imagenes','genially','banner','nombres','html'] };
 let _cacheTiempos = {};
 function _ultimaAsignacionMs(log, asigId, persona){ const arr=(log||{})[asigId]||[]; for(let i=arr.length-1;i>=0;i--) if(arr[i].persona===persona) return arr[i].ms; return null; }
 function _esDelFrenteT(persona, rol, esVideo){
@@ -2201,7 +2298,7 @@ function _timerAbiertoFrente(a, esVideo){
 // Hora en que la persona TERMINÓ su frente en esta asignatura (incluida su parte de la revisión). null = aún no.
 function finFrenteTiempos(a, esVideo, info){
   info = info || infoFrente(a, esVideo);
-  const items = REVISION_ITEMS_FRENTE[esVideo?'video':'diseno'], rv = a.revision||{};
+  const items = REVISION_ITEMS_FRENTE[esVideo?'video':'diseno'], rv = _revDe(a);
   if(a.status!=='Completada'){
     if(!(esVideo ? videoCompletoAsig(a) : disenoCompletoAsig(a))) return null;
     if(!esVideo && !bannerHechoAsig(a)) return null;
@@ -2209,7 +2306,7 @@ function finFrenteTiempos(a, esVideo, info){
     if(_timerAbiertoFrente(a, esVideo)) return null;
   }
   let fin = info.iniciado ? info.ultimoFin : 0;
-  items.forEach(k=>{ const ms = rv[k] && rv[k].ok ? Date.parse(rv[k].fecha||'') : NaN; if(!isNaN(ms) && ms>fin) fin=ms; });
+  (esVideo ? [...items, REVISION_VIDEO_ANTIGUO] : items).forEach(k=>{ const ms = rv[k] && rv[k].ok ? Date.parse(rv[k].fecha||'') : NaN; if(!isNaN(ms) && ms>fin) fin=ms; });
   // Una Completada terminó, a más tardar, cuando se cerró: una sesión registrada después (p. ej. al cerrar un timer
   // olvidado) no la "reabre" ni le corre el término a la persona.
   if(a.status==='Completada' && a.fechaCompletado){
@@ -2669,6 +2766,7 @@ async function calAplicarImportacion(asigId, b, over){
   _calImp=null;
   if(plan.cerrar && a.status===ST_REVISION) await calLiberarACola(a);
   _calVista=a.id; renderCalidad();
+  if(!plan.cerrar) calAbrirReporte(a.id, true);
   toast(plan.cerrar ? '✅ Ronda '+plan.ronda+' importada: todo en Bien, la materia pasa a la cola' : 'Ronda '+plan.ronda+' importada: devuelta al equipo instruccional ('+plan.abiertasFinal+' incidencias abiertas)');
   return true;
 }
@@ -2707,11 +2805,137 @@ async function calLiberarManual(a){
 async function calConfirmarInstruccional(asigId){
   const a=STATE.asignaturas.find(x=>x.id===asigId), f=calFila(asigId); if(!a||!f) return;
   const usuario=calUsuario(); if(!usuario){ toast('Primero elige quién eres (arriba a la derecha)'); return; }
-  const quien=(prompt('¿Quién del equipo instruccional confirmó que los ajustes están hechos?')||'').trim();
+  const quien=(prompt('¿Quién del equipo instruccional confirmó que los ajustes están hechos?', _calUltimoReporte(asigId))||'').trim();
   if(!quien){ toast('Anota quién confirmó para dejar el registro'); return; }
   f.estado=CAL_ESTADO.LISTA; f.desde=_calAhora(); f.instConfirmo=quien+' · '+fmtFecha(today()); f.revisor=usuario;
   renderCalidad(); const ok=await _calEscribir('actualizar','Revision_Entrada',CAL_ENC_REV,_calFilaRev(f));
   toast(ok?'Ajustes confirmados: la materia queda lista para la siguiente ronda':'⚠️ No se pudo guardar; revisa la conexión');
+}
+// ── Reporte a instruccional (6-nov-2026, sugerencia de Cristina) ──
+// Al devolver una materia, Calidad elige a la diseñadora instruccional, escribe su comentario y el dashboard deja el
+// correo listo (Para, Asunto y texto con las incidencias abiertas). El envío es MANUAL: se abre Outlook y quien revisa
+// lo completa y pulsa Enviar. El reporte queda como comentario de la asignatura y, si no lo estaba, la materia pasa a
+// "Devuelta a instruccional". No requiere cambios en el Apps Script.
+// Para añadir o quitar a alguien: una línea por persona.
+const INSTRUCCIONAL_EQUIPO = [
+  { nombre:'Tatiana Nohavá',    correo:'tnohava@eigedu.com' },
+  { nombre:'Jackeline Correa',  correo:'jcorrea@eigedu.com' },
+  { nombre:'Mauricio Díaz',     correo:'mdiaz@eigedu.com' },
+  { nombre:'Angelica Pérez',    correo:'angelica@eigcampus.com' },
+  { nombre:'Korelyz González',  correo:'kgonzalez@eigcampus.com' },
+  { nombre:'Lara Rodríguez',    correo:'lara.rodriguez@eigcampus.com' },
+];
+const CAL_REPORTE_MARCA = '📧 Reporte a instruccional';
+const CAL_MAILTO_MAX = 1800;   // Outlook en Windows corta enlaces de correo muy largos: por encima, el texto se copia y se pega
+let _calRep = null;            // { asigId, persona, comentario, tras }
+function _calUltimoReporte(asigId){
+  const l=(COMENTARIOS[asigId]||[]).filter(c=>String(c.texto).startsWith(CAL_REPORTE_MARCA));
+  if(!l.length) return '';
+  const m=/→ ([^·\n<]+?)\s*(<|·|\n|$)/.exec(l[l.length-1].texto); return m ? m[1].trim() : '';
+}
+function _calPendientesTexto(id){
+  const ab=calAbiertas(id);
+  if(ab.length) return ab.map((o,i)=>(i+1)+'. Punto '+o.punto+(o.clase?' · '+o.clase:'')+': '+o.detalle).join('\n');
+  const r=calRondas(id), ult=r[r.length-1], pun=((_cal().pun[id]||{})[ult&&ult.n])||[];
+  return pun.filter(p=>p.estado!=='bien').map((p,i)=>(i+1)+'. Punto '+p.punto+': '+(p.falla||p.accion||CAL_PAUTA[p.punto-1][1])).join('\n');
+}
+function calCorreoReporte(asigId, persona, comentario){
+  const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return null;
+  const p=INSTRUCCIONAL_EQUIPO.find(x=>x.nombre===persona); if(!p) return null;
+  const rondas=calRondas(asigId), ronda=rondas.length ? rondas[rondas.length-1].n : 0;
+  const pend=_calPendientesTexto(asigId), link=_linkSeguro(a.link), yo=calUsuario();
+  const asunto='Calidad de entrada · ajustes pendientes · '+a.nombre+(ronda?' (ronda '+ronda+')':'');
+  const partes=['Hola '+p.nombre.split(/\s+/)[0]+',', '',
+    'En la revisión de calidad de entrada de "'+a.nombre+'"'+(a.prog?' ('+a.prog+')':'')+(ronda?', ronda '+ronda:'')+', quedaron ajustes pendientes antes de que la materia pase a producción.'];
+  if(String(comentario||'').trim()) partes.push('', String(comentario).trim());
+  if(pend) partes.push('', 'Pendientes:', pend);
+  if(link) partes.push('', 'Carpeta del curso: '+link);
+  partes.push('', 'Cuando estén listos, avísame por este medio para hacer la siguiente revisión.', '', 'Gracias,', yo||'');
+  return { para:p.correo, asunto, cuerpo:partes.join('\n'), persona:p.nombre, ronda };
+}
+function calAbrirReporte(asigId, tras){
+  const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
+  const ult=_calUltimoReporte(asigId);
+  _calRep={ asigId, persona: INSTRUCCIONAL_EQUIPO.some(x=>x.nombre===ult) ? ult : '', comentario:'', tras:!!tras };
+  document.getElementById('modal-reporte').style.display='flex';
+  calRenderReporte();
+}
+function calCerrarReporte(){ _calRep=null; document.getElementById('modal-reporte').style.display='none'; }
+function calRepPersona(v){ _calRep.persona=v; calRenderReporte(true); }
+function calRepComentario(v){ _calRep.comentario=v; const pv=document.getElementById('cal-rep-prev'); const c=calCorreoReporte(_calRep.asigId,_calRep.persona,v); if(pv&&c) pv.textContent=c.cuerpo; }
+function calRenderReporte(conservarFoco){
+  const caja=document.getElementById('modal-reporte-caja'); if(!caja||!_calRep) return;
+  const a=STATE.asignaturas.find(x=>x.id===_calRep.asigId); if(!a){ calCerrarReporte(); return; }
+  const estado=calEstadoDe(a), c=calCorreoReporte(a.id,_calRep.persona,_calRep.comentario), usuario=calUsuario();
+  const ab=calAbiertas(a.id).length;
+  const sinLista=!INSTRUCCIONAL_EQUIPO.length;
+  const cab=_calRep.tras
+    ? `<div style="padding:10px 14px;border-radius:10px;background:#fef3c7;color:#78350f;font-size:13px;margin-bottom:12px">✅ Ronda guardada: la materia quedó <b>Devuelta a instruccional</b>${ab?' con '+ab+' incidencia'+(ab===1?'':'s')+' abierta'+(ab===1?'':'s'):''}. Ahora avisa a quien la tiene en instruccional.</div>`
+    : (estado!==CAL_ESTADO.DEVUELTA ? `<div style="padding:10px 14px;border-radius:10px;background:#eff6ff;color:#1e3a8a;font-size:13px;margin-bottom:12px">Al abrir el correo, la materia pasa a <b>Devuelta a instruccional</b>.</div>` : '');
+  caja.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-family:var(--fhead);font-size:17px;font-weight:700">📧 Reporte a instruccional</span><button class="btn btn-sm" onclick="calCerrarReporte()">Cerrar</button></div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px"><b style="color:var(--text)">${_cEsc(a.nombre)}</b>${a.prog?' · '+_cEsc(a.prog):''}</div>
+    ${cab}
+    ${sinLista?`<div style="padding:10px 14px;border-radius:10px;background:#fee2e2;color:#991b1b;font-size:13px;margin-bottom:12px">Todavía no hay personas del equipo instruccional registradas en el dashboard.</div>`:''}
+    <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">¿A quién se le devuelve?</label>
+    <select onchange="calRepPersona(this.value)" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;margin-bottom:12px">
+      <option value="">Elige a quién del equipo instruccional…</option>
+      ${INSTRUCCIONAL_EQUIPO.map(p=>`<option value="${_cEsc(p.nombre)}" ${_calRep.persona===p.nombre?'selected':''}>${_cEsc(p.nombre)} · ${_cEsc(p.correo)}</option>`).join('')}
+    </select>
+    <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">Comentario (va al inicio del correo)</label>
+    <textarea id="cal-rep-com" oninput="calRepComentario(this.value)" placeholder="Explica qué hay que ajustar y cómo. Las incidencias abiertas ya se agregan solas." style="width:100%;min-height:80px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:12px">${_cEsc(_calRep.comentario)}</textarea>
+    ${c?`<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Así queda el correo · <b>Para:</b> ${_cEsc(c.para)} · <b>Asunto:</b> ${_cEsc(c.asunto)}</div>
+    <pre id="cal-rep-prev" style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:12px;background:var(--bg3);border-radius:8px;padding:10px 12px;margin:0 0 12px;max-height:220px;overflow:auto">${_cEsc(c.cuerpo)}</pre>`:''}
+    ${!usuario?`<div style="font-size:12px;color:#b45309;margin-bottom:8px">Elige tu nombre en "Eres:" (Calidad de entrada, arriba a la derecha) para firmar el correo.</div>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+      <button class="btn" ${c?'':'disabled'} onclick="calCopiarReporte()">Copiar texto</button>
+      <button class="btn btn-primary" ${c&&usuario?'':'disabled'} onclick="calEnviarReporte()">Abrir correo en Outlook</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">El correo se abre listo en tu Outlook: revísalo, agrega lo que quieras y pulsa <b>Enviar</b>. El reporte queda guardado en los comentarios de la asignatura.</div>`;
+  if(conservarFoco){ const t=document.getElementById('cal-rep-com'); if(t) t.value=_calRep.comentario; }
+}
+async function calCopiarReporte(){
+  const c=_calRep && calCorreoReporte(_calRep.asigId,_calRep.persona,_calRep.comentario); if(!c) return false;
+  try{ await navigator.clipboard.writeText(c.cuerpo); toast('Texto del correo copiado'); return true; }
+  catch(e){ toast('No pude copiar: selecciona el texto de la vista previa y cópialo'); return false; }
+}
+// Deja la materia "Devuelta a instruccional" si no lo estaba (p. ej. "Lista para re-revisión" o "Sin revisar")
+async function calMarcarDevuelta(a){
+  const prev=calFila(a.id); if(prev && prev.estado===CAL_ESTADO.DEVUELTA) return true;
+  if(prev && !calAbierta(prev.estado)) return true;   // ya cerrada: no se reabre desde aquí
+  const ahora=_calAhora(), usuario=calUsuario();
+  const fila=prev ? Object.assign({}, prev, { estado:CAL_ESTADO.DEVUELTA, desde:ahora, revisor:usuario })
+    : { id:a.id, materia:a.nombre, prog:a.prog||'', estado:CAL_ESTADO.DEVUELTA, ronda:0, desde:ahora, revisor:usuario, abierta:calDesde(a), ultima:'', cerrada:'', cerradoPor:'', instConfirmo:'', nota:'' };
+  _cal().rev[a.id]=fila; renderCalidad();
+  const ok=await _calEscribir('actualizar','Revision_Entrada',CAL_ENC_REV,_calFilaRev(fila));
+  if(!ok){ if(prev) _cal().rev[a.id]=prev; else delete _cal().rev[a.id]; renderCalidad(); }
+  return ok;
+}
+function _calAbrirMailto(url){ window.location.href=url; }
+async function calEnviarReporte(){
+  if(!_calRep) return;
+  const a=STATE.asignaturas.find(x=>x.id===_calRep.asigId); if(!a) return;
+  const usuario=calUsuario(); if(!usuario){ toast('Primero elige quién eres en "Eres:"'); return; }
+  const c=calCorreoReporte(a.id,_calRep.persona,_calRep.comentario); if(!c){ toast('Elige a quién del equipo instruccional se le envía'); return; }
+  // 1) Se abre el correo primero (es lo que la persona espera ver al pulsar)
+  const base='mailto:'+encodeURIComponent(c.para)+'?subject='+encodeURIComponent(c.asunto);
+  let url=base+'&body='+encodeURIComponent(c.cuerpo), copiado=false;
+  if(url.length>CAL_MAILTO_MAX){
+    try{ await navigator.clipboard.writeText(c.cuerpo); copiado=true; }catch(e){}
+    url=base+'&body='+encodeURIComponent(copiado ? 'Pega aquí el detalle (Ctrl+V).\n' : 'El detalle está en el dashboard (Calidad de entrada).\n');
+  }
+  _calAbrirMailto(url);
+  // 2) Estado y registro
+  const okEstado=await calMarcarDevuelta(a);
+  const com=String(_calRep.comentario||'').trim();
+  // El comentario viaja en la URL de escritura: se acorta si hace falta (el correo completo sale igual)
+  let texto=(CAL_REPORTE_MARCA+(c.ronda?' (ronda '+c.ronda+')':'')+' → '+c.persona+' · '+c.para+(com?'\n'+com:'')).slice(0,COM_MAX);
+  while(texto.length>60 && encodeURIComponent(JSON.stringify(texto)).length>COM_MAX_URL) texto=texto.slice(0,-40);
+  const cm={ id:'cm'+Date.now()+Math.random().toString(36).slice(2,6), asig:a.id, fecha:new Date().toISOString(), autor:usuario, texto };
+  const okCom=await _calEscribir('guardar','Comentarios',ENC_COMENTARIOS,[cm.id, a.id, a.nombre, cm.fecha, usuario, texto]);
+  if(okCom){ (COMENTARIOS[a.id]=COMENTARIOS[a.id]||[]).push(cm); _comRefrescar(a.id); }
+  calCerrarReporte(); renderCalidad();
+  toast(!okEstado||!okCom ? '⚠️ El correo se abrió, pero no se pudo guardar el registro; revisa la conexión'
+    : copiado ? 'Correo abierto. El texto era largo: está copiado, pégalo en el cuerpo (Ctrl+V)' : 'Correo listo en Outlook: revísalo y pulsa Enviar');
 }
 async function calPasarConObservaciones(asigId){
   const a=STATE.asignaturas.find(x=>x.id===asigId), f=calFila(asigId); if(!a||!f) return;
@@ -2806,7 +3030,7 @@ function _calListaHTML(){
         <td style="${celda}">${_cEsc(calPelota(x.estado))||'—'}</td>
         <td style="${celda}">${inc}</td>
         <td style="${celda}">${dias}</td>
-        <td style="${celda};text-align:right;white-space:nowrap">${abierta?`<button class="btn btn-sm" onclick="calPrepararClaude('${a.id}')">Preparar para Claude</button> `:''}<button class="btn btn-sm ${abierta?'btn-primary':''}" onclick="calAbrir('${a.id}')">${abierta?'Abrir':'Ver registro'}</button></td></tr>`; }).join('')}</tbody></table></div>`
+        <td style="${celda};text-align:right;white-space:nowrap">${x.estado===CAL_ESTADO.DEVUELTA?`<button class="btn btn-sm" title="Reporte a instruccional" onclick="calAbrirReporte('${a.id}')">📧</button> `:''}${abierta?`<button class="btn btn-sm" onclick="calPrepararClaude('${a.id}')">Preparar para Claude</button> `:''}<button class="btn btn-sm ${abierta?'btn-primary':''}" onclick="calAbrir('${a.id}')">${abierta?'Abrir':'Ver registro'}</button></td></tr>`; }).join('')}</tbody></table></div>`
     : `<div class="empty-state"><div class="empty-icon">🔎</div><div class="empty-txt">${L.length?'No hay materias en este filtro.':'Aún no hay materias en revisión de calidad. Las asignaturas nuevas aparecerán aquí.'}</div></div>`;
   return `${_calBarra()}
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">
@@ -2846,6 +3070,7 @@ function _calDetalleHTML(id){
   const botones = [];
   botones.push(`<button class="btn btn-sm" onclick="calPrepararClaude('${id}')">Preparar para Claude</button>`);
   botones.push(`<button class="btn btn-sm btn-primary" onclick="calAbrirImport('${id}')">Importar ronda ${((f&&f.ronda)||0)+1}</button>`);
+  if(abierta) botones.push(`<button class="btn btn-sm" onclick="calAbrirReporte('${id}')">📧 Reporte a instruccional</button>`);
   if(estado===CAL_ESTADO.DEVUELTA) botones.push(`<button class="btn btn-sm btn-ok" onclick="calConfirmarInstruccional('${id}')">Ajustes confirmados por instruccional</button>`);
   const puedeCerrar = abierta && f && calAbiertas(id).length===0 && rondas.length>0;
   const cierre = abierta && rondas.length>0 ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px">
@@ -2923,7 +3148,8 @@ function calRenderPreview(){
     ${resultado}
     ${B.conflicto?`<label style="font-size:12px;display:block;margin-bottom:8px"><input type="checkbox" ${_calImp.conf?'checked':''} onchange="calMarcarConf(this.checked)"> Confirmo que el bloque es de esta materia</label>`:''}
     ${!usuario?`<div style="font-size:12px;color:#b45309;margin-bottom:8px">Elige tu nombre arriba a la derecha para poder confirmar.</div>`:''}
-    <button class="btn btn-primary" ${puedo?'':'disabled'} onclick="calConfirmarImport()">${plan.cerrar?'Confirmar y cerrar':'Confirmar y devolver a instruccional'}</button> <span id="cal-progreso" style="font-size:12px;color:var(--muted);margin-left:8px"></span>`;
+    <button class="btn btn-primary" ${puedo?'':'disabled'} onclick="calConfirmarImport()">${plan.cerrar?'Confirmar y cerrar':'Confirmar y devolver a instruccional'}</button> <span id="cal-progreso" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
+    ${plan.cerrar?'':`<div style="font-size:12px;color:var(--muted);margin-top:6px">Después de confirmar se abre el <b>📧 Reporte a instruccional</b> para elegir a quién de instruccional avisar y dejar listo el correo.</div>`}`;
 }
 async function calConfirmarImport(){
   const P=_calImp&&_calImp.parsed; if(!P||!P.ok||!_calImp.busqueda||!_calImp.busqueda.asig) return;
@@ -4959,7 +5185,8 @@ function renderAsignaturas(filtro){
             <button class="utab" onclick="showUnit('${a.id}','u2',this)">Clase 2</button>
             <button class="utab" onclick="showUnit('${a.id}','u3',this)">Clase 3</button>
             <button class="utab" onclick="showUnit('${a.id}','global',this)">Videos globales</button>
-            <button class="utab" onclick="showUnit('${a.id}','cierre',this)">Cierre</button>
+            <button class="utab" onclick="showUnit('${a.id}','cierre',this)">Cierre Diseño</button>
+            <button class="utab" onclick="showUnit('${a.id}','cierrev',this)">Cierre Video</button>
             <button class="utab" onclick="showUnit('${a.id}','equipo',this)">${a.tipo==='celula'?'👥 Equipo':'Equipo'}</button>
 
             <button class="utab" onclick="showUnit('${a.id}','sesiones',this)">Sesiones</button>
@@ -4979,26 +5206,18 @@ function renderAsignaturas(filtro){
           <div class="assets-grid">${mkAssets('u3','u3')}</div>
         </div>
         <div id="unit-${a.id}-cierre" class="form-section" style="display:none">
-          <div class="ind-title" style="margin-bottom:6px">Cierre de la asignatura</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Con el banner y la revisión de calidad completa, la asignatura se cierra sola y sale el correo a UIDE.</div>
+          <div class="ind-title" style="margin-bottom:6px">Cierre de diseño</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Banner y 5 puntos de revisión. Cuando diseño y video tengan su cierre completo, la asignatura se cierra sola y sale el correo a UIDE.</div>
           <div class="asset-chk${bannerHechoAsig(a)?' done':''}" style="cursor:default;margin-bottom:14px">
             <input type="checkbox" ${bannerHechoAsig(a)?'checked':''} disabled style="cursor:default;opacity:.7">
             <span>Banner <span style="font-size:11px;color:var(--muted)">(se completa con el timer “Creación de banner”)</span></span>
           </div>
-          <div class="ind-title" style="margin:0 0 8px">Revisión de calidad <span id="rev-count-${a.id}">${revisionAsig(a).hechos}/${REVISION_ITEMS.length}</span></div>
-          <div style="font-size:12px;margin-bottom:8px">Revisa:
-            <select onclick="event.stopPropagation()" onchange="setRevisor(this.value)" style="font-size:12px;padding:4px 8px;margin-left:6px">
-              <option value="">Elige quién revisa…</option>
-              ${_revisoresPosibles().map(n=>`<option value="${n}" ${localStorage.getItem('revisorNombre')===n?'selected':''}>${n}</option>`).join('')}
-            </select>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:6px">
-            ${REVISION_ITEMS.map(([k,lbl])=>{ const r=(a.revision||{})[k]||{}; const ok=!!r.ok;
-              return `<div class="asset-chk${ok?' done':''}" onclick="event.stopPropagation();toggleRevision('${a.id}','${k}',this)">
-                <input type="checkbox" ${ok?'checked':''} style="pointer-events:none">
-                <span>${lbl}<div class="rev-info" style="font-size:10px;color:var(--ok)">${ok?('✓ '+(r.revisor||'')+' · '+fmtFecha(r.fecha)):''}</div></span>
-              </div>`; }).join('')}
-          </div>
+          ${_revisionFrenteHTML(a,'diseno')}
+        </div>
+        <div id="unit-${a.id}-cierrev" class="form-section" style="display:none">
+          <div class="ind-title" style="margin-bottom:6px">Cierre de video</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">4 puntos de revisión. Cuando diseño y video tengan su cierre completo, la asignatura se cierra sola y sale el correo a UIDE.</div>
+          ${_revisionFrenteHTML(a,'video')}
         </div>
         <div id="unit-${a.id}-global" class="form-section" style="display:none">
           <div class="ind-title" style="margin-bottom:8px">Videos globales de la asignatura</div>
@@ -5078,7 +5297,7 @@ function toggleAsigBody(id){
 }
 
 function showUnit(asigId, unit, el){
-  ['u1','u2','u3','global','cierre','equipo','sesiones','comentarios','celula-flujo','celula-lider','celula-diseno','celula-video'].forEach(u=>{
+  ['u1','u2','u3','global','cierre','cierrev','equipo','sesiones','comentarios','celula-flujo','celula-lider','celula-diseno','celula-video'].forEach(u=>{
     const d=document.getElementById(`unit-${asigId}-${u}`);
     if(d) d.style.display=u===unit?'block':'none';
   });
