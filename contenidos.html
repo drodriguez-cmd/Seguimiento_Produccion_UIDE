@@ -454,7 +454,7 @@ function alarmas(a){
     else if(s.etapa==='escr'&&dh>META.iaEscribe)out.push({n:dh>META.iaEscribe+2?3:2,q:'equipo',txt:'Escritura con IA lleva '+dh+' días hábiles (meta '+META.iaEscribe+')',d:dh});
     else if(s.etapa==='rev'&&a.flujo==='IA'&&!(s.rondas>0)){const F2=fechas(a);if(F2.entregaDocente&&HOY>F2.entregaDocente)out.push({n:3,q:'equipo',txt:'Lista pero sin enviar al profesor: la fecha de UIDE era el '+fmtc(F2.entregaDocente),d:diasCal(F2.entregaDocente,HOY)})}
     else if(s.etapa==='rev'&&dh>META.equipoRevisa)out.push({n:dh>META.equipoRevisa+2?3:2,q:'equipo',txt:etiquetaEtapa(a,s).split(' · ')[0]+': '+dh+' días hábiles (meta '+META.equipoRevisa+')',d:dh});
-    else if(s.etapa==='doc'&&dc>META.docenteAjustes)out.push({n:dc>META.docenteAjustes*2?3:2,q:'docente',txt:'El docente lleva '+dc+' días sin responder',d:dc});
+    else if(s.etapa==='doc'){const P=plazoDoc(a,s),t=P?diasCal(P.lim,HOY):0;if(P&&t>0)out.push({n:t>META.docenteAjustes?3:2,q:'docente',txt:'Al docente se le venció el plazo de ajustes el '+fmtc(P.lim)+' ('+t+' d)',d:t})}
     else if(s.etapa==='coord'&&dh>META.coordinador)out.push({n:dh>META.coordinador*2?3:2,q:'coordinador',txt:'El coordinador lleva '+dh+' días hábiles sin responder',d:dh});
   }
   if((s.rondas||0)>3&&s.etapa!=='fab')out.push({n:2,q:'equipo',txt:'Se ha devuelto '+s.rondas+' veces al docente (máximo 3)',d:null});
@@ -481,12 +481,19 @@ function abrir(id){
 function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),2200)}
 function esc(t){return String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function estHtml(a,s){return '<span class="est"><i style="background:'+ET[s.etapa].c+'"></i>'+etiquetaEtapa(a,s)+'</span>'}
+/* Plazo del profesor con la revisión: 7 días desde que le corresponde empezar.
+   1.ª ronda: la fecha más tardía entre el envío real y la fecha UIDE (IA: entrega al profesor; profesor escribe: fin de nuestra revisión).
+   Desde la 2.ª ronda: el envío real. Así, enviárselo antes no le recorta su plazo ni le cuenta días de más. */
+function inicioDoc(a,s){if(!s.desde)return null;const F=fechas(a),pl=(s.rondas||0)<=1?(a.flujo==='IA'?F.entregaDocente:F.revHasta):'';return pl&&pl>s.desde?pl:s.desde}
+function plazoDoc(a,s){const i=inicioDoc(a,s);return i?{ini:i,lim:addD(i,7)}:null}
 function reloj(a){const s=ST[a.id];
   if(s.etapa==='escr'&&a.flujo==='Autor'){const F=fechas(a);const d=diasCal(HOY,F.entregaDocente);return d<0?{txt:(-d)+' d tarde',ord:1000-d}:{txt:'faltan '+d+' d',ord:-d}}
   if(s.etapa==='rev'&&a.flujo==='IA'&&!(s.rondas>0)){const F=fechas(a);const d=diasCal(HOY,F.entregaDocente);return d<0?{txt:(-d)+' d tarde',ord:1000-d}:{txt:'enviar en '+d+' d',ord:-d}}
   if(!ACTIVAS.includes(s.etapa))return {txt:'—',ord:-9999};
   if(!s.desde)return {txt:'s/f',ord:-1};
-  const d=diasCal(s.desde,HOY);return {txt:d+' d',ord:d}}
+  if(s.etapa==='doc'){const P=plazoDoc(a,s);if(HOY<P.ini)return {txt:'su plazo empieza '+fmtc(P.ini),ord:-diasCal(HOY,P.lim)};
+    const d=diasCal(HOY,P.lim);return d<0?{txt:(-d)+' d tarde',ord:1000-d}:{txt:d?'vence en '+d+' d':'vence hoy',ord:-d}}
+  const d=diasHab(s.desde,HOY);return {txt:d+' d háb.',ord:d}}
 function diasTxt(s,a){return reloj(a).txt}
 
 /* ── Tiempo de trabajo y tiempo en manos ── */
@@ -666,7 +673,7 @@ function pasoSiguiente(a,s){
     else if(cal9(s))pasos=['La revisión quedó en 9/9: pasarla al coordinador desde la caja de Revisión de calidad.'];
     else pasos=['Ya hay revisión con puntos por corregir: <b>Devolver al docente</b> (copia el correo listo y envíalo).','Si las corrige el equipo, volver a <b>Preparar para Claude</b> para una nueva ronda.'];
     if(a.flujo==='IA'&&!(s.rondas>0))pasos=['Ya está escrita: envíala al profesor para que la revise. Fecha de UIDE para entregársela: <b>'+fmt(fechas(a).entregaDocente)+'</b> (puede ir antes).'].concat(!cal9(s)?['Si quieres, pásala antes por la revisión de calidad (1 · Preparar para Claude).']:[])}
-  else if(s.etapa==='doc'){quienT='Le toca al profesor';pasos=['El profesor está haciendo ajustes; los recordatorios salen solos a los 7 y 10 días.','Cuando respondan, registrar <b>Ajustes recibidos</b> o <b>Aprobado por el docente</b>.']}
+  else if(s.etapa==='doc'){quienT='Le toca al profesor';pasos=[(()=>{const P=plazoDoc(a,s);return P?'El profesor tiene <b>7 días</b>: plazo hasta el <b>'+fmt(P.lim)+'</b>'+(P.ini!==s.desde?' (cuenta desde la fecha UIDE '+fmt(P.ini)+', porque se le envió antes)':'')+'. Los recordatorios salen solos: 3 días antes, el día que vence y 3 días después.':'El profesor está haciendo ajustes; los recordatorios salen solos.'})(),'Cuando respondan, registrar <b>Ajustes recibidos</b> o <b>Aprobado por el docente</b>.']}
   else if(s.etapa==='coord'){quienT=s.aprobCoord?'Le toca al equipo':'Le toca al coordinador';pasos=s.aprobCoord?['El coordinador ya aprobó: abajo, pulsar <b>Aprobado por coordinador → entregado a Fábrica</b>.','Cargarla en el dashboard de digitalización (Fábrica).']:['Esperando la respuesta del coordinador.','Si aprobó: pulsar <b>Aprobado por coordinador → entregado a Fábrica</b>. Si pidió cambios: <b>El coordinador pidió cambios</b>.']}
   else return '';
   const tocaEquipo=quienT==='Le toca al equipo';
@@ -1025,7 +1032,7 @@ const FAQ=[
 ['Le mandé un correo de seguimiento al profesor','seguimiento recordatorio correo mail email escribi escribí profesor coordinador recordar','Usa el botón <b>Recordatorio enviado al docente</b> (o <b>Recordatorio al coordinador</b>). Si quieres dejar el detalle, escríbelo en la nota antes del clic. El tiempo va en la categoría <b>Comunicación</b>.'],
 ['Video de presentación del docente','video presentacion presentación grabar pedir pedi pedí recibido','En la caja <b>Video de presentación del docente</b>: <b>Pedí el video al profesor</b> cuando se lo pidas, <b>✓ Recibido</b> cuando llegue, <b>No aplica</b> si no lleva. A los 5 días hábiles sin llegar sale una alarma. Filtro <b>🎬 Video pendiente</b> en Asignaturas.'],
 ['¿Quién envía el encargo al docente?','encargo enviar mandar correo docente automatico automático solo sale hora','El encargo <b>sale solo</b> el día de la fecha de encargo, hacia las <b>2 p. m.</b>, con copia a la responsable y a UIDE, y adjunta los resultados de aprendizaje. Solo revisa que la asignatura tenga <b>correo del docente</b> y <b>carpeta de Drive</b> (si falta algo, sale una alarma antes). Si se envía a mano, registra <b>Encargo docente enviado</b>.'],
-['¿Cuándo salen los recordatorios al profesor?','recordatorio recordatorios automaticos automáticos cuando cuándo salen hora dias días profesor correo','Salen <b>solos</b> los días hábiles hacia las <b>10 a. m.</b>: 5 días antes de la entrega, el día de la entrega y 3 días después; y cuando la revisión está con el profesor, a los 7 y a los 10 días de enviársela. Tú no tienes que mandarlos.'],
+['¿Cuándo salen los recordatorios al profesor?','recordatorio recordatorios automaticos automáticos cuando cuándo salen hora dias días profesor correo','Salen <b>solos</b> los días hábiles hacia las <b>10 a. m.</b>: 5 días antes de la entrega, el día de la entrega y 3 días después; y cuando la revisión está con el profesor (tiene <b>7 días</b>), 3 días antes de que venza su plazo, el día que vence y 3 días después. Si se la enviaste antes de la fecha UIDE, su plazo cuenta desde la fecha UIDE. Tú no tienes que mandarlos.'],
 ['¿Por qué le siguen llegando recordatorios al profesor?','siguen llegando recordatorios profesor ya entrego entregó ya contesto contestó respondio respondió parar detener','El sistema <b>no lee</b> las respuestas: sigue mandando recordatorios hasta que tú registres el avance. Marca el mismo día <b>Material recibido del docente</b>, <b>Ajustes recibidos</b> o <b>Aprobado por el docente</b>. Si una asignatura no debe recibir ninguno, usa <b>Pausar recordatorios</b>.'],
 ['¿Quién va en copia en el encargo y los recordatorios?','copia cc copiado juanito uide responsable quien quién va correos','Siempre van en copia <b>la persona responsable</b> de la asignatura y <b>Juanito (UIDE)</b>. En el aviso de 3 días después también la copia adicional que defina Derly. Si no te llegan, revisa con Derly que tu correo esté en la pestaña Equipo.'],
 ['El profesor contestó, ¿dónde lo veo y cómo le respondo?','contesto contestó respondio respondió respuesta profesor donde dónde outlook gmail hilo responder','Las respuestas llegan al <b>Outlook</b> del buzón y a ti, si el profesor usó <b>Responder a todos</b>. Contéstale desde ese mismo correo con <b>Responder a todos</b>, para que todo quede en el mismo hilo y con las mismas copias. Luego registra el avance en el dashboard.'],
