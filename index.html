@@ -397,7 +397,7 @@ textarea{resize:vertical;min-height:70px}
       <div class="card">
         <div class="card-head"><span class="card-title">Datos generales</span></div>
         <div class="form-section">
-          <div class="fg"><label>Nombre de la asignatura</label><input type="text" id="n-nombre" placeholder="Ej: Neurociencia y educación"></div>
+          <div class="fg"><label>Nombre de la asignatura</label><input type="text" id="n-nombre" placeholder="Ej: Neurociencia y educación" oninput="nuevaAvisarDuplicado()" autocomplete="off"><div id="n-nombre-aviso"></div></div>
           <div class="fg"><label>Programa / Maestría</label>
             <select id="n-prog">
               <option value="">Seleccionar...</option>
@@ -456,7 +456,7 @@ textarea{resize:vertical;min-height:70px}
           </div>
           <div class="fg" style="margin-bottom:14px">
             <label>Fecha de lanzamiento (obligatoria)</label>
-            <input type="date" id="n-fecha-limite">
+            <input type="date" id="n-fecha-limite" onfocus="this.min=_ymdLocal(new Date())" oninput="nuevaAvisarFecha()" onchange="nuevaAvisarFecha()"><div id="n-fecha-aviso"></div>
             <small style="color:var(--muted);display:block;margin-top:4px">Cuando el estudiante la ve. Es obligatoria: el tope de fábrica es esta fecha menos 10 días hábiles (lo que necesita Canvas). Pasado el tope, la asignatura queda Vencida y va primero en la cola; antes, de ella sale la prioridad.</small>
           </div>
           <div class="fg" style="margin-bottom:14px"><label>Modo de ingreso</label>
@@ -864,17 +864,22 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026110605;
+const DASHBOARD_VERSION = 2026110610;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
   let b = document.getElementById('aviso-version');
   if(!b){
     b = document.createElement('div'); b.id='aviso-version';
-    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:10000;background:#b91c1c;color:white;padding:10px 16px;font-size:14px;font-weight:600;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.25)';
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:10000;background:#b91c1c;color:white;padding:10px 16px;font-size:14px;font-weight:600;text-align:center;line-height:1.5;box-shadow:0 2px 10px rgba(0,0,0,.25)';
     document.body.appendChild(b);
   }
-  b.innerHTML = '⚠️ '+(motivo||'Este dashboard está desactualizado.')+' Refresca la página con <b>Ctrl+Shift+R</b> (en Mac, <b>Cmd+Shift+R</b>). Mientras tanto no puede cambiar asignaturas.';
+  // Texto cercano (6-nov-2026, Juan Diego): primero pausar el timer, luego recargar.
+  b.innerHTML = '✨ '+(motivo||'Este dashboard está desactualizado.')+' Para verla: '+
+    '<b>1️⃣ ⏸ pausa tu timer</b> si tienes uno corriendo · '+
+    '<b>2️⃣ 🔄 recarga con Ctrl+Shift+R</b> (en Mac, Cmd+Shift+R) · '+
+    '<b>3️⃣ ▶ reanúdalo</b> y sigue tranquila/o 🙌'+
+    '<div style="font-size:12px;font-weight:500;opacity:.9">Mientras no recargues, esta pestaña no puede cambiar asignaturas.</div>';
 }
 // Revisa cada 10 min si se publicó una versión nueva (lee el index.html publicado). No recarga sola: recargar
 // pausaría los timers que estén corriendo; solo avisa.
@@ -883,7 +888,7 @@ async function revisarVersionPublicada(){
     if(document.hidden || _versionVieja) return;
     const r = await fetch(location.href.split('#')[0], { cache:'no-store' }); if(!r.ok) return;
     const m = /const DASHBOARD_VERSION = (\d+);/.exec(await r.text());
-    if(m && Number(m[1]) > DASHBOARD_VERSION) avisarVersionVieja('Hay una versión nueva del dashboard.');
+    if(m && Number(m[1]) > DASHBOARD_VERSION) avisarVersionVieja('¡Hay una versión nueva del dashboard!');
   }catch(e){}
 }
 setInterval(revisarVersionPublicada, 10*60*1000);
@@ -1022,6 +1027,71 @@ function setSyncStatus(estado){
 }
 
 // ── Respaldo en localStorage
+// ── Próximos lanzamientos (6-nov-2026, Juan Diego): todas las materias sin entregar, ordenadas por fecha de
+// lanzamiento, con en qué proceso van y la meta de cada mes ("faltan X de Y de noviembre"). Entregada = Completada.
+let _colaVista = 'lanz';   // 'lanz' = por lanzamiento · 'cola' = la cola de espera de antes
+const _MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function estadoLanzamiento(a){
+  const VK=['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'];
+  const vh=VK.filter(k=>a?.assets?.global?.[k]).length;
+  const cat=categoriaAsig(a);
+  if(cat==='Pausada') return { txt:'⏸ Pausada', c:'#6b7280', bg:'rgba(107,114,128,.12)' };
+  if(cat==='En revisión de calidad') return { txt:'🔎 En calidad de entrada', c:'#0d9488', bg:'rgba(13,148,136,.1)' };
+  if(cat==='En cola') return { txt:'⏳ En cola', c:'#e8336d', bg:'rgba(232,51,109,.1)' };
+  if(cat==='Por iniciar') return { txt:'Por iniciar', c:'#6366f1', bg:'rgba(99,102,241,.12)' };
+  const dOk=disenoCompletoAsig(a), vOk=videoCompletoAsig(a);
+  const cd=frenteFaltaCierre(a,false), cv=frenteFaltaCierre(a,true);
+  if(dOk && vOk) return { txt:'📋 En cierre', c:'#b45309', bg:'rgba(234,179,8,.16)', sub:[cd?'falta cierre diseño':'', cv?'falta cierre video':''].filter(Boolean).join(' · ') };
+  if(dOk) return { txt:'✅🎨 Diseño listo · falta video', c:'#7c3aed', bg:'rgba(124,58,237,.1)', sub:'video '+vh+'/6' };
+  if(vOk) return { txt:'✅🎬 Video listo · falta diseño', c:'#7c3aed', bg:'rgba(124,58,237,.1)', sub:'diseño '+disenoHechosAsig(a)+'/12' };
+  return { txt:'En producción', c:'#d97706', bg:'rgba(217,119,6,.1)', sub:'diseño '+disenoHechosAsig(a)+'/12 · video '+vh+'/6' };
+}
+function lanzamientosHTML(todas){
+  const hoy=_ymdLocal(new Date());   // fecha local (today() es UTC y después de las 7 p. m. daría mañana)
+  const conFecha=todas.filter(a=>a.tipo==='celula' || a.status===ST_REVISION);
+  const mesDe=a=>/^\d{4}-\d{2}/.test(a.fechaLimite||'') ? a.fechaLimite.slice(0,7) : 'sin';
+  // Metas por mes: solo los meses que aún tienen algo por entregar
+  const meses={};
+  conFecha.forEach(a=>{ const m=mesDe(a); (meses[m]=meses[m]||{total:0,faltan:0}).total++; if(a.status!=='Completada') meses[m].faltan++; });
+  // El mes en curso sale siempre (aunque ya esté todo entregado: también es bueno verlo)
+  const mesesAbiertos=Object.keys(meses).filter(m=>m!=='sin' && (meses[m].faltan>0 || m===hoy.slice(0,7))).sort();
+  const nombreMes=m=>{ const [y,mm]=m.split('-'); return _MESES[Number(mm)-1]+(y!==hoy.slice(0,4)?' '+y:''); };
+  const metas=mesesAbiertos.map(m=>{ const x=meses[m], hechas=x.total-x.faltan, pct=Math.round(hechas/x.total*100);
+    const urg = m<=hoy.slice(0,7) && x.faltan>0;
+    if(!x.faltan) return `<div style="flex:1;min-width:130px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:10px 12px">
+      <div style="font-size:11px;color:#15803d;text-transform:capitalize;font-weight:600">${nombreMes(m)}</div>
+      <div style="font-size:13px;margin-top:2px;color:#15803d"><b style="font-size:18px">✅ ${x.total}</b> entregadas</div>
+      <div style="font-size:10px;color:#15803d;margin-top:3px">¡Todas las del mes!</div></div>`;
+    return `<div style="flex:1;min-width:130px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;${urg?'border-top:3px solid #dc2626':''}">
+      <div style="font-size:11px;color:var(--muted);text-transform:capitalize;font-weight:600">${nombreMes(m)}</div>
+      <div style="font-size:13px;margin-top:2px"><b style="font-size:18px;color:${urg?'#dc2626':'var(--text)'}">${x.faltan}</b> de ${x.total} por entregar</div>
+      <div style="height:4px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:#16a34a"></div></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:3px">${hechas} entregada${hechas===1?'':'s'}</div></div>`; }).join('');
+  const pend=conFecha.filter(a=>a.status!=='Completada')
+    .sort((p,q)=>String(p.fechaLimite||'9999').localeCompare(String(q.fechaLimite||'9999')) || compararPorUrgencia(p,q));
+  if(!pend.length) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No hay materias por entregar ✅</div>`;
+  let mesActual=null;
+  const filas=pend.map(a=>{
+    const m=mesDe(a); let cab='';
+    if(m!==mesActual){ mesActual=m; const x=meses[m];
+      cab=`<div style="padding:8px 20px;background:var(--bg3);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${m==='sin'?'Sin fecha de lanzamiento':'Lanzan en '+nombreMes(m)+' · faltan '+x.faltan+' de '+x.total}</div>`; }
+    const e=estadoLanzamiento(a);
+    const dias = a.fechaLimite ? Math.round((Date.parse(a.fechaLimite+'T12:00:00')-Date.parse(hoy+'T12:00:00'))/86400000) : null;
+    const diasTxt = dias===null ? '' : dias<0 ? 'venció hace '+(-dias)+' d' : dias===0 ? 'lanza hoy' : 'en '+dias+' d';
+    const diasCol = dias===null ? 'var(--muted)' : dias<=7 ? '#dc2626' : dias<=21 ? '#d97706' : 'var(--muted)';
+    const quien=[a.celula?(CELULA_CFG[a.celula]?.label||a.celula):'', a.videoPersona?('🎬 '+a.videoPersona.split(' ')[0]):''].filter(Boolean).join(' · ');
+    return cab+`<div style="display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border)">
+      <div style="width:52px;flex-shrink:0;text-align:center">
+        <div style="font-size:13px;font-weight:700;color:${diasCol}">${a.fechaLimite?_cFmt(a.fechaLimite).slice(0,5):'—'}</div>
+        <div style="font-size:10px;color:${diasCol}">${diasTxt}</div></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${String(a.nombre).replace(/"/g,'&quot;')}">${prioMarca(a)} ${a.nombre}</div>
+        <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${quien||a.prog||''}${e.sub?' · '+e.sub:''}</div></div>
+      <span style="font-size:10px;font-weight:600;padding:3px 9px;border-radius:99px;background:${e.bg};color:${e.c};flex-shrink:0;white-space:nowrap">${e.txt}</span>
+    </div>`; }).join('');
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border)">${metas}</div>
+    <div style="max-height:620px;overflow-y:auto">${filas}</div>`;
+}
 function renderCelulasDir(){
   const el = document.getElementById('celulas-dir-content');
   if(!el) return;
@@ -1076,7 +1146,9 @@ function renderCelulasDir(){
     const cierre = !asigActiva ? enCierre[0] : null;              // si no tiene activa, lo que está haciendo es el cierre
     const avCierre = cierre ? avanceCierreFrente(cierre,false) : null;
     const esperandoVideo = todas.filter(a=>a.celula===id && a.status==='En producción' && disenoCompletoAsig(a) && !videoCompletoAsig(a) && !enCierre.includes(a));
-    const pct = asigActiva ? progAsigVista(asigActiva) : cierre ? avCierre.pct : 0;
+    const dHechos = asigActiva ? disenoHechosAsig(asigActiva) : 0;
+    const pct = asigActiva ? Math.round(dHechos/12*100) : cierre ? avCierre.pct : 0;
+    const asigBarra = asigActiva || cierre;
     const dias = asigActiva ? diasAsig(asigActiva).toFixed(1) : cierre ? diasAsig(cierre).toFixed(1) : '0';
     const completadasCelula = todas.filter(a=>a.celula===id && a.status==='Completada' && a.tipo==='celula');
     const promCelula = completadasCelula.length>0
@@ -1118,7 +1190,8 @@ function renderCelulasDir(){
         <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px">
           <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
         </div>
-        <div style="font-size:11px;font-weight:600;color:${barColor};text-align:right">${cierre ? 'cierre '+avCierre.hechos+'/'+avCierre.total : pct+'%'}</div>
+        <div style="font-size:11px;font-weight:600;color:${barColor};text-align:right">${cierre ? 'cierre '+avCierre.hechos+'/'+avCierre.total : asigActiva ? 'diseño '+dHechos+'/12' : '0%'}</div>
+        ${asigBarra ? `<div style="font-size:10px;color:var(--muted);text-align:right" title="Avance de toda la materia: diseño y video juntos">total ${progAsigVista(asigBarra)}%</div>` : ''}
       </div>
       <div style="text-align:center;min-width:60px">
         <div style="font-size:11px;color:var(--muted)">Días</div>
@@ -1209,6 +1282,7 @@ function renderCelulasDir(){
           <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
         </div>
         <div style="font-size:11px;font-weight:600;color:${barColor};text-align:right">${cierreV ? 'cierre '+avC.hechos+'/'+avC.total : P ? 'videos '+hechos+'/'+VIDEO_KEYS.length : '0%'}</div>
+        ${(P||cierreV) ? `<div style="font-size:10px;color:var(--muted);text-align:right" title="Avance de toda la materia: diseño y video juntos">total ${progAsigVista(P?P.a:cierreV)}%</div>` : ''}
       </div>
       <div style="text-align:center;min-width:60px">
         <div style="font-size:11px;color:var(--muted)">Días</div>
@@ -1292,10 +1366,13 @@ function renderCelulasDir(){
       <div style="display:flex;flex-direction:column;gap:16px">
         <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
           <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">Cola de espera</span>
-            <span style="font-size:11px;padding:2px 10px;border-radius:99px;background:#eef2ff;color:#6366f1">${colaAsigs.length} pendientes${enRev?' · '+enRev+' en revisión de calidad':''}</span>
+            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">${_colaVista==='cola'?'Cola de espera':'🚀 Próximos lanzamientos'}</span>
+            <span style="display:flex;gap:4px">
+              <button class="chip ${_colaVista!=='cola'?'active':''}" style="font-size:11px;padding:3px 10px" onclick="_colaVista='lanz';renderCelulasDir()">Por lanzamiento</button>
+              <button class="chip ${_colaVista==='cola'?'active':''}" style="font-size:11px;padding:3px 10px" onclick="_colaVista='cola';renderCelulasDir()">Cola · ${colaAsigs.length}</button>
+            </span>
           </div>
-          ${colaHTML}
+          ${_colaVista==='cola' ? (enRev?`<div style="padding:8px 20px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">${enRev} más en revisión de calidad (aún no entran a la cola)</div>`:'')+colaHTML : lanzamientosHTML(todas)}
         </div>
         <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
           <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
@@ -1367,6 +1444,26 @@ function guardarEstadoLocal(){
   }catch(e){}
 }
 
+// Timers que estaban corriendo cuando se recargó o cerró la pestaña (6-nov-2026). Quedan en pausa aquí, y el Sheet
+// se pone al día ("Pausado" con sus minutos) para que el resto del equipo no los vea corriendo y la persona los pueda
+// reanudar sin problema. Antes el Sheet seguía diciendo "Activo" y el timer quedaba trabado.
+let _timersPausadosAlRecargar = [];
+function sincronizarTimersTrasRecargar(){
+  const ids=_timersPausadosAlRecargar.splice(0); if(!ids.length) return;
+  const nombres=[];
+  ids.forEach(id=>{ const t=STATE.timers[id]; if(!t) return;
+    sheetActualizar('Timers_Activos', ['ID','Persona','Rol','Tarea','Unidad','Asignatura','Inicio','Estado','Minutos Acumulados'],
+      [t.id, t.persona, ROL_CFG[t.rol]?.label||t.rol, t.tarea, t.unidad||'', t.asigNombre, new Date(t.inicio).toLocaleString('es-CO'), 'Pausado', Math.round((t.elapsed||0)/60000)]);
+    nombres.push(t.tarea+' · '+t.asigNombre);
+  });
+  if(nombres.length) setTimeout(()=>toast('⏸ Tu timer quedó en pausa al recargar ('+nombres.join(' / ')+'). Dale ▶ Reanudar para seguir.'), 1500);
+}
+// Al recargar o cerrar se guarda el tiempo exacto hasta ese momento (antes se perdía lo corrido desde el último guardado)
+window.addEventListener('pagehide', ()=>{ try{
+  if(!Object.keys(STATE.timers||{}).length) return;
+  guardarEstadoLocal();
+  sessionStorage.setItem('timersCorriendoAlRecargar', JSON.stringify(Object.values(STATE.timers).filter(t=>t&&t.running).map(t=>t.id)));
+}catch(e){} });
 function cargarEstadoLocal(){
   try{
     const a = localStorage.getItem('fabrica_asignaturas');
@@ -1393,6 +1490,10 @@ function cargarEstadoLocal(){
       timers.forEach(td=>{
         STATE.timers[td.id] = {...td, inicio: Date.now()-td.elapsed, running:false};
       });
+      // Solo los que corrían en ESTA pestaña al recargarla (sessionStorage es de la pestaña, no se comparte con otras:
+      // así no se pausa en el Sheet un timer que sigue corriendo en otra pestaña abierta)
+      try{ const ids=JSON.parse(sessionStorage.getItem('timersCorriendoAlRecargar')||'[]'); sessionStorage.removeItem('timersCorriendoAlRecargar');
+        ids.forEach(id=>{ if(STATE.timers[id]) _timersPausadosAlRecargar.push(id); }); }catch(e){}
     }
     return !!(a||s);
   }catch(e){ return false; }
@@ -2488,6 +2589,10 @@ function progAsigVista(a){
   return (p>=100 && !cierreCompletoAsig(a)) ? 99 : p;
 }
 // ¿Ya terminó el frente de DISEÑO de esta asignatura? (independiente de si video ya terminó o no)
+// Avance por frente (6-nov-2026, Juan Diego): diseño = 12 entregables (4 por clase); video = 6 videos globales.
+// progAsig (18 en total) mezcla los dos: no sirve para decir cuánto lleva UNA persona.
+function disenoHechosAsig(a){ let n=0; ['u1','u2','u3'].forEach(u=>['html','genially','infografia','imagenes'].forEach(k=>{ if(a?.assets?.[u]?.[k]) n++; })); return n; }
+function videoHechosAsig(a){ return ['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'].filter(k=>a?.assets?.global?.[k]).length; }
 function disenoCompletoAsig(a){
   if(!a?.assets) return false;
   const keys=['html','genially','infografia','imagenes'];
@@ -3160,6 +3265,44 @@ async function calConfirmarImport(){
 function toast(msg){ const t=document.getElementById('toast'); document.getElementById('toast-msg').textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
 
 // ══ NUEVA ASIGNATURA ══
+// ── Nueva asignatura: avisos de duplicado y de fecha pasada (6-nov-2026, Juan Diego) ──
+function _nomNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim(); }
+function _distancia(a,b){ // Levenshtein (nombres cortos)
+  const m=a.length, n=b.length; if(!m) return n; if(!n) return m;
+  let prev=Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){ const cur=[i]; for(let j=1;j<=n;j++) cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1)); prev=cur; }
+  return prev[n];
+}
+// Asignaturas ya registradas con el mismo nombre (igual) o muy parecido (una o dos letras distintas, p. ej. "Urbaniso")
+function buscarAsignaturasParecidas(nombre){
+  const q=_nomNorm(nombre); if(q.length<4) return [];
+  const out=[];
+  STATE.asignaturas.forEach(a=>{
+    const n=_nomNorm(a.nombre); if(!n) return;
+    if(n===q){ out.push({a, tipo:'igual'}); return; }
+    const d=_distancia(q,n), largo=Math.max(q.length,n.length);
+    if(largo>=8 && (d<=2 || d/largo<=0.12)) out.push({a, tipo:'parecida'});
+  });
+  return out.sort((x,y)=>(x.tipo==='igual'?0:1)-(y.tipo==='igual'?0:1)).slice(0,4);
+}
+function _parecidasHTML(lista){
+  if(!lista.length) return '';
+  const hayIgual=lista.some(x=>x.tipo==='igual');
+  return `<div style="margin-top:6px;padding:8px 12px;border-radius:8px;font-size:12px;line-height:1.5;background:${hayIgual?'#fee2e2':'#fef3c7'};color:${hayIgual?'#991b1b':'#92400e'}">
+    ${hayIgual?'⚠️ <b>Esta asignatura ya está registrada:</b>':'🤔 <b>Se parece a una que ya está registrada:</b>'}
+    ${lista.map(x=>`<div>• ${_cEsc(x.a.nombre)} · ${_cEsc(x.a.prog||'—')} · <b>${_cEsc(x.a.status||'')}</b>${x.a.fechaLimite?' · lanza '+_cFmt(x.a.fechaLimite):''}</div>`).join('')}
+    <div style="opacity:.85">Revisa en <b>Asignaturas</b> antes de crearla para no duplicarla.</div></div>`;
+}
+function nuevaAvisarDuplicado(){
+  const el=document.getElementById('n-nombre-aviso'); if(!el) return;
+  el.innerHTML=_parecidasHTML(buscarAsignaturasParecidas(document.getElementById('n-nombre')?.value||''));
+}
+function nuevaAvisarFecha(){
+  const el=document.getElementById('n-fecha-aviso'), v=document.getElementById('n-fecha-limite')?.value||''; if(!el) return;
+  el.innerHTML = v && v<_ymdLocal(new Date())
+    ? `<div style="margin-top:6px;padding:8px 12px;border-radius:8px;font-size:12px;background:#fee2e2;color:#991b1b">📅 Esa fecha ya pasó (${_cFmt(v)}). ¿Será ${v.slice(0,4)==String(new Date().getFullYear())?'del próximo año ('+_cFmt((Number(v.slice(0,4))+1)+v.slice(4))+')':'otro año'}? La fecha de lanzamiento tiene que ser de hoy en adelante.</div>`
+    : '';
+}
 function crearAsignatura(){
   const nombre=document.getElementById('n-nombre').value.trim();
   const prog=document.getElementById('n-prog').value;
@@ -3172,6 +3315,13 @@ function crearAsignatura(){
   const fechaDeberiaEntrar=document.getElementById('n-fecha-entrada')?.value||'';
   if(!nombre||!prog){ toast('Completa nombre y programa'); return; }
   if(!fechaLimite){ toast('Falta la fecha de lanzamiento: es obligatoria porque de ella sale la prioridad'); document.getElementById('n-fecha-limite')?.focus(); return; }
+  if(fechaLimite < _ymdLocal(new Date())){ nuevaAvisarFecha(); toast('📅 La fecha de lanzamiento ya pasó: revisa el año'); document.getElementById('n-fecha-limite')?.focus(); return; }
+  const parecidas=buscarAsignaturasParecidas(nombre);
+  if(parecidas.length){
+    nuevaAvisarDuplicado();
+    const txt=parecidas.map(x=>'• '+x.a.nombre+' ('+(x.a.prog||'—')+', '+x.a.status+')').join('\n');
+    if(!confirm((parecidas.some(x=>x.tipo==='igual')?'⚠️ Esta asignatura ya está registrada:':'🤔 Se parece a una que ya está registrada:')+'\n\n'+txt+'\n\n¿Seguro que quieres crearla de todas formas?')) return;
+  }
   const esCelula = true; // en el modelo por persona, toda asignatura nueva es de diseño
   const modoIngreso = document.getElementById('n-modo-ingreso')?.value || 'espera';
   const celulaId = (esCelula && modoIngreso==='directo') ? (document.getElementById('n-celula')?.value||'') : '';
@@ -3208,6 +3358,7 @@ function crearAsignatura(){
   guardarEstadoLocal();
   // Limpiar formulario
   ['n-nombre','n-df','n-obs','n-link','n-fecha-limite','n-fecha-entrada'].forEach(id=>document.getElementById(id).value='');
+  ['n-nombre-aviso','n-fecha-aviso'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
   const modoSel = document.getElementById('n-modo-ingreso');
   if(modoSel) modoSel.value='espera';
   const extraDiv = document.getElementById('celula-form-extra');
@@ -4638,6 +4789,22 @@ function completarTimer(id,nota='',minsManual=null){
   felicitarSiTermino(STATE.asignaturas.find(x=>x.id===sesion.asigId), antesFelic, _esDelFrenteT(sesion.persona, sesion.rol, true));
 }
 
+// "🙋 Es mío" (6-nov-2026): un timer propio que quedó como "del equipo" (se recargó la pestaña, otra pestaña borró
+// la copia local, se cambió de navegador…) se trae a esta pestaña EN PAUSA, con su tiempo, para poder reanudarlo,
+// pausarlo o completarlo normalmente.
+function adoptarTimer(id){
+  const r=(STATE.timersSheets||[]).find(x=>x.id===id); if(!r){ toast('No se encontró el timer'); return; }
+  if(!confirm('¿Este timer es tuyo?\n\n'+r.persona+' · '+r.tarea+(r.unidad?' · '+r.unidad:'')+'\n'+r.asigNombre+'\n\nQuedará en pausa en esta pestaña con su tiempo, y lo podrás reanudar, pausar o completar.')) return;
+  if(r.running) pausarTimer(id);           // lo reconstruye aquí y lo pausa (guarda sus minutos en el Sheet)
+  else {
+    STATE.timers[id]={ id:r.id, persona:r.persona, rol:r.rol, tarea:r.tarea, unidad:r.unidad,
+      asigId:(STATE.asignaturas.find(a=>a.nombre===r.asigNombre)?.id)||'', asigNombre:r.asigNombre,
+      inicio:Date.now()-(r.minutosAcumulados||0)*60000, elapsed:(r.minutosAcumulados||0)*60000, running:false };
+    guardarEstadoLocal(); renderTimers();
+  }
+  renderDashboardTimers && renderDashboardTimers();
+  toast('🙋 Listo: el timer ya es de esta pestaña. Dale ▶ Reanudar cuando quieras seguir.');
+}
 function completarTimerRemoto(id, persona){
   const r=(STATE.timersSheets||[]).find(x=>x.id===id);
   const minsCalculados = r && !r.running ? Math.round((r.minutosAcumulados||0)) : null;
@@ -4797,6 +4964,7 @@ function renderTimers(){
             <div class="timer-display" id="remote-timer-${t.id}" style="color:${displayColor}">${isPausado?'⏸ Pausado':fmtMs(elapsed)}</div>
           </div>
           <div class="timer-actions" style="margin-top:8px">
+            <button class="btn btn-sm" title="Si este timer es tuyo y no lo puedes controlar (p. ej. después de recargar), tráelo a esta pestaña" onclick="adoptarTimer('${t.id}')">🙋 Es mío</button>
             <button class="btn btn-sm btn-ok" onclick="completarTimerRemoto('${t.id}','${(t.persona||'').replace(/'/g,"\\'")}')">✓ Completar</button>
           </div>
         </div>`;
@@ -5915,6 +6083,8 @@ function crearAsignaturaCelula(){
   const celula = document.getElementById('ca-celula').value;
   const inicio = document.getElementById('ca-inicio').value;
   if(!nombre||!celula){ toast('Completa nombre y célula'); return; }
+  const parecidas=buscarAsignaturasParecidas(nombre);
+  if(parecidas.length && !confirm('⚠️ Ya hay una asignatura igual o muy parecida:\n\n'+parecidas.map(x=>'• '+x.a.nombre+' ('+(x.a.prog||'—')+', '+x.a.status+')').join('\n')+'\n\n¿Crearla de todas formas?')) return;
   const id = uid();
   const asig = {
     id, nombre, prog, celula, inicio: inicio||today(),
@@ -7157,6 +7327,7 @@ async function cargarDesdeSheets(){
   let tieneLocal = false;
   if(!_primerCargaHecha){
     tieneLocal = cargarEstadoLocal();
+    sincronizarTimersTrasRecargar();
     _primerCargaHecha = true;
     _tuvoLocalAlgunaVez = tieneLocal;
     console.log('[CARGA] tieneLocal:', tieneLocal);
@@ -7697,6 +7868,14 @@ async function pollTimersRemotos(){
 }
 setInterval(pollTimersRemotos, 30000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) pollTimersRemotos(); });
+// Aviso al cerrar o recargar la pestaña con un timer corriendo (6-nov-2026, Juan Diego). Los navegadores no permiten
+// texto propio aquí: Chrome muestra su aviso genérico ("¿Quieres salir del sitio?"). Solo cuentan los timers de ESTE
+// navegador que estén corriendo (los pausados no avisan).
+function hayTimerCorriendoLocal(){ return Object.values(STATE.timers||{}).some(t=>t && t.running); }
+window.addEventListener('beforeunload', e=>{
+  if(!hayTimerCorriendoLocal()) return;
+  e.preventDefault(); e.returnValue=''; return '';
+});
 
 
 
