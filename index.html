@@ -864,7 +864,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026110612;
+const DASHBOARD_VERSION = 2026110613;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1298,6 +1298,8 @@ function renderCelulasDir(){
 
   // Cola
   const colaAsigs = ordenarPorPrioridad(todas.filter(a=>a.status==='En espera'));
+  // Timers corriendo ahora (de este navegador + los del equipo en el Sheet, sin repetir) para el botón "⏱ Timers · N"
+  const timersCorriendoN = Object.values(STATE.timers||{}).filter(t=>t&&t.running).length + (STATE.timersSheets||[]).filter(r=>!STATE.timers[r.id] && r.estado==='Activo').length;
   const colaHTML = colaAsigs.length===0
     ? `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No hay asignaturas en cola ✅</div>`
     : colaAsigs.map((a,i)=>`
@@ -1313,11 +1315,10 @@ function renderCelulasDir(){
   el.innerHTML = `
     ${kpiHTML}
     <style>
-      /* Dashboard en 3 columnas (6-nov-2026, Juan Diego): Personas · Próximos lanzamientos · Timers, todo a la vista.
-         En pantallas más angostas: 2 columnas y los timers quedan justo debajo de Próximos lanzamientos. */
-      .dash3{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) minmax(0,.75fr);gap:16px;align-items:start}
-      @media (max-width:1400px){ .dash3{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)} .dash3>.dash3-p{grid-row:span 2} .dash3>.dash3-t{grid-column:2} }
-      @media (max-width:900px){ .dash3{grid-template-columns:minmax(0,1fr)} .dash3>.dash3-p{grid-row:auto} .dash3>.dash3-t{grid-column:auto} }
+      /* Dashboard en 2 columnas (6-nov-2026, Juan Diego): Personas | Próximos lanzamientos · Cola · Timers (botones).
+         En pantallas angostas, una sola columna. */
+      .dash3{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start}
+      @media (max-width:900px){ .dash3{grid-template-columns:minmax(0,1fr)} }
     </style>
     <div class="dash3">
       <div class="dash3-p">
@@ -1339,22 +1340,14 @@ function renderCelulasDir(){
       <div class="dash3-l">
         <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
           <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">${_colaVista==='cola'?'Cola de espera':'🚀 Próximos lanzamientos'}</span>
+            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">${_colaVista==='cola'?'Cola de espera':_colaVista==='timers'?'⏱ Timers activos ahora':'🚀 Próximos lanzamientos'}</span>
             <span style="display:flex;gap:4px">
-              <button class="chip ${_colaVista!=='cola'?'active':''}" style="font-size:11px;padding:3px 10px" onclick="_colaVista='lanz';renderCelulasDir()">Por lanzamiento</button>
+              <button class="chip ${_colaVista!=='cola'&&_colaVista!=='timers'?'active':''}" style="font-size:11px;padding:3px 10px" onclick="_colaVista='lanz';renderCelulasDir()">Por lanzamiento</button>
               <button class="chip ${_colaVista==='cola'?'active':''}" style="font-size:11px;padding:3px 10px" onclick="_colaVista='cola';renderCelulasDir()">Cola · ${colaAsigs.length}</button>
+              <button class="chip ${_colaVista==='timers'?'active':''}" style="font-size:11px;padding:3px 10px" onclick="_colaVista='timers';renderCelulasDir()" title="Timers activos ahora">⏱ Timers · ${timersCorriendoN}</button>
             </span>
           </div>
-          ${_colaVista==='cola' ? (enRev?`<div style="padding:8px 20px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">${enRev} más en revisión de calidad (aún no entran a la cola)</div>`:'')+`<div style="max-height:620px;overflow-y:auto">${colaHTML}</div>` : lanzamientosHTML(todas)}
-        </div>
-      </div>
-      <div class="dash3-t">
-        <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
-          <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-            <span style="font-family:var(--fhead);font-size:14px;font-weight:600">⏱ Timers activos ahora</span>
-            <div class="live-badge"><div class="live-dot"></div>Live</div>
-          </div>
-          <div id="celdir-timers-list" style="max-height:760px;overflow-y:auto"><div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-txt">Sin timers activos</div></div></div>
+          ${_colaVista==='timers' ? `<div style="padding:8px 20px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px"><div class="live-badge"><div class="live-dot"></div>Live</div> Corriendo primero, luego los que están en pausa</div><div id="celdir-timers-list" style="max-height:620px;overflow-y:auto"><div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-txt">Sin timers activos</div></div></div>` : _colaVista==='cola' ? (enRev?`<div style="padding:8px 20px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">${enRev} más en revisión de calidad (aún no entran a la cola)</div>`:'')+`<div style="max-height:620px;overflow-y:auto">${colaHTML}</div>` : lanzamientosHTML(todas)}
         </div>
       </div>
     </div>`;
