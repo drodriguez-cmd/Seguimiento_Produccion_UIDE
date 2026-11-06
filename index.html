@@ -861,7 +861,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026110401;
+const DASHBOARD_VERSION = 2026110601;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -7385,11 +7385,10 @@ async function cargarDesdeSheets(){
     // hacía que las reservas "parpadearan" entre personas — cada navegador con su propia
     // foto de los datos pisaba el reordenamiento del otro. Una vez al día es suficiente
     // para corregir casos reales sin generar ese vaivén confuso para el equipo.
-    const hoyReorden = today();
-    if(localStorage.getItem('ultimoReordenReservas') !== hoyReorden){
-      reordenarReservasPorPrioridad();
-      localStorage.setItem('ultimoReordenReservas', hoyReorden);
-    }
+    // APAGADO el 6-nov-2026 (Juan Diego): cada navegador reordenaba las reservas una vez al día y una misma
+    // asignatura saltaba de persona en persona (Cloud Computing: David → Melissa → Alejandra → Melissa → Gabriel
+    // en menos de un día). Una reserva asignada ya no se mueve sola; si hay que cambiarla, se hace a mano con Mover.
+    // reordenarReservasPorPrioridad() queda en el código pero ya no se llama.
     // Tras sincronizar, reevaluar la cola por si quedó algo pendiente de asignar
     intentarAutoAsignar();
   }catch(e){
