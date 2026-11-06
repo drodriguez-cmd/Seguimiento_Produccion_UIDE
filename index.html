@@ -861,7 +861,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026110601;
+const DASHBOARD_VERSION = 2026110602;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -934,12 +934,16 @@ async function sheetTimerActivo(accion, timer){
   }
 }
 
-async function sheetActualizar(hoja, encabezados, fila){
+// soloCols (6-nov-2026): si se pasa, el Apps Script cambia SOLO esas columnas de la fila y deja las demás como están
+// en el Sheet. Así una pestaña con datos viejos no pisa la persona asignada al prender un timer o al cambiar la
+// prioridad (caso Cloud Computing: el timer de Melissa reescribió Celula=GabrielV desde una pestaña desactualizada).
+async function sheetActualizar(hoja, encabezados, fila, soloCols){
   try{
     setSyncStatus('sync');
     const url = API+'?accion=actualizar&hoja='+encodeURIComponent(hoja)
       +'&enc='+encodeURIComponent(JSON.stringify(encabezados))
-      +'&fila='+encodeURIComponent(JSON.stringify(fila));
+      +'&fila='+encodeURIComponent(JSON.stringify(fila))
+      +(soloCols && soloCols.length ? '&cols='+encodeURIComponent(JSON.stringify(soloCols)) : '');
     const r = await jsonp(url);
     setSyncStatus(r.ok!==false ? 'ok' : 'err');
   }catch(e){ setSyncStatus('err'); }
@@ -3305,7 +3309,7 @@ async function intentarAutoAsignar(){
       [siguiente.id, siguiente.nombre, siguiente.prog, siguiente.inicio, siguiente.df,
        siguiente.status, siguiente.obs||'', today(),
        'celula', disponible.celulaId, siguiente.fechaCompletado||'', siguiente.fechaInicioProduccion||'', siguiente.link||'', siguiente.videoPersona||'', siguiente.prioridad||'media', siguiente.fechaLimite||'', siguiente.prioridadManual?'Si':'No', siguiente.fechaDeberiaEntrar||'']
-    );
+    , ['Status', 'Celula', 'Video Persona', 'Tipo']);
 
     const cfg = CELULA_CFG[disponible.celulaId];
     await notificarAsignacion(siguiente, disponible.celulaId, esPreAsignacion);
@@ -3331,7 +3335,7 @@ function cambiarPrioridad(asigId, valor){
   sheetActualizar('Asignaturas',
     ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
     [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad, asig.fechaLimite||'', 'Si', asig.fechaDeberiaEntrar||'']
-  );
+  , ['Prioridad', 'Prioridad Manual']);
   toast('Prioridad actualizada: '+valor+' (manual — el sistema ya no la recalcula sola)');
   renderAsignaturas();
 }
@@ -3526,7 +3530,7 @@ function limpiarReservasDuplicadas(){
         sheetActualizar('Asignaturas',
           ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
           [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', '', asig.fechaCompletado||'', '', asig.link||'', asig.videoPersona||'', asig.prioridad, asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
-        );
+        , ['Celula', 'Status', 'Fecha Inicio Produccion']);
         toast(`🧹 "${asig.nombre}" era una reserva duplicada de ${CELULA_CFG[celulaId]?.label} — liberada, vuelve a la cola`);
       });
     }
@@ -3562,7 +3566,7 @@ function limpiarReservasDuplicadas(){
         sheetActualizar('Asignaturas',
           ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
           [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En espera', asig.obs||'', today(), asig.tipo||'estandar', '', asig.fechaCompletado||'', '', asig.link||'', asig.videoPersona||'', asig.prioridad, asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
-        );
+        , ['Celula', 'Status', 'Fecha Inicio Produccion']);
         toast(`🧹 "${asig.nombre}" era una activa duplicada de ${CELULA_CFG[celulaId]?.label} (sin trabajo real) — liberada, vuelve a la cola`);
       });
     }
@@ -3717,7 +3721,7 @@ function liberarAsignaturasDePausados(){
     sheetActualizar('Asignaturas',
       ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
       [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En espera', asig.obs||'', today(), asig.tipo||'estandar', '', asig.fechaCompletado||'', '', asig.link||'', asig.videoPersona||'', asig.prioridad, asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
-    );
+    , ['Celula', 'Status', 'Fecha Inicio Produccion']);
     toast(`↩ "${asig.nombre}" liberada de ${celulaAnterior} (pausada) — vuelve a la cola con prioridad ${asig.prioridad}`);
   });
   if(huboCambios){
@@ -3785,7 +3789,7 @@ function rebalancearVideoEquipo(){
     if(typeof renderCelulasDir==='function') renderCelulasDir();
     // Al Sheet de una en una: un cambio de equipo puede mover decenas de asignaturas a la vez
     const ENC=['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'];
-    (async()=>{ for(const f of filasSheet){ await sheetActualizar('Asignaturas', ENC, f); } })();
+    (async()=>{ for(const f of filasSheet){ await sheetActualizar('Asignaturas', ENC, f, ['Video Persona']); } })();
     toast(`🎬 Video rebalanceado entre ${pool.join(', ')} — ${cambios.length} movida${cambios.length!==1?'s':''}`);
     console.log('[REBALANCEO VIDEO]', cambios);
   }
@@ -3812,7 +3816,7 @@ function recalcularPrioridadesAutomaticas(){
     if(typeof renderCelulasDir==='function') renderCelulasDir();
     // Al Sheet de UNA EN UNA: un cambio de regla puede mover decenas de prioridades a la vez, y mandarlas
     // todas juntas choca con el límite de ejecuciones simultáneas de Apps Script (timeouts y filas perdidas).
-    (async()=>{ for(const fila of pendientes){ await sheetActualizar('Asignaturas', ENC, fila); } })();
+    (async()=>{ for(const fila of pendientes){ await sheetActualizar('Asignaturas', ENC, fila, ['Prioridad']); } })();
   }
 }
 
@@ -3834,8 +3838,9 @@ async function asignarCelulaManual(asigId, celulaId){
     // puede meter algo nuevo como "activa" encima, porque quedaría con dos cosas a la vez
     // (una activa recién asignada + su reserva de antes sin tocar). Debe arrancar o liberar
     // esa reserva primero.
-    toast(`⛔ ${CELULA_CFG[celulaId].label} todavía tiene pendiente su reserva "${reserva.nombre}" sin arrancar. Debe iniciarla o liberarla antes de asignarle algo nuevo.`);
-    return;
+    // 6-nov-2026 (Juan Diego): se permite, preguntando. La reserva que ya tenía se queda como su siguiente.
+    if(!confirm(`${CELULA_CFG[celulaId].label} no tiene una asignatura activa, pero tiene su reserva "${reserva.nombre}".\n\n¿"${asig.nombre}" pasa a ser su asignatura ACTIVA ahora?\n(Aceptar = sí, y "${reserva.nombre}" sigue como su siguiente)`)) return;
+    nuevoStatus = 'En producción';
   } else {
     if(reserva){
       // Ya tiene su cupo completo (1 activa + 1 reserva) — no se permite una tercera,
@@ -3853,7 +3858,7 @@ async function asignarCelulaManual(asigId, celulaId){
         sheetActualizar('Asignaturas',
           ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
           [activa.id, activa.nombre, activa.prog, activa.inicio, activa.df, 'En espera', activa.obs||'', today(), 'celula', celulaId, activa.fechaCompletado||'', activa.fechaInicioProduccion||'', activa.link||'', activa.videoPersona||'', activa.prioridad||'media', activa.fechaLimite||'', activa.prioridadManual?'Si':'No', activa.fechaDeberiaEntrar||'']
-        );
+        , ['Status']);
         nuevoStatus = 'En producción';
       } else {
         if(!confirm(`Entonces, ¿poner "${asig.nombre}" como RESERVA de ${nom}? (queda en espera y arranca cuando termine "${activa.nombre}")`)) return;
@@ -3876,7 +3881,7 @@ async function asignarCelulaManual(asigId, celulaId){
   sheetActualizar('Asignaturas',
     ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
     [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, nuevoStatus, asig.obs||'', today(), 'celula', celulaId, asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
-  );
+  , ['Celula', 'Status', 'Video Persona', 'Tipo']);
 
   await notificarAsignacion(asig, celulaId, nuevoStatus==='En espera');
 
@@ -4182,7 +4187,7 @@ function verificarAutoCompletado(asigId){
       [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'Completada',
        asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'',
        asig.fechaCompletado, asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
-    );
+    , ['Status', 'Fecha Completado']);
     renderAsignaturas();
     renderDashboard();
     toast('🎉 ¡'+asig.nombre+' completada automáticamente!');
@@ -4299,7 +4304,7 @@ function iniciarTimer(){
       [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status,
        asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'',
        asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
-    );
+    , ['Status', 'Fecha Inicio Produccion']);
   }
   STATE.intervals[id]=setInterval(()=>{
     if(STATE.timers[id]?.running){ STATE.timers[id].elapsed=Date.now()-STATE.timers[id].inicio; tickRelojes(); }
@@ -5149,7 +5154,7 @@ async function cambiarStatus(id){
     sheetActualizar('Asignaturas',
       ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
       [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, 'En espera', asig.obs||'', today(), asig.tipo||'estandar', '', '', '', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
-    );
+    , ['Status', 'Celula', 'Fecha Completado', 'Fecha Inicio Produccion']);
     toast('▶ Despausada: vuelve a la cola en cero para reasignar');
     // Borrar del Sheet el rastro viejo (sesiones, entregables, timers) para que el cero sea permanente
     await borrarDatosAsignatura(asig.nombre, asig.id);
@@ -5165,7 +5170,7 @@ async function cambiarStatus(id){
   sheetActualizar('Asignaturas',
     ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
     [asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona||'', asig.prioridad||'media', asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']
-  );
+  , ['Status']);
   renderAsignaturas();
   // Si se PAUSÓ, la célula quedó libre → intentar llenarla desde la cola
   if(nuevoStatus==='Pausada'){
@@ -7118,7 +7123,7 @@ async function cargarDesdeSheets(){
             ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
             [a.id, a.nombre, a.prog, a.inicio, a.df, a.status, a.obs||'', today(),
              'celula', a.celula||'', a.fechaCompletado||'', a.fechaInicioProduccion||'', a.link||'', a.videoPersona, a.prioridad||'media', a.fechaLimite||'', a.prioridadManual?'Si':'No', a.fechaDeberiaEntrar||'']
-          );
+          , ['Video Persona']);
           // NO notificar aquí — el patch corre en cada sync y generaría spam.
           // La notificación al editor ya ocurre una sola vez en crearAsignatura().
         });
@@ -7350,7 +7355,7 @@ async function cargarDesdeSheets(){
             ['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'],
             [a.id,a.nombre,a.prog,a.inicio,a.df,'Completada',a.obs||'',today(),
              a.tipo||'estandar',a.celula||'',a.fechaCompletado,a.fechaInicioProduccion||'',a.link||'',a.videoPersona||'', a.prioridad||'media', a.fechaLimite||'', a.prioridadManual?'Si':'No', a.fechaDeberiaEntrar||'']
-          );
+          , ['Status', 'Fecha Completado']);
         }
       });
       
