@@ -841,8 +841,44 @@ textarea{resize:vertical;min-height:70px}
     </div>
   </div>
 </div>
+<div id="modal-meta" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:26px;max-width:470px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+    <div style="font-size:42px;line-height:1;margin-bottom:8px">🏆</div>
+    <div id="modal-meta-tit" style="font-family:var(--fhead);font-size:18px;font-weight:700;margin-bottom:8px"></div>
+    <div id="modal-meta-txt" style="font-size:13px;line-height:1.6;margin-bottom:18px"></div>
+    <button class="btn btn-primary" onclick="document.getElementById('modal-meta').style.display='none'">¡Entendido! 💪</button>
+  </div>
+</div>
 <div id="modal-reporte" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9997;align-items:center;justify-content:center" onclick="if(event.target===this)calCerrarReporte()">
   <div id="modal-reporte-caja" style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:22px 24px;max-width:620px;width:92%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)"></div>
+</div>
+<style>
+  #pq-btn{position:fixed;right:22px;bottom:22px;z-index:9000;background:linear-gradient(135deg,#e8336d,#f0597f);color:#fff;border:none;border-radius:999px;padding:12px 18px;font-size:14px;font-weight:700;box-shadow:0 8px 24px rgba(232,51,109,.35);cursor:pointer;display:flex;align-items:center;gap:8px}
+  #pq-btn:hover{transform:translateY(-1px)}
+  #pq-panel{position:fixed;right:22px;bottom:80px;z-index:9001;width:400px;max-width:calc(100vw - 32px);max-height:min(640px,calc(100vh - 110px));background:#fff;border:1px solid var(--border2);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.25);display:none;flex-direction:column;overflow:hidden}
+  #pq-panel .pq-head{background:linear-gradient(120deg,#e8336d,#f0597f);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+  #pq-panel .pq-body{padding:12px 14px;overflow-y:auto;flex:1;font-size:13px;line-height:1.5}
+  #pq-panel input{flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px}
+  .pq-s{display:inline-block;margin:4px 4px 0 0;padding:5px 10px;border-radius:99px;background:var(--bg3);font-size:11.5px;cursor:pointer;border:1px solid var(--border)}
+  .pq-s:hover{background:#fde7ef;border-color:#f5a9c1}
+  .pq-card{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px;background:#fff}
+  .pq-tit{font-family:var(--fhead);font-weight:700;font-size:14px;margin-bottom:6px}
+  .pq-num{font-family:var(--fhead);font-size:30px;font-weight:700;color:#e8336d;line-height:1.1;margin-bottom:4px}
+  .pq-num span{font-size:14px;color:var(--muted);font-weight:500}
+  .pq-ul{margin:6px 0 4px 18px;padding:0} .pq-ul li{margin:2px 0}
+  .pq-mut{font-size:11.5px;color:var(--muted)}
+  .pq-chip{display:inline-block;font-size:11px;padding:2px 9px;border-radius:99px;background:var(--bg3);margin:2px 4px 2px 0}
+</style>
+<button id="pq-btn" onclick="pqAbrir()" title="Pregúntame sobre la Fábrica">❓ Pregúntame</button>
+<div id="pq-panel">
+  <div class="pq-head"><div><div style="font-weight:700;font-size:15px">❓ Pregúntame</div><div style="font-size:11.5px;opacity:.9">Sobre las materias, el equipo y este dashboard</div></div><span onclick="pqAbrir()" style="cursor:pointer;font-size:20px;line-height:1">×</span></div>
+  <div class="pq-body">
+    <div style="display:flex;gap:6px"><input id="pq-q" maxlength="200" placeholder="Ej.: ¿cuántas de diciembre faltan por entregar?" onkeydown="if(event.key==='Enter')pqPreguntar()"><button class="btn btn-primary btn-sm" onclick="pqPreguntar()">Preguntar</button></div>
+    <div id="pq-r"></div>
+    <div id="pq-mas" style="display:none;margin-top:8px"><span class="pq-s" onclick="pqVerSugerencias()">Ver más preguntas</span></div>
+    <div id="pq-sug" style="margin-top:8px"></div>
+    <div class="pq-mut" style="margin-top:10px">Respondo solo sobre la Fábrica, con los datos del dashboard. No soy una IA de uso general.</div>
+  </div>
 </div>
 <div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg"></span></div>
 
@@ -864,7 +900,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026110613;
+const DASHBOARD_VERSION = 2026110803;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1185,6 +1221,7 @@ function renderCelulasDir(){
         ${otrosCierreTxt}
         ${preAsignadaTxt}
         ${esperandoVideoTxt}
+        ${activaEnEquipo ? metaSemanalHTML(cfg.label, 'diseno') : ''}
       </div>
       <div style="width:100px;flex-shrink:0">
         <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px">
@@ -1276,6 +1313,7 @@ function renderCelulasDir(){
         ${otrosCierreTxt}
         ${colaTxt}
         ${esperandoDisenoTxt}
+        ${activaEnEquipoV ? metaSemanalHTML(persona, 'video') : ''}
       </div>
       <div style="width:100px;flex-shrink:0">
         <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px">
@@ -1720,6 +1758,68 @@ function siguienteDePersona(P, esVideo, salvoId){
 }
 let _felicitacion = null, _felicitado = {};
 // preferVideo: el frente de quien hizo la acción (su timer o el punto marcado); si ese terminó, se felicita ese.
+// ══ META SEMANAL POR PERSONA (8-nov-2026, Juan Diego) ══
+// Semana normal (5 días hábiles): diseño = 1 materia + 66 % de otra (1,66 × 12 entregables ≈ 20); video = 5 materias
+// (5 × 6 videos = 30). Con festivo se reduce en proporción, según el calendario de cada persona (Colombia o Canarias).
+// Cuenta los entregables que la persona TERMINÓ esta semana (lunes a hoy): el primer timer que marcó cada entregable.
+const META_MATERIAS_SEMANA = { diseno: 1.66, video: 5 };
+const ENTREGABLES_POR_MATERIA = { diseno: 12, video: 6 };
+function _lunesDe(d){ const x=new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; }
+let _metaMem = { firma:'', creditos:[] };
+function _creditosEntregables(){
+  const ss=STATE.sesiones||[], firma=ss.length+'|'+(ss[0]&&ss[0].id)+'|'+(ss.length&&ss[ss.length-1].id);
+  if(_metaMem.firma===firma) return _metaMem.creditos;
+  const vistos=new Set(), out=[];
+  ss.filter(x=>Number(x.fin)>0).sort((a,b)=>Number(a.fin)-Number(b.fin)).forEach(x=>{
+    const m=_mapaEntregable(x.tarea, x.unidad); if(!m) return;
+    const k=(x.asigId||x.asigNombre)+'|'+m.unitKey+'|'+m.assetKey; if(vistos.has(k)) return; vistos.add(k);
+    out.push({ frente: m.unitKey==='global'?'video':'diseno', persona:x.persona, rol:x.rol, fin:Number(x.fin) });
+  });
+  _metaMem={ firma, creditos:out }; return out;
+}
+function metaSemanal(persona, frente, ahora){
+  const hoy=ahora?new Date(ahora):new Date(), lun=_lunesDe(hoy), cal=calendarioDe(persona);
+  let habiles=0; for(let i=0;i<5;i++){ const d=new Date(lun); d.setDate(lun.getDate()+i); if(esDiaHabil(d, cal, persona)) habiles++; }
+  const metaMaterias=META_MATERIAS_SEMANA[frente]*habiles/5, porMat=ENTREGABLES_POR_MATERIA[frente];
+  const meta=Math.round(metaMaterias*porMat);
+  const hechos=_creditosEntregables().filter(c=>c.frente===frente && c.fin>=lun.getTime() && c.fin<=hoy.getTime()
+    && mismaPersona(c.persona, persona) && _esDelFrenteT(c.persona, c.rol, frente==='video')).length;
+  return { hechos, meta, habiles, metaMaterias, porMat, pct: meta?Math.round(hechos/meta*100):0, cumplida: meta>0 && hechos>=meta, lunes:_ymdL(lun) };
+}
+// "1 materia + 66 % de otra"
+function _textoMaterias(materias){
+  const full=Math.floor(materias+1e-9), resto=Math.round((materias-full)*100);
+  if(!full) return resto+' % de una materia';
+  return full+' materia'+(full>1?'s':'')+(resto?' + '+resto+' % de otra':'');
+}
+function metaSemanalHTML(persona, frente){
+  const m=metaSemanal(persona, frente); if(!m.meta) return '';
+  const pct=Math.min(100,m.pct), col=m.cumplida?'#16a34a':m.pct>=60?'#d97706':'#6366f1';
+  const nota=m.habiles<5 ? ` (semana de ${m.habiles} día${m.habiles===1?'':'s'} por festivo o ausencia)` : '';
+  return `<div style="margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" title="Meta de la semana: ${_textoMaterias(m.metaMaterias)} (${m.meta} entregables)${nota}">
+    <span style="font-size:11px;font-weight:600;color:${col}">${m.cumplida?'🎉 ¡Meta semanal cumplida!':'🎯 Meta semanal'}</span>
+    <span style="display:inline-block;width:70px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:${pct}%;background:${col}"></span></span>
+    <span style="font-size:11px;color:var(--text)"><b>${m.hechos}/${m.meta}</b> · ${m.pct}%</span>
+    <span style="font-size:10px;color:var(--muted)">Lleva <b>${_textoMaterias(m.hechos/m.porMat)}</b> · meta ${_textoMaterias(m.metaMaterias)}${nota}</span>
+  </div>`;
+}
+// Al cerrar un timer: si con eso la persona llega a su meta de la semana, se celebra (una vez por semana en ese navegador)
+function celebrarMetaSiToca(persona, rol){
+  try{
+    const frente=_esDelFrenteT(persona, rol, true)?'video':'diseno', m=metaSemanal(persona, frente);
+    if(!m.cumplida) return;
+    const clave='metaCelebrada_'+_primerNombre(persona)+'_'+frente+'_'+m.lunes;
+    try{ if(localStorage.getItem(clave)) return; localStorage.setItem(clave,'1'); }catch(e){}
+    const nombre=String(persona||'').trim().split(/\s+/)[0];
+    document.getElementById('modal-meta-tit').textContent='🎉 ¡Objetivo semanal cumplido, '+nombre+'!';
+    document.getElementById('modal-meta-txt').innerHTML=
+      'Llevas <b>'+m.hechos+' de '+m.meta+' entregables</b> esta semana: '+_textoMaterias(m.hechos/m.porMat)+'. 🙌<br><br>'+
+      'Antes de cerrar la semana, recuerda revisar que cada entregable:'+
+      '<div style="text-align:left;display:inline-block;margin:8px 0">✅ cumpla con los estándares de calidad<br>✅ no tenga errores<br>✅ esté subido en su carpeta correspondiente</div><br>'+
+      '<span style="font-size:12px;color:var(--muted)">Así evitamos incidencias y reprocesos. ¡Gran trabajo! 💪</span>';
+    setTimeout(()=>{ document.getElementById('modal-meta').style.display='flex'; try{ sonidoFelicitacion(); }catch(e){} }, 1200);
+  }catch(e){ console.log('[META SEMANAL] error:', e); }
+}
 function felicitarSiTermino(a, antes, preferVideo){
   try{
     if(!a || a.tipo!=='celula') return;
@@ -2132,6 +2232,51 @@ function obtenerDiasProdAsig(a){
   });
   return totalMins / 480;
 }
+// Fecha local AAAA-MM-DD (toISOString usa UTC: en un navegador de España corría los festivos un día atrás)
+function _ymdL(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// ── Calendario de cada persona (8-nov-2026, Juan Diego) ──
+// Sofía y Cristina viven en Islas Canarias (calendario de España); el resto del equipo, en Colombia.
+// Festivos de Canarias: nacionales + Comunidad Autónoma (sin los de isla ni los municipales).
+// Fuente: Gobierno de Canarias / RTVC. Añadir aquí cada año nuevo (y el de su isla, si aplica).
+const FESTIVOS_CANARIAS = {
+  2026:['2026-01-01','2026-01-06','2026-04-02','2026-04-03','2026-05-01','2026-05-30','2026-08-15','2026-10-12','2026-11-02','2026-12-08','2026-12-25'],
+  2027:['2027-01-01','2027-01-06','2027-03-25','2027-03-26','2027-05-01','2027-05-30','2027-08-16','2027-10-12','2027-11-01','2027-12-06','2027-12-08','2027-12-25']
+};
+const PERSONAS_CALENDARIO_ESPANA = ['sofia','cristina'];   // primer nombre, sin tildes
+function calendarioDe(persona){
+  const n=String(persona||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().split(/\s+/)[0];
+  return PERSONAS_CALENDARIO_ESPANA.includes(n) ? 'ES' : 'CO';
+}
+const _festMem = {};
+function festivosDe(year, cal){
+  const k=(cal||'CO')+year; if(_festMem[k]) return _festMem[k];
+  let f;
+  if(cal==='ES') f=new Set(FESTIVOS_CANARIAS[year] || ['01-01','01-06','05-01','05-30','08-15','10-12','11-01','12-06','12-08','12-25'].map(x=>year+'-'+x));
+  else f=festivosColombia(year);
+  return (_festMem[k]=f);
+}
+// ── Ausencias personales (8-nov-2026, Juan Diego): vacaciones, día libre por cumpleaños, permisos… ──
+// Pestaña "Ausencias" del Sheet: ID | Persona | Desde | Hasta | Motivo (fechas AAAA-MM-DD). Esos días no cuentan como
+// hábiles PARA ESA PERSONA en Tiempos (días transcurridos y fecha esperada) ni en su meta semanal.
+// No pausan el reparto: para eso sigue la hoja Equipo ("Disponible Desde").
+let AUSENCIAS = [];   // [{persona, desde, hasta, motivo}]
+async function cargarAusencias(){
+  const r = await jsonp(API+'?hoja='+encodeURIComponent('Ausencias'));
+  if(!r || r.ok===false || !Array.isArray(r.filas)) return false;   // si falla la lectura se conserva lo que había
+  const fecha=v=>{ const t=String(v||'').trim(); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const d=new Date(t); return isNaN(d)?'':_ymdL(d); };
+  AUSENCIAS = r.filas.slice(1).map(f=>({ persona:String(f[1]||'').trim(), desde:fecha(f[2]), hasta:fecha(f[3])||fecha(f[2]), motivo:String(f[4]||'') }))
+    .filter(a=>a.persona && a.desde);
+  return true;
+}
+// ¿Es la misma persona? Primer nombre igual y, si los dos traen apellido, misma inicial del apellido
+// (así "Alejandra Gonzales" ≠ "Alejandra B[arco]" y "Juliana Zarate" ≠ "Juliana Gutiérrez").
+function _mismaPersonaAus(a, b){
+  const n=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().split(/\s+/);
+  const x=n(a), y=n(b); if(!x[0] || x[0]!==y[0]) return false;
+  return !(x[1] && y[1]) || x[1][0]===y[1][0];
+}
+function estaAusente(persona, ymd){ return !!persona && AUSENCIAS.some(a=>a.desde<=ymd && ymd<=a.hasta && _mismaPersonaAus(a.persona, persona)); }
+function esDiaHabil(fecha, cal, persona){ const d=fecha instanceof Date?fecha:new Date(fecha); const w=d.getDay(); if(w===0||w===6) return false; const y=_ymdL(d); return !festivosDe(d.getFullYear(), cal).has(y) && !estaAusente(persona, y); }
 function festivosColombia(year){
   // Festivos fijos
   const fijos=['01-01','05-01','07-20','08-07','12-08','12-25'];
@@ -2146,7 +2291,7 @@ function festivosColombia(year){
   const juevesSanto=new Date(pascua); juevesSanto.setDate(pascua.getDate()-3);
   const viernesSanto=new Date(pascua); viernesSanto.setDate(pascua.getDate()-2);
   [juevesSanto,viernesSanto].forEach(d=>{
-    festivos.add(d.toISOString().slice(0,10));
+    festivos.add(_ymdL(d));
   });
   // Festivos basados en Pascua que se trasladan al lunes siguiente (Ley Emiliani):
   // Ascensión (+43 días), Corpus Christi (+64), Sagrado Corazón (+71)
@@ -2154,7 +2299,7 @@ function festivosColombia(year){
     const f=new Date(pascua); f.setDate(pascua.getDate()+off);
     const dow=f.getDay();
     if(dow!==1){ f.setDate(f.getDate()+((1-dow+7)%7)); }
-    festivos.add(f.toISOString().slice(0,10));
+    festivos.add(_ymdL(f));
   });
   // Festivos "puente" (se mueven al siguiente lunes)
   // Reyes, S.José, S.Pedro, N.Sra. Chiquinquirá (9 jul, nuevo festivo nacional), Asunción,
@@ -2166,26 +2311,20 @@ function festivosColombia(year){
     const fecha=new Date(year,m-1,d);
     const dow=fecha.getDay();
     if(dow!==1){ fecha.setDate(fecha.getDate()+((1-dow+7)%7)); }
-    festivos.add(fecha.toISOString().slice(0,10));
+    festivos.add(_ymdL(fecha));
   });
   return festivos;
 }
 
-function diasHabilesEntre(fechaInicio, fechaFin){
+function diasHabilesEntre(fechaInicio, fechaFin, cal, persona){
   if(!fechaInicio||fechaInicio==='—') return 0;
   const d1=new Date(fechaInicio+'T00:00:00');
   const d2=fechaFin ? new Date(fechaFin) : new Date();
   if(isNaN(d1.getTime())) return 0;
   let count=0;
   const cur=new Date(d1);
-  const festivos2026=festivosColombia(2026);
-  const festivos2025=festivosColombia(2025);
   while(cur<=d2){
-    const dow=cur.getDay();
-    const iso=cur.toISOString().slice(0,10);
-    const year=cur.getFullYear();
-    const festivos=year===2026?festivos2026:year===2025?festivos2025:festivosColombia(year);
-    if(dow!==0 && dow!==6 && !festivos.has(iso)) count++;
+    if(esDiaHabil(cur, cal, persona)) count++;
     cur.setDate(cur.getDate()+1);
   }
   return count;
@@ -2194,16 +2333,16 @@ function diasHabilesEntre(fechaInicio, fechaFin){
 // Suma N días HÁBILES completos a una fecha/hora exacta (para "fecha esperada de término"),
 // saltando fines de semana y festivos de Colombia, conservando la hora exacta de arranque
 // (si empezó a las 9:03am, el resultado también queda a las 9:03am del día calculado).
-function sumarDiasHabiles(inicioMs, diasHabilesObjetivo){
+function sumarDiasHabiles(inicioMs, diasHabilesObjetivo, cal, persona){
   const cur = new Date(inicioMs);
   let contados = 0;
-  const dias = Math.max(0, Math.round(diasHabilesObjetivo));
+  let dias = Math.max(0, Math.round(diasHabilesObjetivo));
+  // Si el día de arranque no era hábil para la persona (festivo, fin de semana o ausencia, p. ej. su día libre),
+  // ese día no se trabajó: el plazo se corre un día hábil más (8-nov-2026, caso de Gabriel).
+  if(dias>0 && !esDiaHabil(cur, cal, persona)) dias++;
   while(contados < dias){
     cur.setDate(cur.getDate()+1);
-    const dow = cur.getDay();
-    const iso = cur.toISOString().slice(0,10);
-    const festivos = festivosColombia(cur.getFullYear());
-    if(dow!==0 && dow!==6 && !festivos.has(iso)) contados++;
+    if(esDiaHabil(cur, cal, persona)) contados++;
   }
   return cur;
 }
@@ -2314,7 +2453,7 @@ function infoFrente(a, esVideo, soloPersona){
     iniciado:true,
     fechaMs: primerInicio,
     ultimoFin: ultimoFin,
-    diasTranscurridos: diasHabilesEntre(ymd, new Date(ultimoFin)),
+    diasTranscurridos: diasHabilesEntre(ymd, new Date(ultimoFin), soloPersona ? calendarioDe(soloPersona) : 'CO', soloPersona||''),
     diasProduccion: totalMs/60000/MIN_JORNADA
   };
 }
@@ -2379,14 +2518,13 @@ function finFrenteTiempos(a, esVideo, info){
   return fin || null;
 }
 // Milisegundos entre dos momentos contando solo días hábiles (lun-vie, sin festivos de Colombia), a reloj de 24 h.
-function msHabilesEntre(iniMs, finMs){
+function msHabilesEntre(iniMs, finMs, cal, persona){
   if(!(finMs>iniMs)) return 0;
   let total=0; const cur=new Date(iniMs); cur.setHours(0,0,0,0);
   while(cur.getTime()<finMs){
     const sig=new Date(cur); sig.setDate(sig.getDate()+1);
     const ymd=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
-    const dow=cur.getDay();
-    if(dow!==0 && dow!==6 && !festivosColombia(cur.getFullYear()).has(ymd)){
+    if(esDiaHabil(cur, cal, persona)){
       total += Math.max(0, Math.min(finMs, sig.getTime()) - Math.max(iniMs, cur.getTime()));
     }
     cur.setTime(sig.getTime());
@@ -2431,8 +2569,9 @@ function calcularFilasTiempos(){
     // Tiempo REAL transcurrido en días hábiles (4-nov-2026, caso de Valentina): 1 día = 24 h; fines de semana y
     // festivos no cuentan. Antes se contaban las FECHAS tocadas (de 2:33 p. m. de un día a 6:33 a. m. del siguiente
     // salían "2 días" con solo 16 h). Así cuadra con la fecha esperada: pasa del objetivo justo cuando se atrasa.
-    const diasTranscurridos = msHabilesEntre(inicioMs, finParaTranscurridos.getTime()) / 86400000;
-    const fechaEsperada = sumarDiasHabiles(inicioMs, objetivo);
+    const cal = calendarioDe(persona);   // Sofía y Cristina: festivos de Canarias; el resto: Colombia
+    const diasTranscurridos = msHabilesEntre(inicioMs, finParaTranscurridos.getTime(), cal, persona) / 86400000;
+    const fechaEsperada = sumarDiasHabiles(inicioMs, objetivo, cal, persona);   // salta festivos y sus ausencias
     const sobreObjetivo = (info.diasProduccion||0) > objetivo;
     // La fecha vencida es la señal MÁS fuerte: si ya pasó el calendario y no está completo, es atraso real.
     const fechaVencida = !completo && ahora > fechaEsperada.getTime();
@@ -2489,14 +2628,8 @@ function diasDesde(fecha){
   if(isNaN(d1.getTime())) return 0;
   let count=0;
   const cur=new Date(d1);
-  const festivos2026=festivosColombia(2026);
-  const festivos2025=festivosColombia(2025);
   while(cur<=d2){
-    const dow=cur.getDay();
-    const iso=cur.toISOString().slice(0,10);
-    const year=cur.getFullYear();
-    const festivos=year===2026?festivos2026:year===2025?festivos2025:festivosColombia(year);
-    if(dow!==0 && dow!==6 && !festivos.has(iso)) count++;
+    if(esDiaHabil(cur, 'CO')) count++;
     cur.setDate(cur.getDate()+1);
   }
   return count;
@@ -4748,6 +4881,7 @@ function completarTimer(id,nota='',minsManual=null){
   sheetTimerActivo('completar', t);
   renderTimers(); renderDashboardTimers(); toast('Sesión guardada · '+minsToStr(mins));
   recordarCierreSiToca(sesion.asigId, sesion.persona, sesion.rol);
+  celebrarMetaSiToca(sesion.persona, sesion.rol);
   felicitarSiTermino(STATE.asignaturas.find(x=>x.id===sesion.asigId), antesFelic, _esDelFrenteT(sesion.persona, sesion.rol, true));
 }
 
@@ -7353,7 +7487,8 @@ async function cargarDesdeSheets(){
           const estadoTxt = String(r[2]||'').trim().toLowerCase();
           nuevoEstado[id] = {
             activo: estadoTxt === 'activo' ? true : estadoTxt === 'pausado' ? false : true, // por defecto activo si la celda está mal escrita
-            disponibleDesde: String(r[3]||'').trim()
+            // Si la celda quedó como fecha de Sheets llega como "2026-11-16T05:00:00.000Z": se deja en AAAA-MM-DD local
+            disponibleDesde: (v=>{ if(!v) return ''; if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; const d=new Date(v); return isNaN(d)?v:_ymdL(d); })(String(r[3]||'').trim())
           };
         });
         STATE.equipoEstado = nuevoEstado;
@@ -7683,6 +7818,7 @@ async function cargarDesdeSheets(){
     // Revisiones de calidad (pestaña "Revisiones")
     try{ await cargarRevisiones(); }catch(e){ console.log('[REVISIONES] error:', e); }
     try{ await cargarComentarios(); }catch(e){ console.log('[COMENTARIOS] error:', e); }
+    try{ await cargarAusencias(); }catch(e){ console.log('[AUSENCIAS] error:', e); }
     try{ if(await cargarCalidadEntrada()) calSanar(); calActualizarBadge(); }catch(e){ console.log('[CALIDAD] error:', e); }
     if(actualizado){
       // Check all asignaturas for auto-completion (catches ones completed before this feature)
@@ -7844,6 +7980,243 @@ window.addEventListener('beforeunload', e=>{
 
 
 
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ❓ PREGÚNTAME (8-nov-2026, Juan Diego)
+//  Ayuda SIN inteligencia artificial: reconoce preguntas sobre la Fábrica con palabras clave y responde con los
+//  datos del dashboard y del Sheet (o con textos fijos). No se conecta a ninguna IA ni a internet: si la pregunta
+//  no es sobre la Fábrica, lo dice y sugiere preguntas que sí sabe. Así no se puede usar para otros temas.
+//  Cada pregunta queda en la pestaña "Preguntas" del Sheet (para ir agregando las que falten).
+// ═══════════════════════════════════════════════════════════════════════════
+const _PQ_MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const _pqNorm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[¿?¡!.,;:()"]/g,' ').replace(/\s+/g,' ').trim();
+const _pqEsc = s => String(s==null?'':s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+const _pqF = ymd => { if(!ymd) return '—'; const p=String(ymd).slice(0,10).split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+const _PQ_SUGERENCIAS = [
+  '¿Cuántas materias de diciembre faltan por entregar?',
+  '¿Cuáles materias de diciembre se han entregado?',
+  '¿Cuántas materias se entregaron en noviembre?',
+  '¿Cuántas materias de enero hemos recibido de instruccional?',
+  '¿Cuántas de diciembre faltan por recibir de instruccional?',
+  '¿En qué está Fabián?',
+  '¿Cuáles son los entregables de diseño?',
+  '¿Qué revisa el cierre de video?',
+  '¿Cuál es el proceso de una materia?',
+  '¿Qué encuentro en la pestaña Tiempos?'
+];
+
+// Mes y año que menciona la pregunta. "enero" en noviembre = enero del año que viene.
+function _pqMes(q){
+  const hoy=new Date(); let m=-1;
+  if(/\beste mes\b/.test(q)) m=hoy.getMonth();
+  else if(/\b(proximo|siguiente) mes\b/.test(q)) m=(hoy.getMonth()+1)%12;
+  else if(/\bmes pasado\b/.test(q)) m=(hoy.getMonth()+11)%12;
+  else _PQ_MESES.forEach((n,i)=>{ if(m<0 && new RegExp('\\b'+n+'\\b').test(q)) m=i; });
+  if(m<0) return null;
+  const ya=q.match(/\b(20\d\d)\b/);
+  let y=hoy.getFullYear();
+  if(ya) y=Number(ya[1]);
+  else if(/\bproximo mes\b|\bsiguiente mes\b/.test(q) && m<hoy.getMonth()) y++;
+  else if(/\bmes pasado\b/.test(q) && m>hoy.getMonth()) y--;
+  else if(m < hoy.getMonth()-3) y++;          // un mes "muy atrás" se refiere al del año que viene
+  const ym=y+'-'+String(m+1).padStart(2,'0');
+  return { ym, nombre:_PQ_MESES[m]+(y!==hoy.getFullYear()?' '+y:'') };
+}
+const _pqLanzaEn = (a, ym) => String(a.fechaLimite||'').slice(0,7)===ym;
+const _pqCompletadaEn = (a, ym) => a.status==='Completada' && a.fechaCompletado && _ymdL(new Date(a.fechaCompletado)).slice(0,7)===ym;
+function _pqLista(asigs, extra){
+  if(!asigs.length) return '';
+  return '<ul class="pq-ul">'+asigs.slice(0,40).map(a=>'<li>'+_pqEsc(a.nombre)+(extra?' <span class="pq-mut">· '+extra(a)+'</span>':'')+'</li>').join('')+'</ul>'+(asigs.length>40?'<div class="pq-mut">…y '+(asigs.length-40)+' más</div>':'');
+}
+function _pqEstadoTxt(a){ try{ const e=estadoLanzamiento(a); return e.txt+(e.sub?' ('+e.sub+')':''); }catch(e){ return a.status; } }
+function _pqPersonaDe(q){
+  // Personas del equipo mencionadas por su nombre (diseño y video)
+  const lista=[...UNIDADES_DISENO.map(id=>({id, nombre:CELULA_CFG[id].label, frente:'diseno'})), ...VIDEO_PERSONAS.map(p=>({id:p, nombre:p, frente:'video'}))];
+  const qn=' '+q+' ';
+  const cand=lista.filter(p=>{ const n=_pqNorm(p.nombre).split(' '); return qn.includes(' '+n[0]+' '); });
+  if(cand.length<=1) return cand[0]||null;
+  return cand.find(p=>{ const n=_pqNorm(p.nombre).split(' '); return n[1] && qn.includes(' '+n[1]); }) || cand;   // varias: Juliana / Alejandra
+}
+function _pqAsignaturaDe(q){
+  // Asignatura mencionada (nombre normalizado incluido en la pregunta, o la mayoría de sus palabras)
+  let mejor=null, pts=0;
+  STATE.asignaturas.forEach(a=>{
+    const n=_pqNorm(a.nombre); if(!n) return;
+    if(q.includes(n)){ if(n.length>pts){ mejor=a; pts=n.length+100; } return; }
+    const pal=n.split(' ').filter(w=>w.length>3); if(pal.length<2) return;
+    const hit=pal.filter(w=>q.includes(w)).length;
+    if(hit>=Math.max(2,Math.ceil(pal.length*0.6)) && hit>pts){ mejor=a; pts=hit; }
+  });
+  return mejor;
+}
+
+// ── Las respuestas ── cada una: [prueba(q), responder(q) → {titulo, html}]
+const _PQ_RESPUESTAS = [
+  // Proceso completo
+  [q=>/(proceso|flujo|pasos|ciclo|como funciona|de principio a fin|hasta que se envia|hasta que se entrega)/.test(q) && !/\b(cuantas|cuantos)\b/.test(q),
+   ()=>({ titulo:'🔄 El proceso de una materia',
+     html:'<ol class="pq-ul"><li><b>Llega de instruccional</b> y coordinación la registra en <i>Nueva asignatura</i> (con su fecha de lanzamiento).</li><li><b>Calidad de entrada</b>: se revisa con la pauta de 9 puntos; si falla algo, vuelve a instruccional.</li><li><b>Cola</b>: el dashboard la asigna sola, por urgencia, a quien se libere (o queda pre-asignada).</li><li><b>Producción</b>: diseño y video trabajan en paralelo, cada uno con sus timers. Cada tarea completada marca su entregable.</li><li><b>Cierre</b>: diseño hace el banner y su Cierre Diseño (5 puntos); video su Cierre Video (4 puntos).</li><li><b>Entrega</b>: con todo completo, la materia pasa sola a <i>Completada</i> y sale el correo a UIDE.</li></ol>' })],
+  // Materias por recibir de instruccional (Cronograma que aún no entra a la Fábrica)
+  [q=>/(falta|faltan|pendiente|no han llegado|no ha llegado|sin recibir|por recibir|no han ingresado)/.test(q) && /(recib|instruccional|lleg|ingres)/.test(q),
+   async q=>{
+     const M=_pqMes(q); if(!M) return { titulo:'¿De qué mes?', html:'Dime el mes de lanzamiento, por ejemplo: <i>¿Cuántas de diciembre faltan por recibir de instruccional?</i>' };
+     if(!_cronoFilas) await cargarCronograma();
+     const it=(_cronoItems(_ymdL(new Date()))||[]).filter(r=>(r.f.lanz||'').slice(0,7)===M.ym);
+     if(!it.length) return { titulo:'Lanzamientos de '+M.nombre, html:'El Cronograma no tiene materias con lanzamiento en '+M.nombre+' (o aún no se ha cargado ese mes).' };
+     const falta=it.filter(r=>r.estado==='no_ingresada');
+     return { titulo:'Por recibir de instruccional · lanzamiento en '+M.nombre,
+       html:'<div class="pq-num">'+falta.length+'<span> de '+it.length+'</span></div>'+
+         (falta.length ? 'Estas aún no han llegado a la Fábrica:'+'<ul class="pq-ul">'+falta.slice(0,40).map(r=>'<li>'+_pqEsc(r.f.materia)+' <span class="pq-mut">· '+_pqEsc(r.f.prog||'')+(r.f.e0?' · debía ingresar '+_pqF(r.f.e0):'')+(r.alerta==='sin_ingresar'?' · <b style="color:#b91c1c">atrasada '+r.diasAtraso+' d</b>':'')+'</span></li>').join('')+'</ul>' : '¡Ya llegaron todas! 🎉')+
+         '<div class="pq-mut">Según la pestaña Cronograma del Sheet.</div>' };
+   }],
+  // Materias recibidas de instruccional (ya están en la Fábrica)
+  [q=>/(recib|llegad|llegaron|ingresad|ingresaron|entraron|han entrado)/.test(q) && !/(falta|pendiente|por recibir|no han)/.test(q),
+   q=>{
+     const M=_pqMes(q); if(!M) return { titulo:'¿De qué mes?', html:'Dime el mes de lanzamiento, por ejemplo: <i>¿Cuántas materias de enero hemos recibido de instruccional?</i>' };
+     const L=STATE.asignaturas.filter(a=>_pqLanzaEn(a,M.ym));
+     const rev=L.filter(a=>a.status===ST_REVISION).length, comp=L.filter(a=>a.status==='Completada').length;
+     return { titulo:'Recibidas de instruccional · lanzamiento en '+M.nombre,
+       html:'<div class="pq-num">'+L.length+'<span> materia'+(L.length===1?'':'s')+'</span></div>'+
+         (L.length?'De ellas: '+rev+' en calidad de entrada · '+(L.length-rev-comp)+' en cola o producción · '+comp+' entregada'+(comp===1?'':'s')+'.'+_pqLista(L,a=>_pqEsc(a.prog||'')+' · '+_pqEstadoTxt(a)):'Todavía no ha llegado ninguna con lanzamiento en '+M.nombre+'.') };
+   }],
+  // Cuáles se han entregado (por mes de lanzamiento)
+  [q=>/(cuales|que materias|lista)/.test(q) && /entreg/.test(q) && !/entregable/.test(q) && !/(falta|pendiente|por entregar)/.test(q),
+   q=>{
+     const M=_pqMes(q); if(!M) return { titulo:'¿De qué mes?', html:'Dime el mes de lanzamiento, por ejemplo: <i>¿Cuáles materias de diciembre se han entregado?</i>' };
+     const L=STATE.asignaturas.filter(a=>_pqLanzaEn(a,M.ym)), E=L.filter(a=>a.status==='Completada');
+     return { titulo:'Entregadas · lanzamiento en '+M.nombre,
+       html:'<div class="pq-num">'+E.length+'<span> de '+L.length+'</span></div>'+(E.length?_pqLista(E,a=>'entregada el '+_pqF(_ymdL(new Date(a.fechaCompletado||a.fechaLimite)))):'Aún no se ha entregado ninguna de '+M.nombre+'.') };
+   }],
+  // Faltan por entregar (por mes de lanzamiento)
+  [q=>/(falta|faltan|pendiente|por entregar|quedan|sin entregar)/.test(q) && !/entregable/.test(q) && !_pqPersonaDe(q),
+   q=>{
+     const M=_pqMes(q);
+     const L=M ? STATE.asignaturas.filter(a=>_pqLanzaEn(a,M.ym)) : STATE.asignaturas.filter(a=>a.tipo==='celula'||a.status===ST_REVISION);
+     const P=L.filter(a=>a.status!=='Completada').sort((x,y)=>String(x.fechaLimite||'9').localeCompare(String(y.fechaLimite||'9')));
+     const cuenta={}; P.forEach(a=>{ const t=_pqEstadoTxt(a).replace(/ \(.*\)$/,''); cuenta[t]=(cuenta[t]||0)+1; });
+     return { titulo:'Por entregar'+(M?' · lanzamiento en '+M.nombre:' · todas'),
+       html:'<div class="pq-num">'+P.length+'<span> de '+L.length+'</span></div>'+
+         (P.length ? Object.entries(cuenta).map(([k,v])=>'<span class="pq-chip">'+_pqEsc(k)+' · '+v+'</span>').join(' ')+_pqLista(P,a=>'lanza '+_pqF(a.fechaLimite)+' · '+_pqEstadoTxt(a)) : '¡Todas entregadas! 🎉')+
+         (M?'':'<div class="pq-mut">Tip: agrega el mes, por ejemplo "¿cuántas de diciembre faltan?"</div>') };
+   }],
+  // Cuántas se entregaron EN un mes (fecha de entrega)
+  [q=>/entreg/.test(q) && !/entregable/.test(q) && /\b(cuantas|cuantos|numero|total)\b/.test(q),
+   q=>{
+     const M=_pqMes(q); if(!M) return { titulo:'¿De qué mes?', html:'Dime el mes, por ejemplo: <i>¿Cuántas materias se entregaron en noviembre?</i>' };
+     const E=STATE.asignaturas.filter(a=>_pqCompletadaEn(a,M.ym));
+     const L=STATE.asignaturas.filter(a=>_pqLanzaEn(a,M.ym)), LE=L.filter(a=>a.status==='Completada').length;
+     return { titulo:'Entregadas en '+M.nombre,
+       html:'<div class="pq-num">'+E.length+'<span> materia'+(E.length===1?'':'s')+'</span></div>Se completaron (y salió su correo a UIDE) durante '+M.nombre+'.'+
+         '<div class="pq-mut" style="margin-top:6px">Por fecha de lanzamiento: de las '+L.length+' que lanzan en '+M.nombre+', '+LE+' ya están entregadas.</div>'+_pqLista(E,a=>'el '+_pqF(_ymdL(new Date(a.fechaCompletado))))};
+   }],
+  // Estado de una asignatura
+  [q=>!!_pqAsignaturaDe(q),
+   q=>{
+     const a=_pqAsignaturaDe(q);
+     const dis=a.celula?(CELULA_CFG[a.celula]?.label||a.celula):'sin asignar', vid=a.videoPersona||'sin asignar';
+     return { titulo:a.nombre,
+       html:'<div><b>Estado:</b> '+_pqEsc(_pqEstadoTxt(a))+'</div><div><b>Programa:</b> '+_pqEsc(a.prog||'—')+'</div>'+
+         '<div><b>Lanzamiento:</b> '+_pqF(a.fechaLimite)+'</div><div><b>Diseño:</b> '+_pqEsc(dis)+' · '+disenoHechosAsig(a)+'/12 entregables</div>'+
+         '<div><b>Video:</b> '+_pqEsc(vid)+' · '+videoHechosAsig(a)+'/6 videos</div><div><b>Avance total:</b> '+progAsigVista(a)+' %</div>'+
+         (a.status==='Completada'&&a.fechaCompletado?'<div><b>Entregada:</b> '+_pqF(_ymdL(new Date(a.fechaCompletado)))+'</div>':'')+
+         '<div class="pq-mut">Más detalle en la pestaña Asignaturas (búscala por nombre).</div>' };
+   }],
+  // Qué está haciendo una persona
+  [q=>!!_pqPersonaDe(q) && !/(entregables|estandar|calidad|checklist)/.test(q),
+   q=>{
+     let p=_pqPersonaDe(q);
+     if(Array.isArray(p)) return { titulo:'¿Cuál de ellas?', html:'Hay varias personas con ese nombre: '+p.map(x=>'<b>'+_pqEsc(x.nombre)+'</b>').join(' o ')+'. Escribe también el apellido.' };
+     const activa=celulaActiva(p.id);
+     const mias=STATE.asignaturas.filter(a=>a.status!=='Completada' && (p.frente==='video' ? a.videoPersona===p.id && !videoCompletoAsig(a) : a.celula===p.id));
+     const m=metaSemanal(p.nombre, p.frente);
+     const aus=AUSENCIAS.filter(x=>_mismaPersonaAus(x.persona,p.nombre) && x.hasta>=_ymdL(new Date()));
+     return { titulo:(p.frente==='video'?'🎬 ':'🎨 ')+p.nombre,
+       html:(!activa?'<div style="color:#b45309"><b>⏸ En pausa</b>'+(celulaDisponibleDesde(p.id)?' · vuelve el '+_pqF(celulaDisponibleDesde(p.id)):'')+'</div>':'')+
+         (aus.length?'<div class="pq-mut">Ausencias: '+aus.map(x=>_pqEsc(x.motivo||'ausencia')+' '+_pqF(x.desde)+(x.hasta!==x.desde?' a '+_pqF(x.hasta):'')).join(' · ')+'</div>':'')+
+         (mias.length?'<b>Sus materias:</b>'+_pqLista(mias,a=>_pqEstadoTxt(a)+' · lanza '+_pqF(a.fechaLimite)):'<div>No tiene materias abiertas.</div>')+
+         (m.meta?'<div style="margin-top:6px"><b>🎯 Meta semanal:</b> '+m.hechos+'/'+m.meta+' ('+m.pct+' %)'+(m.cumplida?' 🎉':'')+'</div>':'') };
+   }],
+  // Entregables de diseño
+  [q=>/entregable/.test(q) && /(disen|disenador|disenadora)/.test(q),
+   ()=>({ titulo:'🎨 Entregables de diseño',
+     html:'Por <b>cada una de las 3 clases</b> (12 en total):<ul class="pq-ul"><li>Estructura de contenido (HTML)</li><li>Interacción (Genially)</li><li>Infografía</li><li>Imágenes</li></ul>Además, para cerrar: el <b>banner</b> (se marca solo con el timer "Creación de banner") y los 5 puntos de <b>Cierre Diseño</b>.<div class="pq-mut">Se marcan solos al completar el timer de cada tarea.</div>' })],
+  // Entregables de video
+  [q=>/entregable/.test(q) && /(video|editor|edicion)/.test(q),
+   ()=>({ titulo:'🎬 Entregables de video',
+     html:'6 por materia:<ul class="pq-ul"><li>Video intro</li><li>Video del profesor</li><li>Genially de RDA</li><li>Video clase 1</li><li>Video clase 2</li><li>Video clase 3</li></ul>Para cerrar: los 4 puntos de <b>Cierre Video</b>.<div class="pq-mut">Se marcan solos al completar el timer de cada tarea.</div>' })],
+  // Calidad / cierre de video
+  [q=>/(calidad|estandar|cierre|checklist|revisar|revision)/.test(q) && /(video|editor)/.test(q),
+   ()=>({ titulo:'✅ Cierre Video · estándares de calidad',
+     html:'<ol class="pq-ul">'+REVISION_ITEMS.filter(([k])=>REVISION_ITEMS_FRENTE.video.includes(k)).map(([,l])=>'<li>'+_pqEsc(l)+'</li>').join('')+'</ol><div class="pq-mut">Están en Asignaturas → cada materia → pestaña "Cierre Video".</div>' })],
+  // Calidad / cierre de diseño
+  [q=>/(calidad|estandar|cierre|checklist|revisar|revision)/.test(q) && /(disen|banner)/.test(q),
+   ()=>({ titulo:'✅ Cierre Diseño · estándares de calidad',
+     html:'<ol class="pq-ul"><li>Banner cargado (se marca con el timer "Creación de banner")</li>'+REVISION_ITEMS.filter(([k])=>REVISION_ITEMS_FRENTE.diseno.includes(k)).map(([,l])=>'<li>'+_pqEsc(l)+'</li>').join('')+'</ol><div class="pq-mut">Están en Asignaturas → cada materia → pestaña "Cierre Diseño".</div>' })],
+  // Calidad de entrada
+  [q=>/calidad de entrada|9 puntos|pauta/.test(q),
+   ()=>({ titulo:'🔎 Calidad de entrada',
+     html:'Toda materia nueva pasa primero por calidad de entrada (Cristina): se revisa con una pauta de <b>9 puntos</b>. Si todo está bien, entra a la cola; si no, se <b>devuelve a instruccional</b> con el Reporte a instruccional (correo) y vuelve a revisarse cuando confirman los ajustes.<ol class="pq-ul">'+CAL_PAUTA.map(([,t])=>'<li>'+_pqEsc(t)+'</li>').join('')+'</ol>' })],
+  // Meta semanal
+  [q=>/meta|objetivo semanal|incentivo/.test(q),
+   ()=>({ titulo:'🎯 Meta semanal',
+     html:'En una semana de 5 días hábiles: <b>diseño</b> = 1 materia + 66 % de otra (20 entregables); <b>video</b> = 5 materias (30 videos). Con festivos o ausencias baja en proporción. Se ve en la fila de cada persona en el Dashboard y se reinicia cada lunes. Al cumplirla sale un aviso con el recordatorio de revisar la calidad.' })],
+  // Festivos / ausencias
+  [q=>/festivo|vacacion|ausencia|dia libre|cumpleanos|permiso/.test(q),
+   ()=>({ titulo:'📅 Festivos y ausencias',
+     html:'Sofía y Cristina usan los festivos de Canarias; el resto del equipo, los de Colombia. Los días libres y vacaciones se anotan en la pestaña <b>Ausencias</b> del Sheet (persona, desde, hasta, motivo): esos días no cuentan en Tiempos ni en la meta semanal.'+
+       (AUSENCIAS.filter(x=>x.hasta>=_ymdL(new Date())).length?'<div style="margin-top:6px"><b>Próximas ausencias:</b>'+'<ul class="pq-ul">'+AUSENCIAS.filter(x=>x.hasta>=_ymdL(new Date())).map(x=>'<li>'+_pqEsc(x.persona)+' · '+_pqEsc(x.motivo||'')+' · '+_pqF(x.desde)+(x.hasta!==x.desde?' a '+_pqF(x.hasta):'')+'</li>').join('')+'</ul></div>':'') })],
+  // Timers
+  [q=>/timer|cronometro|pausar|es mio|recargar|ctrl/.test(q),
+   ()=>({ titulo:'⏱ Timers',
+     html:'<ul class="pq-ul"><li>Prende el timer de la tarea en <i>Timers en vivo</i>; al completarlo se guarda la sesión y se marca el entregable.</li><li>Antes de recargar la página, <b>pausa tu timer</b>. Si recargas sin pausar, queda en pausa con su tiempo: dale ▶ Reanudar.</li><li>Si un timer tuyo aparece como "del equipo" y no lo puedes pausar, usa <b>🙋 Es mío</b>.</li><li>Si cierras la pestaña con un timer corriendo, Chrome te pregunta antes.</li></ul>' })],
+  // Pestañas
+  [q=>/tiempos/.test(q),
+   ()=>({ titulo:'📊 Pestaña Tiempos',
+     html:'Muestra, por persona y frente (diseño o video), cada materia en curso: cuándo arrancó su plazo, el <b>tiempo transcurrido</b> en días hábiles, la <b>producción real</b> (horas de timer en jornadas de 8 h), el objetivo (diseño 3 días, video 1 día), la <b>fecha esperada de término</b>, el lanzamiento y si va en plazo o atrasada. El plazo arranca cuando la persona termina su materia anterior (o cuando se le asigna) y salta festivos y ausencias.' })],
+  [q=>/cronograma/.test(q),
+   ()=>({ titulo:'🗓 Pestaña Cronograma', html:'El plan de UIDE mes a mes: cada materia con su lanzamiento, cuándo debía ingresar a la Fábrica y su entrega límite, y si ya llegó, está en producción o se entregó. Sirve para ver lo que falta por recibir de instruccional.' })],
+  [q=>/operacion|capacidad/.test(q),
+   ()=>({ titulo:'⚙️ Pestaña Operación', html:'La capacidad del equipo frente a lo que viene: cuántas materias llegan por semana o mes y si alcanza la gente para entregarlas a tiempo.' })],
+  [q=>/dashboard|inicio|panel|lanzamiento/.test(q),
+   ()=>({ titulo:'🏠 Pestaña Dashboard', html:'Arriba, los números de la Fábrica. A la izquierda, cada persona de diseño y de video: en qué materia está, su avance y su meta semanal. A la derecha, tres botones: 🚀 <b>Por lanzamiento</b> (lo que falta por entregar, por fecha y con la meta de cada mes), <b>Cola</b> y ⏱ <b>Timers</b>.' })],
+  [q=>/asignaturas|pestana/.test(q),
+   ()=>({ titulo:'📚 Pestaña Asignaturas', html:'Todas las materias con su avance. Al abrir una: sus clases y entregables, Videos globales, Cierre Diseño, Cierre Video, el equipo, las sesiones y los comentarios. Se puede filtrar por estado, persona y fechas, y buscar por nombre.' })]
+];
+
+function _pqFuera(){
+  return { titulo:'Eso no lo sé 🙈', fuera:true,
+    html:'Solo respondo preguntas sobre la <b>Fábrica de Producción</b>: materias, entregas, lanzamientos, el equipo, los entregables, la calidad y cómo usar este dashboard. Prueba con alguna de estas:' };
+}
+async function pqResponder(texto){
+  const q=_pqNorm(texto);
+  if(q.length<3) return _pqFuera();
+  for(const [prueba, resp] of _PQ_RESPUESTAS){
+    try{ if(prueba(q)) return await resp(q); }catch(e){ console.log('[PREGÚNTAME] error:', e); }
+  }
+  return _pqFuera();
+}
+function pqAbrir(){
+  const p=document.getElementById('pq-panel'); if(!p) return;
+  const abierto=p.style.display==='flex'; p.style.display=abierto?'none':'flex';
+  if(!abierto){ pqSugerencias(); const i=document.getElementById('pq-q'); if(i) i.focus(); }
+}
+function pqSugerencias(){
+  const el=document.getElementById('pq-sug'); if(!el) return;
+  el.innerHTML=_PQ_SUGERENCIAS.map(s=>`<span class="pq-s" onclick="pqPreguntar(this.textContent)">${_pqEsc(s)}</span>`).join('');
+}
+async function pqPreguntar(t){
+  const inp=document.getElementById('pq-q'), out=document.getElementById('pq-r');
+  const texto=String(t||inp.value||'').trim().slice(0,200); if(!texto) return;
+  inp.value=texto; out.innerHTML='<div class="pq-mut">Buscando…</div>';
+  const r=await pqResponder(texto);
+  out.innerHTML=`<div class="pq-card"><div class="pq-tit">${_pqEsc(r.titulo)}</div><div>${r.html}</div></div>`;
+  document.getElementById('pq-sug').style.display = r.fuera ? '' : 'none';
+  document.getElementById('pq-mas').style.display = r.fuera ? 'none' : '';
+  try{ sheetGuardar('Preguntas', ['ID','Fecha','Pregunta','Respuesta mostrada','Encontrada','Quien'],
+    ['pq'+Date.now()+Math.random().toString(36).slice(2,5), new Date().toISOString(), texto, r.titulo, r.fuera?'No':'Sí', localStorage.getItem('revisorNombre')||'']); }catch(e){}
+}
+function pqVerSugerencias(){ document.getElementById('pq-sug').style.display=''; document.getElementById('pq-mas').style.display='none'; }
 
 </script>
 </body>
