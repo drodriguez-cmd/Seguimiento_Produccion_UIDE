@@ -68,7 +68,8 @@ input,select{font-family:inherit;font-size:13px;border:1px solid var(--border);b
 .steps i.ok{background:var(--step)}.steps i.now{background:var(--now)}.steps i.nd{background:repeating-linear-gradient(45deg,#e6e8f0 0 4px,#f3f4f8 4px 8px)}
 .where{font-size:12.5px;margin-top:6px}
 .m{color:var(--muted)}
-.est{font-size:12px;color:var(--muted)}.est b{display:block;font-size:17px;color:var(--text)}
+.est{font-size:12px;color:var(--muted)}
+.curso{display:inline-block;margin-top:5px;font-size:12px;font-weight:600;color:var(--info);text-decoration:none;border:1px solid #c9dcf5;background:var(--info-bg);padding:2px 9px;border-radius:99px}.curso:hover{background:#d6e6fb}.est b{display:block;font-size:17px;color:var(--text)}
 .pill{display:inline-block;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;text-align:center;white-space:nowrap}
 .p-ok{background:var(--ok-bg);color:var(--ok)}.p-riesgo{background:var(--warn-bg);color:var(--warn)}.p-atrasada{background:var(--bad-bg);color:var(--bad)}.p-entregada{background:var(--info-bg);color:var(--info)}.p-retraso{background:var(--bad-bg);color:var(--bad)}
 .det{padding:6px 18px 18px;background:#f8f9fe;border-top:1px dashed var(--border);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:18px}
@@ -160,9 +161,10 @@ function vistaA(C){
   const base=C.filter(pasa),al=base.filter(x=>x.al).sort((a,b)=>a.al.n===b.al.n?a.l.localeCompare(b.l):b.al.n-a.al.n);
   const fil='<div class="filters p3">'+opciones(C)+'</div>';
   const grupo=(n,tit,col)=>{const L=al.filter(x=>x.al.n===n);return '<div class="card"><div class="ch"><b style="color:'+col+'">'+tit+'</b><span>'+L.length+'</span></div>'+
-    (L.length?L.map(x=>'<div class="al" onclick="ir(\''+clave(x)+'\')"><span class="dot" style="background:'+col+'"></span><div><div class="nm" style="font-size:13px">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div></div><div><div class="t" style="color:'+col+'">'+esc(x.al.t)+'</div>'+(x.al.q?'<div class="q">'+esc(x.al.q)+'</div>':'')+'</div></div>').join(''):'<div class="empty">Nada por ahora</div>')+'</div>'};
+    (L.length?L.map(x=>'<div class="al" onclick="ir(\''+clave(x)+'\')"><span class="dot" style="background:'+col+'"></span><div><div class="nm" style="font-size:13px">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div>'+enlace(x)+'</div><div><div class="t" style="color:'+col+'">'+esc(x.al.t)+'</div>'+(x.al.q?'<div class="q">'+esc(x.al.q)+'</div>':'')+'</div></div>').join(''):'<div class="empty">Nada por ahora</div>')+'</div>'};
   return fil+grupo(2,'Vencidas','var(--bad)')+grupo(1,'Por vencer','#d97706')+
     '<footer>Se alerta cuando el docente no ha entregado o le vence la entrega en 5 días o menos, cuando los ajustes del docente están vencidos o vencen en 3 días o menos, cuando el docente no cumplió una fecha que acordó, cuando la coordinación lleva más de 5 días hábiles sin responder y cuando falta el video de presentación del docente. Haz clic en una alerta para ver la asignatura y sus últimos movimientos.</footer>'}
+function enlace(x){return x.u&&/^https?:\/\//i.test(x.u)?'<a class="curso" href="'+esc(x.u)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">'+(x.ut==='carpeta'?'Abrir carpeta ↗':'Abrir curso ↗')+'</a>':''}
 function clave(x){return encodeURIComponent(x.m+'|'+x.l+'|'+x.p).replace(/'/g,'%27')}
 function filaC(x){
   const k=clave(x),open=ABIERTA===k;
@@ -170,7 +172,7 @@ function filaC(x){
   const t=[];if(x.pd)t.push(x.pd==='Docente'?'pendiente del docente':x.pd==='Coordinación UIDE'?'pendiente de la coordinación UIDE':'pendiente de EIG');
   if(x.d&&HOY&&x.pd){const d=dias(x.d,HOY);if(d>=0)t.push(d===0?'desde hoy':'hace '+d+' día'+(d===1?'':'s'))}
   if(x.meta&&HOY){const d=dias(HOY,x.meta);t.push(d<0?'venció el '+dm(x.meta):d===0?'vence hoy':'plazo '+dm(x.meta))}
-  return '<div class="row'+(open?' open':'')+'" id="r-'+k+'" onclick="abrir(\''+k+'\')"><div><div class="nm">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div></div>'+
+  return '<div class="row'+(open?' open':'')+'" id="r-'+k+'" onclick="abrir(\''+k+'\')"><div><div class="nm">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div>'+enlace(x)+'</div>'+
     '<div><div class="steps">'+st+'</div><div class="where"><b>'+esc(x.et)+'</b>'+(t.length?' <span class="m">· '+t.join(' · ')+'</span>':'')+'</div></div><span class="pill '+SEM[x.sem][1]+'">'+SEM[x.sem][0]+'</span></div>'+(open?detalleC(x):'')}
 function detalleC(x){
   const Fe=[['Contenidos',x.plan.c,1],['Revisión',x.plan.r,2],['Coordinación',x.plan.co,3],['Lanzamiento',x.l,4]];
@@ -190,12 +192,12 @@ function vistaP(P){
   const l=base.filter(x=>KPI?kP(x,KPI):true);
   return h+fil+(l.length?porMes(l,filaP,(a,b)=>(a.sem==='entregada')-(b.sem==='entregada')||(a.est||a.fe).localeCompare(b.est||b.fe)||a.m.localeCompare(b.m,'es')):'<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>')+
     '<footer><b>Entrega estimada</b>: fecha aproximada en que se entrega la asignatura, calculada con el avance de producción y el orden de la cola; se actualiza sola y puede moverse unos días. '+
-    'Cada asignatura se compara con la fecha de entrega pactada en el cronograma: <b>A tiempo</b> o <b>Con retraso</b>. Las entregadas indican si se entregaron a tiempo o con retraso. Cuando los contenidos llegaron a producción después de la fecha pactada en el cronograma, se indica con cuántos días de diferencia.</footer>'}
+    'Las que están por entregar se comparan con la fecha de entrega pactada en el cronograma: <b>A tiempo</b> o <b>Con retraso</b>. Cuando los contenidos llegaron a producción después de la fecha pactada en el cronograma, se indica con cuántos días de diferencia.</footer>'}
 function filaP(x){
   const ent=x.sem==='entregada';
-  return '<div class="row pr"><div><div class="nm">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div></div>'+
+  return '<div class="row pr"><div><div class="nm">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div>'+enlace(x)+'</div>'+
     '<div class="where" style="margin:0"><b>'+esc(x.et)+'</b>'+(x.det&&!ent?'<div class="m">'+esc(x.det)+'</div>':'')+(x.it>0?'<div style="color:var(--warn);margin-top:2px">Ingresó a producción '+x.it+' día'+(x.it===1?'':'s')+' después de la fecha pactada ('+dm(x.di)+')</div>':'')+'</div>'+
-    '<div class="est">'+(ent?'Entregada el<b>'+dma(x.fe)+'</b>':'Entrega estimada<b>'+dma(x.est)+'</b>')+'</div>'+(()=>{const r=sp(x)==='retraso';return '<span class="pill '+(r?'p-retraso':'p-ok')+'" title="Fecha pactada: '+dma(x.meta)+'">'+(ent?(r?'Entregada con retraso':'Entregada a tiempo'):(r?'Con retraso':'A tiempo'))+'</span>'})()+'</div>'}
+    '<div class="est">'+(ent?'Entregada el<b>'+dma(x.fe)+'</b>':'Entrega estimada<b>'+dma(x.est)+'</b>')+'</div>'+(()=>{const r=sp(x)==='retraso';if(ent)return '<span class="pill p-entregada">Entregada</span>';return '<span class="pill '+(r?'p-retraso':'p-ok')+'" title="Fecha pactada: '+dma(x.meta)+'">'+(r?'Con retraso':'A tiempo')+'</span>'})()+'</div>'}
 if(API.indexOf('http')!==0){document.getElementById('sync').className='err';document.getElementById('sync').textContent='Falta configurar la conexión.'}else{cargar();setInterval(()=>{if(!document.hidden&&!ABIERTA)cargar()},10*60*1000)}
 </script>
 </body>
