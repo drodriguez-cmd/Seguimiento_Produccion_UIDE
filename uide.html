@@ -12,12 +12,25 @@
   --ok:#16a34a;--ok-bg:#e7f6ec;--warn:#b45309;--warn-bg:#fdf3e1;--bad:#dc2626;--bad-bg:#fde8e8;--info:#1f5fa8;--info-bg:#e6f0fd;--step:#1d9e75;--now:#3b8be0}
 body{background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;font-size:14px;min-height:100vh}
 button{font-family:inherit}
-.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 60px}
+.shell{display:flex;min-height:100vh}
+.side{width:230px;flex-shrink:0;background:#fff;border-right:1px solid var(--border);position:fixed;top:0;left:0;bottom:0;display:flex;flex-direction:column;z-index:10}
+.side .logo{padding:22px 18px 16px;border-bottom:1px solid var(--border)}
+.side .logo b{display:block;font-size:15px;margin-top:4px;letter-spacing:-.01em}
+.nav{padding:14px 10px;flex:1}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;border:1px solid transparent;background:transparent;padding:10px 12px;border-radius:10px;font-size:13.5px;font-weight:600;color:var(--muted);cursor:pointer;text-align:left;margin-bottom:3px}
+.nav button:hover{background:var(--bg3);color:var(--text)}
+.nav button.on{color:var(--acc);background:#fff0f5;border-color:#fbc8d8}
+.nav .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.nav .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted);background:var(--bg3);padding:1px 8px;border-radius:99px}
+.nav .cnt.r{background:var(--bad-bg);color:var(--bad)}
+.side #sync{padding:14px 18px;border-top:1px solid var(--border);text-align:left;background:#fafbfd}
+.main{flex:1;margin-left:230px;min-width:0}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 28px 60px}
 header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
 .brand{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);font-weight:700}
 h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:4px}
 .sub{color:var(--muted);font-size:13px;margin-top:4px}
-#sync{font-size:12px;color:var(--muted);text-align:right}
+#sync{font-size:12px;color:var(--muted)}
 #sync.err{color:var(--bad);font-weight:600}
 #sync button{margin-top:6px;border:1px solid var(--border);background:#fff;border-radius:8px;padding:5px 12px;font-weight:600;font-size:12px;color:var(--text);cursor:pointer}
 .tabs{display:flex;gap:6px;background:#e9ebf2;padding:4px;border-radius:12px;width:max-content;max-width:100%;margin-bottom:18px}
@@ -43,7 +56,7 @@ input,select{font-family:inherit;font-size:13px;border:1px solid var(--border);b
 .al .dot{width:9px;height:9px;border-radius:50%;margin-top:5px}
 .al .t{font-size:13px}.al .q{font-size:12px;color:var(--muted);margin-top:2px}
 .row{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1.7fr) 118px;gap:16px;align-items:center;padding:13px 18px;border-top:1px solid var(--border);cursor:pointer}
-.row.pr{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) 150px 118px;cursor:default}
+.row.pr{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) 140px 158px;cursor:default}
 .ch+.row{border-top:none}
 .row:hover{background:#fafbfd}
 .row.open{background:#f8f9fe}
@@ -57,7 +70,7 @@ input,select{font-family:inherit;font-size:13px;border:1px solid var(--border);b
 .m{color:var(--muted)}
 .est{font-size:12px;color:var(--muted)}.est b{display:block;font-size:17px;color:var(--text)}
 .pill{display:inline-block;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;text-align:center;white-space:nowrap}
-.p-ok{background:var(--ok-bg);color:var(--ok)}.p-riesgo{background:var(--warn-bg);color:var(--warn)}.p-atrasada{background:var(--bad-bg);color:var(--bad)}.p-entregada{background:var(--info-bg);color:var(--info)}
+.p-ok{background:var(--ok-bg);color:var(--ok)}.p-riesgo{background:var(--warn-bg);color:var(--warn)}.p-atrasada{background:var(--bad-bg);color:var(--bad)}.p-entregada{background:var(--info-bg);color:var(--info)}.p-retraso{background:var(--bad-bg);color:var(--bad)}
 .det{padding:6px 18px 18px;background:#f8f9fe;border-top:1px dashed var(--border);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:18px}
 .box h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 8px}
 .fechas{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
@@ -73,18 +86,17 @@ input,select{font-family:inherit;font-size:13px;border:1px solid var(--border);b
 .ley{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin:2px 2px 14px}
 .ley span{display:inline-flex;align-items:center;gap:6px}.ley i{display:inline-block;width:22px;height:7px;border-radius:4px}
 footer{font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px}
-@media(max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.filters,.filters.p3{grid-template-columns:1fr 1fr}.row,.row.pr{grid-template-columns:1fr;gap:8px}.row .pill{justify-self:start}.det{grid-template-columns:1fr}.fechas{grid-template-columns:1fr 1fr}.al{grid-template-columns:10px minmax(0,1fr)}.al>div:last-child{grid-column:2}}
-@media(max-width:520px){.wrap{padding:20px 16px 50px}.filters,.filters.p3{grid-template-columns:1fr}h1{font-size:22px}.tab{padding:8px 12px;font-size:13px}}
+@media(max-width:900px){.side{position:sticky;width:auto;bottom:auto;right:0;flex-direction:row;align-items:center;border-right:0;border-bottom:1px solid var(--border);overflow-x:auto}.shell{flex-direction:column}.side .logo{display:none}.nav{display:flex;gap:4px;padding:8px}.nav button{width:auto;white-space:nowrap;margin:0}.side #sync{display:none}.main{margin-left:0}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.filters,.filters.p3{grid-template-columns:1fr 1fr}.row,.row.pr{grid-template-columns:1fr;gap:8px}.row .pill{justify-self:start}.det{grid-template-columns:1fr}.fechas{grid-template-columns:1fr 1fr}.al{grid-template-columns:10px minmax(0,1fr)}.al>div:last-child{grid-column:2}}
+@media(max-width:520px){.wrap{padding:20px 16px 50px}.nav button{padding:8px 10px;font-size:12.5px}.filters,.filters.p3{grid-template-columns:1fr}h1{font-size:22px}.tab{padding:8px 12px;font-size:13px}}
 </style>
 </head>
 <body>
-<div class="wrap">
-<header>
-  <div><div class="brand">EIG Campus · UIDE</div><h1>Seguimiento de asignaturas</h1><div class="sub">Estado de cada asignatura de maestría, desde los contenidos hasta la entrega</div></div>
-  <div id="sync">Cargando…</div>
-</header>
-<div class="tabs" id="tabs"></div>
+<div class="shell">
+<aside class="side"><div class="logo"><div class="brand">EIG Campus · UIDE</div><b>Seguimiento de asignaturas</b></div><nav class="nav" id="tabs"></nav><div id="sync">Cargando…</div></aside>
+<div class="main"><div class="wrap">
+<header><div><h1 id="titulo"></h1><div class="sub" id="subtitulo"></div></div></header>
 <div id="vista"></div>
+</div></div>
 </div>
 <script>
 const API='https://script.google.com/macros/s/AKfycbwrnJ4X4RM5Y7AwDv_uLR7CCgAP6amZHTDjwOPyGx2boX6TDK5OmbvHIGkTl9wInGCp/exec';   /* termina en /exec */
@@ -124,22 +136,33 @@ function porMes(l,fn,orden){const g={};l.forEach(x=>(g[x.l.slice(0,7)]=g[x.l.sli
 const ORD={atrasada:0,riesgo:1,ok:2,entregada:3};
 function pintar(){
   const C=FILAS.filter(x=>x.v==='c'),P=FILAS.filter(x=>x.v==='p');
-  document.getElementById('tabs').innerHTML='<button class="tab'+(VISTA==='c'?' on':'')+'" onclick="setVista(\'c\')">Contenidos<small>'+C.length+'</small></button><button class="tab'+(VISTA==='p'?' on':'')+'" onclick="setVista(\'p\')">Producción<small>'+P.length+'</small></button>';
-  document.getElementById('vista').innerHTML=VISTA==='p'?vistaP(P):vistaC(C)}
+  const nA=C.filter(x=>x.al).length,nR=C.filter(x=>x.al&&x.al.n===2).length;
+  const V=[['c','Contenidos','#818cf8',C.length,''],['a','Alertas de seguimiento','#dc2626',nA,nR?'r':''],['p','Producción','#1d9e75',P.length,'']];
+  if(!V.some(v=>v[0]===VISTA))VISTA='c';
+  document.getElementById('tabs').innerHTML=V.map(v=>'<button class="'+(VISTA===v[0]?'on':'')+'" onclick="setVista(\''+v[0]+'\')"><span class="dot" style="background:'+v[2]+'"></span>'+v[1]+'<span class="cnt '+v[4]+'">'+v[3]+'</span></button>').join('');
+  const T={c:['Contenidos','Asignaturas que aún están en elaboración, revisión o coordinación'],a:['Alertas de seguimiento','Docentes y coordinaciones a los que conviene hacer seguimiento hoy'],p:['Producción','Asignaturas en producción y su fecha estimada de entrega']}[VISTA];
+  document.getElementById('titulo').textContent=T[0];document.getElementById('subtitulo').textContent=T[1];
+  document.getElementById('vista').innerHTML=VISTA==='p'?vistaP(P):VISTA==='a'?vistaA(C):vistaC(C)}
 /* ── Contenidos ── */
 function kC(x,k){if(!k)return true;if(k==='docente')return x.pd==='Docente';if(k==='coord')return x.pd==='Coordinación UIDE';if(k==='alerta')return !!x.al;if(k==='atrasada')return x.sem==='atrasada';return true}
 function vistaC(C){
   const base=C.filter(pasa),n=k=>base.filter(x=>kC(x,k)).length;
-  const h=kpis([['','En contenidos',base.length,'aún no pasan a producción','#7F77DD'],['docente','Con el docente',n('docente'),'elaborando o ajustando','#ea7a52'],['coord','En coordinación UIDE',n('coord'),'revisión académica','#e3a018'],['alerta','Con alerta',n('alerta'),'necesitan seguimiento','#dc2626']]);
+  const h=kpis([['','En contenidos',base.length,'aún no pasan a producción','#7F77DD'],['docente','Con el docente',n('docente'),'elaborando o ajustando','#ea7a52'],['coord','En coordinación UIDE',n('coord'),'revisión académica','#e3a018'],['atrasada','Atrasadas',n('atrasada'),'pasó la fecha de su etapa','#dc2626']]);
   const fil='<div class="filters">'+opciones(C)+'<select onchange="setF(\'d\',this.value)"><option value="">Pendiente de: todos</option>'+['Docente','Coordinación UIDE','EIG'].map(o=>'<option'+(o===F.d?' selected':'')+'>'+o+'</option>').join('')+'</select></div>';
-  const al=base.filter(x=>x.al).sort((a,b)=>b.al.n-a.al.n||a.l.localeCompare(b.l));
-  const alH='<div class="card"><div class="ch"><b>Alertas de seguimiento</b><span>'+(al.length?al.filter(x=>x.al.n===2).length+' vencidas · '+al.filter(x=>x.al.n===1).length+' por vencer':'')+'</span></div>'+
-    (al.length?al.map(x=>'<div class="al" onclick="ir(\''+clave(x)+'\')"><span class="dot" style="background:'+(x.al.n===2?'var(--bad)':'#d97706')+'"></span><div><div class="nm" style="font-size:13px">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div></div><div><div class="t" style="color:'+(x.al.n===2?'var(--bad)':'var(--warn)')+'">'+esc(x.al.t)+'</div>'+(x.al.q?'<div class="q">'+esc(x.al.q)+'</div>':'')+'</div></div>').join(''):'<div class="empty">Sin alertas: todo va dentro de los plazos</div>')+'</div>';
   const l=base.filter(x=>kC(x,KPI));
   const ley='<div class="ley"><span><i style="background:var(--step)"></i>Etapa cumplida</span><span><i style="background:var(--now)"></i>Etapa actual</span><span><i style="background:var(--bg3)"></i>Por hacer</span></div>';
-  return h+fil+(KPI?'':alH)+ley+(l.length?porMes(l,filaC,(a,b)=>ORD[a.sem]-ORD[b.sem]||a.l.localeCompare(b.l)||a.m.localeCompare(b.m,'es')):'<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>')+
+  const nAl=base.filter(x=>x.al).length;
+  const aviso=nAl&&!KPI?'<div class="card" style="cursor:pointer" onclick="setVista(\'a\')"><div class="ch" style="border:0;background:#fff8f8"><b style="color:var(--bad)">'+nAl+' asignatura'+(nAl>1?'s necesitan':' necesita')+' seguimiento</b><span>Ver alertas →</span></div></div>':'';
+  return h+fil+aviso+ley+(l.length?porMes(l,filaC,(a,b)=>ORD[a.sem]-ORD[b.sem]||a.l.localeCompare(b.l)||a.m.localeCompare(b.m,'es')):'<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>')+
     '<footer>Etapas: <b>Contenidos</b> (elaboración) · <b>Revisión</b> (revisión de contenidos y ajustes del docente) · <b>Coordinación</b> (revisión académica de la coordinación UIDE). Cuando la coordinación aprueba, la asignatura pasa a la pestaña <b>Producción</b>.<br>'+
     'El estado compara cada asignatura con la fecha del cronograma acordado para su etapa actual: <b>A tiempo</b>, <b>En riesgo</b> (vence en 3 días o menos) o <b>Atrasada</b>. Haz clic en una asignatura para ver sus fechas y sus últimos movimientos.</footer>'}
+function vistaA(C){
+  const base=C.filter(pasa),al=base.filter(x=>x.al).sort((a,b)=>a.al.n===b.al.n?a.l.localeCompare(b.l):b.al.n-a.al.n);
+  const fil='<div class="filters p3">'+opciones(C)+'</div>';
+  const grupo=(n,tit,col)=>{const L=al.filter(x=>x.al.n===n);return '<div class="card"><div class="ch"><b style="color:'+col+'">'+tit+'</b><span>'+L.length+'</span></div>'+
+    (L.length?L.map(x=>'<div class="al" onclick="ir(\''+clave(x)+'\')"><span class="dot" style="background:'+col+'"></span><div><div class="nm" style="font-size:13px">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div></div><div><div class="t" style="color:'+col+'">'+esc(x.al.t)+'</div>'+(x.al.q?'<div class="q">'+esc(x.al.q)+'</div>':'')+'</div></div>').join(''):'<div class="empty">Nada por ahora</div>')+'</div>'};
+  return fil+grupo(2,'Vencidas','var(--bad)')+grupo(1,'Por vencer','#d97706')+
+    '<footer>Se alerta cuando el docente no ha entregado o le vence la entrega en 5 días o menos, cuando los ajustes del docente están vencidos o vencen en 3 días o menos, cuando el docente no cumplió una fecha que acordó, cuando la coordinación lleva más de 5 días hábiles sin responder y cuando falta el video de presentación del docente. Haz clic en una alerta para ver la asignatura y sus últimos movimientos.</footer>'}
 function clave(x){return encodeURIComponent(x.m+'|'+x.l+'|'+x.p).replace(/'/g,'%27')}
 function filaC(x){
   const k=clave(x),open=ABIERTA===k;
@@ -156,23 +179,23 @@ function detalleC(x){
   return '<div class="det"><div class="box"><h4>Fechas del cronograma</h4><div class="fechas">'+fe+'</div>'+(x.det?'<div class="note">'+esc(x.det)+'.</div>':'')+(x.al?'<div class="note" style="color:'+(x.al.n===2?'var(--bad)':'var(--warn)')+'"><b>'+esc(x.al.t)+'</b>'+(x.al.q?' · '+esc(x.al.q):'')+'</div>':'')+'</div>'+
     '<div class="box"><h4>Últimos movimientos</h4>'+hi+'</div></div>'}
 function abrir(k){ABIERTA=ABIERTA===k?null:k;pintar()}
-function ir(k){ABIERTA=k;KPI='';pintar();const el=document.getElementById('r-'+k);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('flash')}}
+function ir(k){ABIERTA=k;KPI='';VISTA='c';try{localStorage.setItem('uide_vista','c')}catch(e){}pintar();const el=document.getElementById('r-'+k);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('flash')}}
 /* ── Producción ── */
-function kP(x,k){if(!k)return x.sem!=='entregada';if(k==='prod')return x.et==='En producción';if(k==='cola')return x.et==='En cola de producción';if(k==='entregada')return x.sem==='entregada';return true}
+function sp(x){const f=x.fe||x.est;return (!x.meta||!f||f<=x.meta)?'atiempo':'retraso'}
+function kP(x,k){if(k==='retraso')return x.sem!=='entregada'&&sp(x)==='retraso';if(!k)return x.sem!=='entregada';if(k==='prod')return x.et==='En producción';if(k==='cola')return x.et==='En cola de producción';if(k==='entregada')return x.sem==='entregada';return true}
 function vistaP(P){
   const base=P.filter(pasa),n=k=>base.filter(x=>kP(x,k)).length;
-  const sem7=base.filter(x=>x.est&&HOY&&dias(HOY,x.est)<=7&&x.sem!=='entregada').length;
-  const h=kpis([['prod','En producción',n('prod'),'maquetación en curso','#3b8be0'],['cola','En cola',n('cola'),'por iniciar','#7F77DD'],['semana','Se entregan pronto',sem7,'estimado en los próximos 7 días','#1d9e75'],['entregada','Entregadas',n('entregada'),'últimas semanas','#1f5fa8']]);
+  const h=kpis([['prod','En producción',n('prod'),'maquetación en curso','#3b8be0'],['cola','En cola',n('cola'),'por iniciar','#7F77DD'],['retraso','Con retraso',n('retraso'),'se entregan después de la fecha pactada','#dc2626'],['entregada','Entregadas',n('entregada'),'últimas semanas','#1f5fa8']]);
   const fil='<div class="filters p3">'+opciones(P)+'</div>';
-  const l=base.filter(x=>KPI==='semana'?(x.est&&dias(HOY,x.est)<=7&&x.sem!=='entregada'):KPI?kP(x,KPI):true);
+  const l=base.filter(x=>KPI?kP(x,KPI):true);
   return h+fil+(l.length?porMes(l,filaP,(a,b)=>(a.sem==='entregada')-(b.sem==='entregada')||(a.est||a.fe).localeCompare(b.est||b.fe)||a.m.localeCompare(b.m,'es')):'<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>')+
     '<footer><b>Entrega estimada</b>: fecha aproximada en que se entrega la asignatura, calculada con el avance de producción y el orden de la cola; se actualiza sola y puede moverse unos días. '+
-    'El estado la compara con el cronograma: <b>A tiempo</b> (antes de la entrega pactada), <b>En riesgo</b> (después de la pactada, pero con margen antes del lanzamiento) o <b>Atrasada</b>.</footer>'}
+    'Cada asignatura se compara con la fecha de entrega pactada en el cronograma: <b>A tiempo</b> o <b>Con retraso</b>. Las entregadas indican si se entregaron a tiempo o con retraso.</footer>'}
 function filaP(x){
   const ent=x.sem==='entregada';
   return '<div class="row pr"><div><div class="nm">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div></div>'+
     '<div class="where" style="margin:0"><b>'+esc(x.et)+'</b>'+(x.det&&!ent?'<div class="m">'+esc(x.det)+'</div>':'')+'</div>'+
-    '<div class="est">'+(ent?'Entregada el<b>'+dma(x.fe)+'</b>':'Entrega estimada<b>'+dma(x.est)+'</b>')+'</div><span class="pill '+SEM[x.sem][1]+'">'+SEM[x.sem][0]+'</span></div>'}
+    '<div class="est">'+(ent?'Entregada el<b>'+dma(x.fe)+'</b>':'Entrega estimada<b>'+dma(x.est)+'</b>')+'</div>'+(()=>{const r=sp(x)==='retraso';return '<span class="pill '+(r?'p-retraso':'p-ok')+'" title="Fecha pactada: '+dma(x.meta)+'">'+(ent?(r?'Entregada con retraso':'Entregada a tiempo'):(r?'Con retraso':'A tiempo'))+'</span>'})()+'</div>'}
 if(API.indexOf('http')!==0){document.getElementById('sync').className='err';document.getElementById('sync').textContent='Falta configurar la conexión.'}else{cargar();setInterval(()=>{if(!document.hidden&&!ABIERTA)cargar()},10*60*1000)}
 </script>
 </body>
