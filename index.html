@@ -900,7 +900,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026110803;
+const DASHBOARD_VERSION = 2026110804;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1777,14 +1777,35 @@ function _creditosEntregables(){
   });
   _metaMem={ firma, creditos:out }; return out;
 }
+// La semana va de LUNES 00:00 a DOMINGO 23:59 (lo trabajado en fin de semana también cuenta, p. ej. freelance) y
+// arranca en la hora de CADA PERSONA, no del computador que mira: Sofía y Cristina el lunes 00:00 de Canarias,
+// el resto el lunes 00:00 de Colombia (8-nov-2026, Juan Diego). Así todos ven la misma cifra.
+const ZONA_HORARIA = { ES:'Atlantic/Canary', CO:'America/Bogota' };
+function _partesEnZona(ms, tz){
+  const p={}; new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',weekday:'short'})
+    .formatToParts(new Date(ms)).forEach(x=>p[x.type]=x.value);
+  return p;
+}
+function _desfaseZona(ms, tz){ const p=_partesEnZona(ms,tz); return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second) - Math.floor(ms/1000)*1000; }
+function _medianocheEnZona(y, m, d, tz){   // ms de las 00:00 de ese día en esa zona
+  let t=Date.UTC(y,m-1,d); t-=_desfaseZona(t,tz); return Date.UTC(y,m-1,d)-_desfaseZona(t,tz);
+}
+function inicioSemanaPersona(persona, ahoraMs){
+  const tz=ZONA_HORARIA[calendarioDe(persona)]||ZONA_HORARIA.CO, p=_partesEnZona(ahoraMs,tz);
+  const dow={Mon:0,Tue:1,Wed:2,Thu:3,Fri:4,Sat:5,Sun:6}[p.weekday];
+  const lunUTC=new Date(Date.UTC(+p.year,+p.month-1,+p.day-dow));
+  const y=lunUTC.getUTCFullYear(), m=lunUTC.getUTCMonth()+1, d=lunUTC.getUTCDate();
+  return { ms:_medianocheEnZona(y,m,d,tz), ymd:y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'), y, m, d };
+}
 function metaSemanal(persona, frente, ahora){
-  const hoy=ahora?new Date(ahora):new Date(), lun=_lunesDe(hoy), cal=calendarioDe(persona);
-  let habiles=0; for(let i=0;i<5;i++){ const d=new Date(lun); d.setDate(lun.getDate()+i); if(esDiaHabil(d, cal, persona)) habiles++; }
+  const hoy=ahora?new Date(ahora):new Date(), cal=calendarioDe(persona), L=inicioSemanaPersona(persona, hoy.getTime());
+  const lun={ getTime:()=>L.ms };
+  let habiles=0; for(let i=0;i<5;i++){ const d=new Date(L.y, L.m-1, L.d+i, 12); if(esDiaHabil(d, cal, persona)) habiles++; }
   const metaMaterias=META_MATERIAS_SEMANA[frente]*habiles/5, porMat=ENTREGABLES_POR_MATERIA[frente];
   const meta=Math.round(metaMaterias*porMat);
   const hechos=_creditosEntregables().filter(c=>c.frente===frente && c.fin>=lun.getTime() && c.fin<=hoy.getTime()
     && mismaPersona(c.persona, persona) && _esDelFrenteT(c.persona, c.rol, frente==='video')).length;
-  return { hechos, meta, habiles, metaMaterias, porMat, pct: meta?Math.round(hechos/meta*100):0, cumplida: meta>0 && hechos>=meta, lunes:_ymdL(lun) };
+  return { hechos, meta, habiles, metaMaterias, porMat, pct: meta?Math.round(hechos/meta*100):0, cumplida: meta>0 && hechos>=meta, lunes:L.ymd, desdeMs:L.ms };
 }
 // "1 materia + 66 % de otra"
 function _textoMaterias(materias){
@@ -1796,11 +1817,11 @@ function metaSemanalHTML(persona, frente){
   const m=metaSemanal(persona, frente); if(!m.meta) return '';
   const pct=Math.min(100,m.pct), col=m.cumplida?'#16a34a':m.pct>=60?'#d97706':'#6366f1';
   const nota=m.habiles<5 ? ` (semana de ${m.habiles} día${m.habiles===1?'':'s'} por festivo o ausencia)` : '';
-  return `<div style="margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" title="Meta de la semana: ${_textoMaterias(m.metaMaterias)} (${m.meta} entregables)${nota}">
+  return `<div style="margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" title="Meta de la semana (lunes a domingo): ${_textoMaterias(m.metaMaterias)} = ${m.meta} entregables${nota}. Cuentan los entregables terminados en la semana, sin importar el día en que arrancó cada materia.">
     <span style="font-size:11px;font-weight:600;color:${col}">${m.cumplida?'🎉 ¡Meta semanal cumplida!':'🎯 Meta semanal'}</span>
     <span style="display:inline-block;width:70px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:${pct}%;background:${col}"></span></span>
     <span style="font-size:11px;color:var(--text)"><b>${m.hechos}/${m.meta}</b> · ${m.pct}%</span>
-    <span style="font-size:10px;color:var(--muted)">Lleva <b>${_textoMaterias(m.hechos/m.porMat)}</b> · meta ${_textoMaterias(m.metaMaterias)}${nota}</span>
+    <span style="font-size:10px;color:var(--muted)">Lleva el equivalente a <b>${_textoMaterias(m.hechos/m.porMat)}</b> · meta ${_textoMaterias(m.metaMaterias)}${nota}</span>
   </div>`;
 }
 // Al cerrar un timer: si con eso la persona llega a su meta de la semana, se celebra (una vez por semana en ese navegador)
