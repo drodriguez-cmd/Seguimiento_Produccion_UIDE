@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Seguimiento de asignaturas · Maestrías UIDE</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#f5f6fa;--card:#fff;--bg3:#f0f1f6;--border:#e2e5ef;--text:#1a1d2e;--muted:#6b7080;--dim:#9ba3b8;--acc:#e8336d;
+  --ok:#16a34a;--ok-bg:#e7f6ec;--warn:#b45309;--warn-bg:#fdf3e1;--bad:#dc2626;--bad-bg:#fde8e8;--info:#1f5fa8;--info-bg:#e6f0fd;--step:#1d9e75;--now:#3b8be0}
+body{background:var(--bg);color:var(--text);font-family:'Instrument Sans',system-ui,sans-serif;font-size:14px;min-height:100vh}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 60px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+.brand{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);font-weight:700}
+h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:4px}
+.sub{color:var(--muted);font-size:13px;margin-top:4px}
+#sync{font-size:12px;color:var(--muted);text-align:right}
+#sync.err{color:var(--bad);font-weight:600}
+#sync button{margin-top:6px;border:1px solid var(--border);background:#fff;border-radius:8px;padding:5px 12px;font:600 12px inherit;font-family:inherit;color:var(--text);cursor:pointer}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer;text-align:left;font-family:inherit;color:inherit;position:relative;overflow:hidden}
+.kpi::after{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--c)}
+.kpi.on{border-color:var(--c);box-shadow:0 0 0 2px color-mix(in srgb,var(--c) 25%,transparent)}
+.kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.kpi .v{font-size:28px;font-weight:700;margin-top:6px;color:var(--c)}
+.kpi .s{font-size:11px;color:var(--muted);margin-top:2px}
+.filters{display:grid;grid-template-columns:2fr 1.2fr 1fr 1.1fr;gap:10px;margin-bottom:16px}
+input,select{font-family:inherit;font-size:13px;border:1px solid var(--border);border-radius:10px;padding:9px 12px;background:#fff;color:var(--text);width:100%}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:18px}
+.mes{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:#fafbfd;border-bottom:1px solid var(--border)}
+.mes b{font-size:14px}.mes span{font-size:12px;color:var(--muted)}
+.row{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1.7fr) 118px;gap:16px;align-items:center;padding:13px 18px;border-top:1px solid var(--border);cursor:pointer}
+.mes+.row{border-top:none}
+.row:hover{background:#fafbfd}
+.row.open{background:#f8f9fe}
+.nm{font-weight:600;font-size:14px}.pg{font-size:12px;color:var(--muted);margin-top:2px}
+.steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.steps i{display:block;height:8px;border-radius:4px;background:var(--bg3)}
+.steps i.ok{background:var(--step)}.steps i.now{background:var(--now)}.steps i.nd{background:repeating-linear-gradient(45deg,#e6e8f0 0 4px,#f3f4f8 4px 8px)}
+.where{font-size:12.5px;margin-top:6px;color:var(--text)}
+.where .m{color:var(--muted)}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;text-align:center;white-space:nowrap}
+.p-ok{background:var(--ok-bg);color:var(--ok)}.p-riesgo{background:var(--warn-bg);color:var(--warn)}.p-atrasada{background:var(--bad-bg);color:var(--bad)}.p-entregada{background:var(--info-bg);color:var(--info)}
+.det{padding:4px 18px 18px;background:#f8f9fe;border-top:1px dashed var(--border)}
+.tl{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:12px}
+.tl>div{background:#fff;border:1px solid var(--border);border-radius:10px;padding:9px 10px;font-size:12px}
+.tl>div b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
+.tl>div.ok{border-color:#b9e3c6}.tl>div.now{border-color:#9cc2ef;box-shadow:inset 0 3px 0 var(--now)}
+.tl .f{display:block;font-size:13px;font-weight:600}.tl .q{display:block;color:var(--muted);margin-top:2px}
+.note{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.55}
+.empty{padding:26px;text-align:center;color:var(--muted)}
+.ley{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin:4px 2px 16px}
+.ley span{display:inline-flex;align-items:center;gap:6px}.ley i{display:inline-block;width:22px;height:7px;border-radius:4px}
+footer{font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px}
+@media(max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.filters{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr;gap:8px}.row .st{justify-self:start}.tl{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.wrap{padding:20px 16px 50px}.filters{grid-template-columns:1fr}h1{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div><div class="brand">EIG Campus · UIDE</div><h1>Seguimiento de asignaturas</h1><div class="sub">Estado de cada asignatura de maestría, desde los contenidos hasta la entrega</div></div>
+  <div id="sync">Cargando…</div>
+</header>
+<div class="kpis" id="kpis"></div>
+<div class="filters">
+  <input id="q" placeholder="Buscar asignatura o programa" oninput="pintar()">
+  <select id="fp" onchange="pintar()"></select>
+  <select id="fm" onchange="pintar()"></select>
+  <select id="fd" onchange="pintar()"><option value="">Pendiente de: todos</option><option>Docente</option><option>Coordinación UIDE</option><option>EIG</option></select>
+</div>
+<div class="ley"><span><i style="background:var(--step)"></i>Etapa cumplida</span><span><i style="background:var(--now)"></i>Etapa actual</span><span><i style="background:var(--bg3)"></i>Por hacer</span><span><i style="background:repeating-linear-gradient(45deg,#e6e8f0 0 4px,#f3f4f8 4px 8px)"></i>Sin registro en este tablero</span></div>
+<div id="lista"></div>
+<footer>Etapas: <b>Contenidos</b> (elaboración) · <b>Revisión</b> (revisión de contenidos y ajustes del docente) · <b>Coordinación</b> (revisión de la coordinación académica UIDE) · <b>Producción</b> (maquetación de contenido e interacción) · <b>Entregada</b>.<br>
+El estado compara cada asignatura con la fecha del cronograma acordado para la etapa en la que está: <b>A tiempo</b>, <b>En riesgo</b> (vence en 3 días o menos) o <b>Atrasada</b> (la fecha ya pasó). Haz clic en una asignatura para ver sus fechas.</footer>
+</div>
+<script>
+const API='PEGA_AQUI_LA_URL_DEL_APPS_SCRIPT_SEGUIMIENTO_UIDE';   /* termina en /exec */
+const PASOS=['Contenidos','Revisión','Coordinación','Producción','Entregada'];
+const SEM={ok:['A tiempo','p-ok'],riesgo:['En riesgo','p-riesgo'],atrasada:['Atrasada','p-atrasada'],entregada:['Entregada','p-entregada']};
+const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+let FILAS=[],HOY='',KPI='',ABIERTA=null;
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function dm(s){return s?s.slice(8,10)+'/'+s.slice(5,7):'—'}
+function dma(s){return s?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(2,4):'—'}
+function dias(a,b){const p=a.split('-').map(Number),q=b.split('-').map(Number);return Math.round((Date.UTC(q[0],q[1]-1,q[2])-Date.UTC(p[0],p[1]-1,p[2]))/864e5)}
+function jsonp(params){return new Promise(res=>{const cb='u'+Date.now()+Math.floor(Math.random()*1e6),s=document.createElement('script');let done=false;
+  const fin=v=>{if(done)return;done=true;try{delete window[cb]}catch(e){}s.remove();res(v||{ok:false})};window[cb]=fin;s.onerror=()=>fin({ok:false});
+  s.src=API+'?'+Object.entries(params).map(([k,v])=>k+'='+encodeURIComponent(v)).join('&')+'&callback='+cb;document.body.appendChild(s);setTimeout(()=>fin({ok:false}),45000)})}
+async function cargar(){
+  const el=document.getElementById('sync');el.className='';el.textContent='Cargando…';
+  const r=await jsonp({accion:'resumen'});
+  if(!r.ok||!Array.isArray(r.filas)){el.className='err';el.innerHTML='No se pudo cargar la información.<br><button onclick="cargar()">Intentar de nuevo</button>';if(!FILAS.length)document.getElementById('lista').innerHTML='<div class="card"><div class="empty">Sin datos por ahora</div></div>';return}
+  FILAS=r.filas;HOY=r.hoy;
+  el.innerHTML='Actualizado '+new Date().toTimeString().slice(0,5)+'<br><button onclick="cargar()">Actualizar</button>';
+  filtros();pintar()}
+function filtros(){
+  const fp=document.getElementById('fp'),fm=document.getElementById('fm'),vp=fp.value,vm=fm.value;
+  fp.innerHTML='<option value="">Todos los programas</option>'+[...new Set(FILAS.map(x=>x.p).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(p=>'<option>'+esc(p)+'</option>').join('');
+  fm.innerHTML='<option value="">Todos los meses de lanzamiento</option>'+[...new Set(FILAS.map(x=>x.l.slice(0,7)))].sort().map(m=>'<option value="'+m+'">Lanzan en '+MESES[+m.slice(5)-1]+' '+m.slice(0,4)+'</option>').join('');
+  fp.value=vp;fm.value=vm}
+function setKpi(k){KPI=KPI===k?'':k;pintar()}
+function pasa(x){
+  const q=document.getElementById('q').value.toLowerCase().trim(),fp=document.getElementById('fp').value,fm=document.getElementById('fm').value,fd=document.getElementById('fd').value;
+  if(q&&!(x.m+' '+x.p).toLowerCase().includes(q))return false;
+  if(fp&&x.p!==fp)return false;if(fm&&!x.l.startsWith(fm))return false;if(fd&&x.pd!==fd)return false;return true}
+function enKpi(x,k){if(!k)return true;if(k==='curso')return x.sem!=='entregada';return x.sem===k}
+function pintar(){
+  const base=FILAS.filter(pasa);
+  const n=k=>base.filter(x=>enKpi(x,k)).length;
+  const K=[['curso','En curso',n('curso'),'sin entregar','#7F77DD'],['ok','A tiempo',n('ok'),'según el cronograma','#16a34a'],['riesgo','En riesgo',n('riesgo'),'vence en 3 días o menos','#d97706'],['atrasada','Atrasadas',n('atrasada'),'pasó la fecha de su etapa','#dc2626'],['entregada','Entregadas',n('entregada'),'últimas semanas','#1f5fa8']];
+  document.getElementById('kpis').innerHTML=K.map(k=>'<button class="kpi'+(KPI===k[0]?' on':'')+'" style="--c:'+k[4]+'" onclick="setKpi(\''+k[0]+'\')"><div class="l">'+k[1]+'</div><div class="v">'+k[2]+'</div><div class="s">'+k[3]+'</div></button>').join('');
+  const l=base.filter(x=>enKpi(x,KPI));
+  if(!l.length){document.getElementById('lista').innerHTML='<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>';return}
+  const g={};l.forEach(x=>(g[x.l.slice(0,7)]=g[x.l.slice(0,7)]||[]).push(x));
+  const ord={atrasada:0,riesgo:1,ok:2,entregada:3};
+  document.getElementById('lista').innerHTML=Object.keys(g).sort().map(m=>{const L=g[m].sort((a,b)=>ord[a.sem]-ord[b.sem]||a.l.localeCompare(b.l)||a.m.localeCompare(b.m,'es'));
+    const ent=L.filter(x=>x.sem==='entregada').length;
+    return '<div class="card"><div class="mes"><b>Lanzan en '+MESES[+m.slice(5)-1]+' '+m.slice(0,4)+'</b><span>'+L.length+' asignatura'+(L.length>1?'s':'')+(ent?' · '+ent+' entregada'+(ent>1?'s':''):'')+'</span></div>'+L.map(fila).join('')+'</div>'}).join('')}
+function clave(x){return x.m+'|'+x.l+'|'+x.p}
+function fila(x){
+  const k=clave(x),open=ABIERTA===k;
+  const st=PASOS.map((_,i)=>{const n=i+1;let c='';if(x.paso===5||n<x.paso)c=(x.et==='Por ingresar a producción'&&n<=3)?'nd':'ok';else if(n===x.paso)c='now';return '<i class="'+c+'" title="'+PASOS[i]+'"></i>'}).join('');
+  let donde='<b>'+esc(x.et)+'</b>';
+  if(x.sem==='entregada')donde+=' <span class="m">el '+dma(x.fe)+'</span>';
+  else{const t=[];if(x.pd)t.push(x.pd==='Docente'?'pendiente del docente':x.pd==='Coordinación UIDE'?'pendiente de la coordinación UIDE':'pendiente de EIG');
+    if(x.d&&HOY){const d=dias(x.d,HOY);if(d>=0)t.push(d===0?'desde hoy':'hace '+d+' día'+(d===1?'':'s'))}
+    if(x.meta){const d=dias(HOY,x.meta);t.push(d<0?'venció el '+dm(x.meta):d===0?'vence hoy':'plazo '+dm(x.meta))}
+    if(t.length)donde+=' <span class="m">· '+t.join(' · ')+'</span>'}
+  return '<div class="row'+(open?' open':'')+'" onclick="abrir(\''+esc(k).replace(/'/g,"\\'")+'\')"><div><div class="nm">'+esc(x.m)+'</div><div class="pg">'+esc(x.p||'')+' · lanza '+dma(x.l)+'</div></div>'+
+    '<div><div class="steps">'+st+'</div><div class="where">'+donde+'</div></div><span class="pill st '+SEM[x.sem][1]+'">'+SEM[x.sem][0]+'</span></div>'+(open?detalle(x):'')}
+function detalle(x){
+  const F=[['Contenidos',x.plan.c,'Entrega de contenidos'],['Revisión',x.plan.r,'Fin de la revisión y ajustes'],['Coordinación',x.plan.co,'Aprobación de coordinación'],['Producción',x.plan.pr,'Entrega de producción'],['Lanzamiento',x.l,'Inicio de clases']];
+  const tl=F.map((f,i)=>{const n=i+1,c=x.paso===5||n<x.paso?'ok':n===x.paso?'now':'';return '<div class="'+c+'"><b>'+f[0]+'</b><span class="f">'+(f[1]?dma(f[1]):'—')+'</span><span class="q">'+f[2]+'</span></div>'}).join('');
+  return '<div class="det"><div class="tl">'+tl+'</div><div class="note">'+(x.det?esc(x.det)+'. ':'')+'Fechas del cronograma acordado.'+(x.sd&&x.paso<5?' Las etapas anteriores a producción de esta asignatura no se registraron en este tablero.':'')+'</div></div>'}
+function abrir(k){ABIERTA=ABIERTA===k?null:k;pintar()}
+if(API.indexOf('http')!==0){document.getElementById('sync').className='err';document.getElementById('sync').textContent='Falta configurar la conexión.'}else{cargar();setInterval(()=>{if(!document.hidden)cargar()},10*60*1000)}
+</script>
+</body>
+</html>
