@@ -37,7 +37,7 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:4px}
 .tab{border:0;background:transparent;padding:9px 18px;border-radius:9px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
 .tab.on{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .tab small{font-size:12px;font-weight:600;margin-left:4px;color:var(--muted)}
-.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px}
 .kpi{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;cursor:pointer;text-align:left;color:inherit;position:relative;overflow:hidden}
 .kpi::after{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--c)}
 .kpi.on{border-color:var(--c);box-shadow:0 0 0 2px color-mix(in srgb,var(--c) 25%,transparent)}
@@ -182,19 +182,19 @@ function abrir(k){ABIERTA=ABIERTA===k?null:k;pintar()}
 function ir(k){ABIERTA=k;KPI='';VISTA='c';try{localStorage.setItem('uide_vista','c')}catch(e){}pintar();const el=document.getElementById('r-'+k);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('flash')}}
 /* ── Producción ── */
 function sp(x){const f=x.fe||x.est;return (!x.meta||!f||f<=x.meta)?'atiempo':'retraso'}
-function kP(x,k){if(k==='retraso')return x.sem!=='entregada'&&sp(x)==='retraso';if(!k)return x.sem!=='entregada';if(k==='prod')return x.et==='En producción';if(k==='cola')return x.et==='En cola de producción';if(k==='entregada')return x.sem==='entregada';return true}
+function kP(x,k){if(k==='tarde')return x.it>0;if(k==='retraso')return x.sem!=='entregada'&&sp(x)==='retraso';if(!k)return x.sem!=='entregada';if(k==='prod')return x.et==='En producción';if(k==='cola')return x.et==='En cola de producción';if(k==='entregada')return x.sem==='entregada';return true}
 function vistaP(P){
   const base=P.filter(pasa),n=k=>base.filter(x=>kP(x,k)).length;
-  const h=kpis([['prod','En producción',n('prod'),'maquetación en curso','#3b8be0'],['cola','En cola',n('cola'),'por iniciar','#7F77DD'],['retraso','Con retraso',n('retraso'),'se entregan después de la fecha pactada','#dc2626'],['entregada','Entregadas',n('entregada'),'últimas semanas','#1f5fa8']]);
+  const h=kpis([['prod','En producción',n('prod'),'maquetación en curso','#3b8be0'],['cola','En cola',n('cola'),'por iniciar','#7F77DD'],['retraso','Con retraso',n('retraso'),'se entregan después de la fecha pactada','#dc2626'],['tarde','Ingresaron tarde',n('tarde'),'contenidos recibidos después de lo pactado','#d97706'],['entregada','Entregadas',n('entregada'),'últimas semanas','#1f5fa8']]);
   const fil='<div class="filters p3">'+opciones(P)+'</div>';
   const l=base.filter(x=>KPI?kP(x,KPI):true);
   return h+fil+(l.length?porMes(l,filaP,(a,b)=>(a.sem==='entregada')-(b.sem==='entregada')||(a.est||a.fe).localeCompare(b.est||b.fe)||a.m.localeCompare(b.m,'es')):'<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>')+
     '<footer><b>Entrega estimada</b>: fecha aproximada en que se entrega la asignatura, calculada con el avance de producción y el orden de la cola; se actualiza sola y puede moverse unos días. '+
-    'Cada asignatura se compara con la fecha de entrega pactada en el cronograma: <b>A tiempo</b> o <b>Con retraso</b>. Las entregadas indican si se entregaron a tiempo o con retraso.</footer>'}
+    'Cada asignatura se compara con la fecha de entrega pactada en el cronograma: <b>A tiempo</b> o <b>Con retraso</b>. Las entregadas indican si se entregaron a tiempo o con retraso. Cuando los contenidos llegaron a producción después de la fecha pactada en el cronograma, se indica con cuántos días de diferencia.</footer>'}
 function filaP(x){
   const ent=x.sem==='entregada';
   return '<div class="row pr"><div><div class="nm">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div></div>'+
-    '<div class="where" style="margin:0"><b>'+esc(x.et)+'</b>'+(x.det&&!ent?'<div class="m">'+esc(x.det)+'</div>':'')+'</div>'+
+    '<div class="where" style="margin:0"><b>'+esc(x.et)+'</b>'+(x.det&&!ent?'<div class="m">'+esc(x.det)+'</div>':'')+(x.it>0?'<div style="color:var(--warn);margin-top:2px">Ingresó a producción '+x.it+' día'+(x.it===1?'':'s')+' después de la fecha pactada ('+dm(x.di)+')</div>':'')+'</div>'+
     '<div class="est">'+(ent?'Entregada el<b>'+dma(x.fe)+'</b>':'Entrega estimada<b>'+dma(x.est)+'</b>')+'</div>'+(()=>{const r=sp(x)==='retraso';return '<span class="pill '+(r?'p-retraso':'p-ok')+'" title="Fecha pactada: '+dma(x.meta)+'">'+(ent?(r?'Entregada con retraso':'Entregada a tiempo'):(r?'Con retraso':'A tiempo'))+'</span>'})()+'</div>'}
 if(API.indexOf('http')!==0){document.getElementById('sync').className='err';document.getElementById('sync').textContent='Falta configurar la conexión.'}else{cargar();setInterval(()=>{if(!document.hidden&&!ABIERTA)cargar()},10*60*1000)}
 </script>
