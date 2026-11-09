@@ -900,7 +900,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026110804;
+const DASHBOARD_VERSION = 2026110901;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -2357,10 +2357,15 @@ function diasHabilesEntre(fechaInicio, fechaFin, cal, persona){
 function sumarDiasHabiles(inicioMs, diasHabilesObjetivo, cal, persona){
   const cur = new Date(inicioMs);
   let contados = 0;
-  let dias = Math.max(0, Math.round(diasHabilesObjetivo));
-  // Si el día de arranque no era hábil para la persona (festivo, fin de semana o ausencia, p. ej. su día libre),
-  // ese día no se trabajó: el plazo se corre un día hábil más (8-nov-2026, caso de Gabriel).
-  if(dias>0 && !esDiaHabil(cur, cal, persona)) dias++;
+  const dias = Math.max(0, Math.round(diasHabilesObjetivo));
+  // Si el día de arranque no era hábil para la persona (fin de semana, festivo o ausencia, p. ej. el día libre de
+  // Gabriel), el plazo empieza a contar a las 00:00 del siguiente día hábil, igual que el "tiempo transcurrido"
+  // (8-nov-2026). Antes se sumaba un día entero de más y una materia asignada un domingo en la noche ganaba ~19 h.
+  if(dias>0 && !esDiaHabil(cur, cal, persona)){
+    cur.setHours(0,0,0,0);
+    let guard=0; do{ cur.setDate(cur.getDate()+1); }while(!esDiaHabil(cur, cal, persona) && guard++<30);
+    // desde aquí (00:00 del primer día hábil) el bucle de abajo cuenta días completos de 24 h
+  }
   while(contados < dias){
     cur.setDate(cur.getDate()+1);
     if(esDiaHabil(cur, cal, persona)) contados++;
@@ -2581,6 +2586,25 @@ function calcularFilasTiempos(){
     if(g.esVideo){ const ms=_ultimaAsignacionMs(_asignacionesVideoLog, a.id, g.P); return (ms && ms>=TIEMPOS_VIDEO_LOG_DESDE) ? ms : null; }
     return _ultimaAsignacionMs(_asignacionesLog, a.id, g.P);
   };
+  // ¿La persona ya tenía otra materia de ese frente esperándola en el momento t? (asignada a ella según el registro
+  // y sin terminar). Si sí, su plazo siguiente arranca al terminar la anterior aunque después le cambien CUÁL es esa
+  // materia (p. ej. una redistribución de videos el domingo no le reinicia el reloj) — 9-nov-2026, Juan Diego.
+  const teniaPendienteEn = (g, t, salvoId) => {
+    const log = g.esVideo ? _asignacionesVideoLog : _asignacionesLog;
+    return Object.keys(log||{}).some(id=>{
+      if(id===salvoId) return false;
+      const arr=log[id]; let ult=null; for(const x of arr){ if(x.ms<=t) ult=x; else break; }
+      if(!ult || ult.persona!==g.P) return false;
+      const a2=STATE.asignaturas.find(x=>x.id===id); if(!a2) return false;
+      const f2=finFrenteTiempos(a2, g.esVideo);
+      return !(f2 && f2<=t);
+    });
+  };
+  const anclaPlazo = (g, a, finPrev) => {
+    const asig = asignacionMs(g, a)||0;
+    if(finPrev && asig>finPrev && teniaPendienteEn(g, finPrev, a.id)) return finPrev;
+    return Math.max(finPrev||0, asig);
+  };
   const empuja = (g, it, inicioMs, inicioAuto) => {
     const { a, info, completo, fin } = it;
     const persona = g.esVideo ? g.P : (CELULA_CFG[g.P]?.label || g.P);
@@ -2619,7 +2643,7 @@ function calcularFilasTiempos(){
       const t0 = it.info.fechaMs;
       let inicio = t0, auto = false;
       if(t0 >= TIEMPOS_RELOJ_MINIMO && it.a.status!==ST_REVISION && !ocupadaEn(t0, it.a.id)){
-        const ancla = Math.max(finAntes(t0, it.a.id), asignacionMs(g, it.a)||0);
+        const ancla = anclaPlazo(g, it.a, finAntes(t0, it.a.id));
         if(ancla){ const c = Math.max(ancla, TIEMPOS_RELOJ_MINIMO); if(c < t0){ inicio = c; auto = true; } }
       }
       empuja(g, it, inicio, auto);
@@ -2633,7 +2657,7 @@ function calcularFilasTiempos(){
     if(g.esVideo) sig = pend.slice().sort((p,q)=>compararPorUrgencia(p.a,q.a))[0];
     else sig = pend.find(it=>it.a.status==='En producción') || pend.find(it=>it.a.status==='En espera');
     if(!sig) return;
-    const ancla = Math.max(finAntes(ahora, sig.a.id), asignacionMs(g, sig.a)||0);
+    const ancla = anclaPlazo(g, sig.a, finAntes(ahora, sig.a.id));
     if(!ancla) return; // sin término previo ni hora de asignación: no se inventa un inicio
     const inicio = Math.max(ancla, TIEMPOS_RELOJ_MINIMO);
     if(inicio > ahora) return;
@@ -4235,8 +4259,13 @@ function hayVideoHuerfana(){
 function equipoVideoActivoCambio(){
   const actual = VIDEO_PERSONAS.filter(p=>celulaActiva(p)).sort().join(',');
   const anterior = localStorage.getItem('videoActivoUltimo');
+  const vistoMs = Number(localStorage.getItem('videoActivoUltimoMs')||0);
   localStorage.setItem('videoActivoUltimo', actual);
-  return anterior !== null && anterior !== actual;
+  localStorage.setItem('videoActivoUltimoMs', String(Date.now()));
+  // Solo cuenta como "cambio" si este navegador vio el equipo hace poco (12 h). Un navegador que no se abría desde
+  // hace días recuerda un equipo viejo y repartía de nuevo todos los videos no empezados (9-nov-2026: así se movieron
+  // 5 videos el domingo 8 a las 7:03 p. m.). Un cambio real (alguien se pausa o vuelve) lo detectan las pestañas abiertas.
+  return anterior !== null && anterior !== actual && vistoMs>0 && (Date.now()-vistoMs) < 12*3600*1000;
 }
 
 // Reparte TODO el trabajo de video que aún no ha arrancado (en cola + activas sin tocar)
