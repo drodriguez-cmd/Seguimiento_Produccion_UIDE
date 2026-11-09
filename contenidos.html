@@ -80,7 +80,23 @@ textarea{resize:vertical;min-height:54px}
 .ehead:hover{background:#f5f6fa}
 .est{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
 .est i{width:9px;height:9px;border-radius:50%;display:inline-block}
-.det{border-top:1px solid var(--border);background:#fbfaff;padding:18px 22px}
+.det{background:#fbfaff}
+.ficha{position:fixed;top:0;right:0;bottom:0;width:min(820px,64vw);background:#fbfaff;border-left:1px solid var(--border2);box-shadow:-10px 0 30px rgba(20,24,40,.14);z-index:40;overflow-y:auto;transform:translateX(105%);transition:transform .18s ease;visibility:hidden}
+.ficha.show{transform:none;visibility:visible}
+.fi-head{background:#fff;border-bottom:1px solid var(--border);padding:16px 22px 12px;display:flex;gap:12px;align-items:flex-start}
+.fi-head h2{font-size:17px;line-height:1.3;margin:0}
+.fi-x{margin-left:auto;border:1px solid var(--border2);background:#fff;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer;flex:none}
+.fi-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.fi-chips span{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--bg3);color:var(--muted)}
+.fi-top{padding:14px 22px 0}
+.fi-tabs{position:sticky;top:0;z-index:3;display:flex;gap:2px;overflow-x:auto;background:#fbfaff;border-bottom:1px solid var(--border);padding:0 18px;margin-top:4px}
+.fi-tab{border:0;background:none;padding:10px 12px 9px;font-weight:600;font-size:12.5px;font-family:inherit;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.fi-tab.on{color:var(--text);border-bottom-color:#1a1d2e}
+.fi-tab i{font-style:normal;font-size:10.5px;margin-left:5px;padding:0 6px;border-radius:99px;background:var(--bg3);color:var(--muted)}
+.fi-tab i.r{background:#fde8e8;color:var(--danger)}.fi-tab i.a{background:#fdf3e1;color:#b45309}
+.fi-body{padding:16px 22px 90px}.fi-panel{display:none}.fi-panel.on{display:block}
+.arow.open{background:#eef2ff;box-shadow:inset 3px 0 0 #5b4fc7}
+@media(max-width:900px){.ficha{width:100vw}}
 .dgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
 @media(max-width:1000px){.dgrid{grid-template-columns:1fr}}
 .box{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px}
@@ -493,13 +509,12 @@ let FILTRO={etapa:'',persona:''};let ABIERTA=null;
 function goPage(p){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.p===p));
   document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='p-'+p));
-  window.scrollTo(0,0);render();
+  window.scrollTo(0,0);if(p!=='asig'){const f=document.getElementById('ficha');if(f)f.classList.remove('show')}render();
 }
 function verAsig(etapa,persona){FILTRO.etapa=etapa||'';document.getElementById('f-p').value=persona||'';goPage('asig')}
 function abrir(id){
   const a=DATOS.find(x=>x.id===id);FILTRO.etapa='';
-  document.getElementById('f-q').value=a.materia;document.getElementById('f-p').value='';document.getElementById('f-fl').value='';document.getElementById('f-m').value='';document.getElementById('f-fac').value='';
-  ABIERTA=id;goPage('asig');
+  ABIERTA=id;FICHA_TAB=null;goPage('asig');
 }
 function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),2200)}
 function esc(t){return String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -602,7 +617,7 @@ function promPersona(p){
 function tick(){document.querySelectorAll('[data-clk]').forEach(el=>{const s=ST[el.dataset.clk];if(s)el.textContent=fmtClk(msTrab(s))})}
 setInterval(tick,1000);
 /* Si la pestaña quedó abierta de un día para otro, "hoy" se actualiza solo (fecha de ¿Cuándo pasó?, alarmas y días) */
-setInterval(()=>{const h=ymd(new Date());if(h===HOY)return;const ta=document.querySelector('.det textarea');if(ta&&(ta===document.activeElement||ta.value))return;
+setInterval(()=>{const h=ymd(new Date());if(h===HOY)return;const ta=document.querySelector('#ficha.show textarea:focus')||[...document.querySelectorAll('#ficha.show textarea')].find(x=>x.value);if(ta)return;
   HOY=h;try{render()}catch(e){}},30000);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)return;const h=ymd(new Date());if(h!==HOY){HOY=h;try{render()}catch(e){}}});
 
@@ -697,10 +712,11 @@ function renderAsig(){
   document.getElementById('lista').innerHTML=h+(l.length?l.map(a=>{
     const s=ST[a.id],F=fechas(a),al=alarmas(a),n=al.length?al[0].n:0;
     const alH=n?'<div class="t2" style="color:'+(n>=3?'var(--danger)':n==2?'var(--warn)':'var(--muted)')+'">'+esc(al[0].txt)+(al.length>1?' · +'+(al.length-1):'')+'</div>':'';
-    return '<div class="arow'+(ABIERTA===a.id?' open':'')+'" onclick="toggle(\''+a.id+'\')"><div><div class="t1">'+esc(a.materia)+'</div><div class="t2">'+esc(a.programa)+' · '+a.metodologia+' · '+chipDoc(a)+(a.facultad?' · '+esc(facCorta(a.facultad)):'')+(a.novedad&&a.novedad.toUpperCase().startsWith('SI')?' · <b style="color:var(--danger)">Novedad UIDE</b>':'')+(vidDe(s).e==='sol'?' · 🎬 video pedido':'')+(trab(s).ini?' · <span style="color:var(--ok);font-weight:600">● trabajando</span>':msTrab(s)>0?' · trabajado '+fmtH(msTrab(s)):'')+'</div>'+alH+'</div><span>'+(s.responsable?esc(s.responsable):'<span class="badge b-warn">Sin asignar</span>')+'</span><span style="font-size:12px">'+proxHtml(a,s)+'<div class="t2">inicia '+fmtc(a.inicio)+'</div></span><span>'+estHtml(a,s)+(s.rondas||s.rc?'<div class="t2">'+[s.rondas?s.rondas+' ronda'+(s.rondas>1?'s':'')+' prof.':'',s.rc?s.rc+' coord.':''].filter(Boolean).join(' · ')+'</div>':'')+chipCal(a,s)+'</span><span class="dd" style="color:'+(n>=3?'var(--danger)':n==2?'var(--warn)':'var(--text)')+'">'+diasTxt(s,a)+'</span></div>'+(ABIERTA===a.id?detalle(a):'');
+    return '<div class="arow'+(ABIERTA===a.id?' open':'')+'" onclick="toggle(\''+a.id+'\')"><div><div class="t1">'+esc(a.materia)+'</div><div class="t2">'+esc(a.programa)+' · '+a.metodologia+' · '+chipDoc(a)+(a.facultad?' · '+esc(facCorta(a.facultad)):'')+(a.novedad&&a.novedad.toUpperCase().startsWith('SI')?' · <b style="color:var(--danger)">Novedad UIDE</b>':'')+(vidDe(s).e==='sol'?' · 🎬 video pedido':'')+(trab(s).ini?' · <span style="color:var(--ok);font-weight:600">● trabajando</span>':msTrab(s)>0?' · trabajado '+fmtH(msTrab(s)):'')+'</div>'+alH+'</div><span>'+(s.responsable?esc(s.responsable):'<span class="badge b-warn">Sin asignar</span>')+'</span><span style="font-size:12px">'+proxHtml(a,s)+'<div class="t2">inicia '+fmtc(a.inicio)+'</div></span><span>'+estHtml(a,s)+(s.rondas||s.rc?'<div class="t2">'+[s.rondas?s.rondas+' ronda'+(s.rondas>1?'s':'')+' prof.':'',s.rc?s.rc+' coord.':''].filter(Boolean).join(' · ')+'</div>':'')+chipCal(a,s)+'</span><span class="dd" style="color:'+(n>=3?'var(--danger)':n==2?'var(--warn)':'var(--text)')+'">'+diasTxt(s,a)+'</span></div>';
   }).join(''):'<div class="empty">Sin resultados</div>');
+  renderFicha();
 }
-function toggle(id){ABIERTA=ABIERTA===id?null:id;renderAsig()}
+function toggle(id){ABIERTA=ABIERTA===id?null:id;FICHA_TAB=null;renderAsig()}
 
 const ITEMS_G=[['video','Video docente'],['ruta','Ruta de aprendizaje']];
 function itemsClase(a){const b=[['tema','Tema'],['qha','¿Qué hemos aprendido?'],['saber','Saber más (opcional)'],['test','Test']];
@@ -715,12 +731,12 @@ function pasoSiguiente(a,s){
   else if(s.etapa==='escr'&&a.flujo==='Autor'){quienT='Le toca al profesor';pasos=['El profesor está escribiendo; los recordatorios salen solos.','Cuando llegue el material, registrar abajo <b>Material recibido del docente</b>.']}
   else if(s.etapa==='escr'){quienT='Le toca al equipo';pasos=['Escribir con IA con el reloj encendido (<b>Empezar a trabajar</b>).','Al terminar, registrar <b>Terminé la escritura con IA</b> y enviarla al profesor para que la revise.']}
   else if(s.etapa==='rev'){quienT='Le toca al equipo';
-    if(ajCoord(s))pasos=['El coordinador pidió cambios (ronda '+(s.rc||1)+' con coordinación). Hazlos con el reloj en <b>Ajustes de coordinación</b>; si los tiene que hacer el profesor, devuélvelo desde la caja de Revisión de calidad.','Si la materia cambió bastante, pulsa <b>＋ Nueva revisión</b> antes de reenviarla.','Cuando estén: <b>Reenviado al coordinador</b> en Registrar lo que pasó (y le escribes el correo tú).'];
-    else if(!s.cal)pasos=['Pulsar <b>1 · Preparar para Claude</b> (el reloj arranca solo) y pegar el texto en Claude.','Copiar toda la respuesta de Claude y pulsar <b>2 · Pegar resultado</b> → <b>Importar resultado</b>.','Según el resultado: devolver al docente con el correo listo, o pasar al coordinador.'];
-    else if(calPend(s))pasos=['Toca la revisión de calidad <b>ronda '+calRonda(s)+'</b>'+(s.cal.dev?' (el docente devolvió sus ajustes)':'')+': <b>1 · Preparar para Claude</b> y luego <b>2 · Pegar resultado</b>.','Según el resultado: devolver al docente o enviar al coordinador.'];
-    else if(cal9(s))pasos=['La revisión quedó en 9/9: pasarla al coordinador desde la caja de Revisión de calidad o con <b>Enviado al coordinador</b> en Registrar lo que pasó.','Si la materia cambió después (la corrigió el equipo o el coordinador pidió cambios), pulsa <b>＋ Nueva revisión</b>.'];
-    else pasos=['Ya hay revisión con puntos por corregir: <b>Devolver al docente</b> (copia el correo listo y envíalo).','Si los corrige el equipo, pulsar <b>＋ Nueva revisión</b> en la caja de Revisión de calidad para hacer la ronda siguiente.'];
-    if(a.flujo==='IA'&&!(s.rondas>0))pasos=['Ya está escrita: envíala al profesor para que la revise. Fecha de UIDE para entregársela: <b>'+fmt(fechas(a).entregaDocente)+'</b> (puede ir antes).'].concat(!cal9(s)?['Si quieres, pásala antes por la revisión de calidad (1 · Preparar para Claude).']:[])}
+    if(ajCoord(s))pasos=['El coordinador pidió cambios (ronda '+(s.rc||1)+' con coordinación). Hazlos con el reloj en <b>Ajustes de coordinación</b>; si los tiene que hacer el profesor, devuélvelo desde la pestaña Calidad.','Si la materia cambió bastante, pulsa <b>＋ Nueva revisión</b> antes de reenviarla.','Cuando estén: <b>Reenviado al coordinador</b> en Registrar lo que pasó (y le escribes el correo tú).'];
+    else if(!s.cal)pasos=['Pulsar <b>1 · Copiar datos para ChatGPT</b> (el reloj arranca solo) y pegarlo en ChatGPT con la carpeta y la matriz.','Copiar toda la respuesta de ChatGPT (con el bloque FABRICA_REVISION_V2 al final) y pulsar <b>2 · Pegar resultado</b> → <b>Importar resultado</b>.','Según el resultado: devolver al docente con el correo listo, o pasar al coordinador.'];
+    else if(calPend(s))pasos=['Toca la revisión de calidad <b>ronda '+calRonda(s)+'</b>'+(s.cal.dev?' (el docente devolvió sus ajustes)':'')+': <b>1 · Copiar datos para ChatGPT</b> y luego <b>2 · Pegar resultado</b>.','Según el resultado: devolver al docente o enviar al coordinador.'];
+    else if(cal9(s))pasos=['La revisión de calidad quedó lista: pasarla al coordinador desde la pestaña Calidad o con <b>Enviado al coordinador</b> en Registrar lo que pasó.','Si la materia cambió después (la corrigió el equipo o el coordinador pidió cambios), pulsa <b>＋ Nueva revisión</b>.'];
+    else pasos=['Ya hay revisión con puntos por corregir: <b>Devolver al docente</b> (copia el correo listo y envíalo).','Si los corrige el equipo, pulsar <b>＋ Nueva revisión</b> en la pestaña Calidad para hacer la ronda siguiente.'];
+    if(a.flujo==='IA'&&!(s.rondas>0))pasos=['Ya está escrita: envíala al profesor para que la revise. Fecha de UIDE para entregársela: <b>'+fmt(fechas(a).entregaDocente)+'</b> (puede ir antes).'].concat(!cal9(s)?['Si quieres, pásala antes por la revisión de calidad (1 · Copiar datos para ChatGPT).']:[])}
   else if(s.etapa==='doc'){quienT='Le toca al profesor';pasos=[(()=>{const P=plazoDoc(a,s);return P?'El profesor tiene <b>7 días</b>: plazo hasta el <b>'+fmt(P.lim)+'</b>'+(P.ini!==s.desde?' (cuenta desde la fecha UIDE '+fmt(P.ini)+', porque se le envió antes)':'')+'. Los recordatorios salen solos: 3 días antes, el día que vence y 3 días después.':'El profesor está haciendo ajustes; los recordatorios salen solos.'})(),'Cuando respondan, registrar <b>Ajustes recibidos</b> o <b>Aprobado por el docente</b>.']}
   else if(s.etapa==='coord'){quienT=s.aprobCoord?'Le toca al equipo':'Le toca al coordinador';pasos=s.aprobCoord?['El coordinador ya aprobó: abajo, pulsar <b>Aprobado por coordinador → entregado a Fábrica</b>.','Cargarla en el dashboard de digitalización (Fábrica).']:['Esperando la respuesta del coordinador.','Si aprobó: pulsar <b>Aprobado por coordinador → entregado a Fábrica</b>. Si pidió cambios: <b>El coordinador pidió cambios</b>.']}
   else return '';
@@ -744,28 +760,54 @@ function detalle(a){
   const al=alarmas(a);
   const evs=s.eventos.slice().sort((x,y)=>(x.ts||0)-(y.ts||0)).reverse().map(e=>'<div class="ev"><span class="f">'+fmt(e.f)+'</span><div>'+esc(e.l)+(e.nota?'<div class="w">'+esc(e.nota)+'</div>':'')+'<div class="w">'+esc(e.por||'')+'</div></div></div>').join('');
   const hist=a.historial;
-  return '<div class="det" onclick="event.stopPropagation()"><div class="dgrid"><div>'+
-    '<div class="box"><h4>Fechas del cronograma UIDE · '+(a.flujo==='IA'?'IA':'Autor')+(F.dePlan?'':' · calculadas (sin fila en el cronograma)')+'</h4>'+tl+'<div class="mini" style="margin-top:8px">Arriba: fecha del cronograma UIDE · abajo: fecha real en que pasó (≈ = aproximada del archivo de UIDE). Hoy '+fmt(HOY)+(s.encargo&&a.flujo==='Autor'?' · encargo enviado '+(/^\d{4}-\d{2}-\d{2}$/.test(s.encargo)?fmt(s.encargo):'(sin fecha)'):'')+'</div></div>'+
-    pasoSiguiente(a,s)+cajaComp(a)+
-    (al.length?'<div class="box" style="border-color:#f5c2c2"><h4 style="color:var(--danger)">Alarmas</h4>'+al.map(x=>'<div style="font-size:13px;padding:3px 0"><span class="sq" style="background:'+(x.n>=3?'var(--danger)':x.n==2?'var(--warn)':'var(--dim)')+'"></span>'+esc(x.txt)+' <span class="mini">· le toca al '+x.q+'</span></div>').join('')+'</div>':'')+
-    cajaCalidad(a)+cajaVideo(a)+
-    '<div class="box"><h4>Registrar lo que pasó · '+etiquetaEtapa(a,s)+'</h4><div class="row2" style="margin:0 0 10px"><span class="mini">¿Cuándo pasó?</span><input type="date" id="fecha-'+a.id+'" value="'+HOY+'" max="'+HOY+'" style="width:auto"><span class="mini">cámbiala si estás registrando algo de días anteriores</span>'+(s.etapa!=='sin'?'<button class="btn" style="margin-left:auto" onclick="corregirFecha(\''+a.id+'\')" title="Usa la fecha de ¿Cuándo pasó?">Corregir fecha: llegó a '+ET[s.etapa].l+' ese día</button>':'')+'</div>'+(acts?'<div class="acts">'+acts+'</div>':'<div class="mini">'+(s.etapa==='rev'?'Para devolver al docente o aprobar, usa la caja de Revisión de calidad de arriba.':'Entregada a Fábrica. No hay más pasos.')+'</div>')+
-      '<textarea id="nota-'+a.id+'" placeholder="Nota opcional (se guarda con el próximo registro)" style="margin-top:10px"></textarea>'+
-      '<div class="row2"><button class="btn" onclick="registrar(\''+a.id+'\',\'nota\')">Guardar solo la nota</button>'+
-      '<select style="width:auto" onchange="cambiarResp(\''+a.id+'\',this.value)"><option value="">Responsable: '+(s.responsable||'sin asignar')+'</option>'+PERSONAS.map(p=>'<option>'+p+'</option>').join('')+'</select>'+
+  const tabs=[['calidad','Calidad'],['fechas','Fechas'],['tiempo','Tiempo'],['correos','Correos'],['historial','Historial'],['datos','Datos']];
+  const tab=FICHA_TAB||tabDefecto(a,s);
+  const cr=s.cal?calResumen(s.cal):null,nAl=al.filter(x=>x.n>=2).length;
+  const bd={calidad:cr?(calV2(s.cal)?(cr.bloq?'<i class="r">'+cr.bloq+'</i>':cr.pend?'<i class="a">'+cr.pend+'</i>':''):(cr.corregir?'<i class="r">'+cr.corregir+'</i>':'')):(s.etapa==='rev'?'<i class="a">!</i>':''),
+    fechas:nAl?'<i class="'+(al.some(x=>x.n>=3)?'r':'a')+'">'+nAl+'</i>':'',historial:s.eventos.length?'<i>'+s.eventos.length+'</i>':''};
+  const P=proxPaso(a,s),w=trab(s);
+  const chips=[P?'<span style="'+(P.f<HOY?'background:#fde8e8;color:var(--danger)':P.f===HOY?'background:#e6f0fd;color:#1f5fa8':'')+'">Próxima: '+(P.f===HOY?'hoy':fmtc(P.f))+' · '+esc(P.t)+'</span>':'',
+    s.cal?'<span>'+chipCal(a,s).replace(/<[^>]+>/g,'')+'</span>':'',
+    w.ini?'<span style="background:#e7f6ec;color:var(--ok)">● reloj <b data-clk="'+a.id+'">'+fmtClk(msTrab(s))+'</b></span>':msTrab(s)>0?'<span>trabajado '+fmtH(msTrab(s))+'</span>':'',
+    s.rondas?'<span>'+s.rondas+' ronda'+(s.rondas>1?'s':'')+' prof.</span>':'',s.rc?'<span>'+s.rc+' coord.</span>':''].filter(Boolean).join('');
+  const registrarBox='<div class="box"><h4>Registrar lo que pasó · '+etiquetaEtapa(a,s)+'</h4><div class="row2" style="margin:0 0 10px"><span class="mini">¿Cuándo pasó?</span><input type="date" id="fecha-'+a.id+'" value="'+HOY+'" max="'+HOY+'" style="width:auto"><span class="mini">cámbiala si registras algo de días anteriores</span>'+(s.etapa!=='sin'?'<button class="btn" style="margin-left:auto" onclick="corregirFecha(\''+a.id+'\')" title="Usa la fecha de ¿Cuándo pasó?">Corregir fecha: llegó a '+ET[s.etapa].l+' ese día</button>':'')+'</div>'+(acts?'<div class="acts">'+acts+'</div>':'<div class="mini">'+(s.etapa==='rev'?'Para devolver al docente o aprobar, usa la pestaña Calidad.':'Entregada a Fábrica. No hay más pasos.')+'</div>')+
+      '<textarea id="nota-'+a.id+'" placeholder="Nota opcional (se guarda con el próximo registro)" style="margin-top:10px;min-height:44px"></textarea>'+
+      '<div class="row2"><button class="btn" onclick="registrar(\''+a.id+'\',\'nota\')">Guardar solo la nota</button></div></div>';
+  const datosBox='<div class="box"><h4>Responsable y etapa</h4><div class="row2" style="margin:0"><select style="width:auto" onchange="cambiarResp(\''+a.id+'\',this.value)"><option value="">Responsable: '+(s.responsable||'sin asignar')+'</option>'+PERSONAS.map(p=>'<option>'+p+'</option>').join('')+'</select>'+
       '<select style="width:auto" onchange="moverEtapa(\''+a.id+'\',this.value)"><option value="">Corregir etapa…</option>'+ETAPAS.map(e=>'<option value="'+e.k+'">'+e.l+'</option>').join('')+'</select></div></div>'+
     '<div class="box"><h4>Datos</h4><div style="font-size:12.5px;line-height:1.8"><b>Docente:</b> '+esc(a.docente||'—')+' · <select style="width:auto;padding:2px 6px;font-size:12px" onchange="setDocTipo(\''+a.id+'\',this.value)">'+(docTipo(a)?'':'<option value="" selected>¿UIDE o EIG?</option>')+'<option value="UIDE"'+(docTipo(a)==='UIDE'?' selected':'')+'>Docente UIDE</option><option value="EIG"'+(docTipo(a)==='EIG'?' selected':'')+'>Docente EIG</option></select> · <select style="width:auto;padding:2px 6px;font-size:12px" onchange="setFlujo(\''+a.id+'\',this.value)"><option value="Autor"'+(a.flujo!=='IA'?' selected':'')+'>Escribe el profesor</option><option value="IA"'+(a.flujo==='IA'?' selected':'')+'>Escribe el equipo con IA</option></select><br><b>Contacto:</b> '+(a.contacto?esc(a.contacto):'<span style="color:var(--warn)">sin correo</span>')+' <button class="btn" style="padding:1px 8px;font-size:11px;margin-left:4px" onclick="editarDocente(\''+a.id+'\')">✎ Cambiar docente o correo</button><br><b>Programa:</b> '+esc(a.programa)+(a.metodologia?' · '+a.metodologia:'')+(a.facultad?'<br><b>Facultad:</b> '+esc(a.facultad)+(a.escuela?' · '+esc(a.escuela):''):'')+
       '<br><b>Coordinador:</b> '+(a.coordinador?esc(a.coordinador)+(a.correoCoord?' · '+esc(a.correoCoord):' · <span style="color:var(--warn)">sin correo</span>'):'<span style="color:var(--warn)">sin dato</span>')+
       '<br><b>Carpeta:</b> '+(a.drive?'<a href="'+esc(a.drive)+'" target="_blank" rel="noopener">Abrir carpeta de Drive ↗</a>':'<span style="color:var(--warn)">sin enlace</span>')+' <button class="btn" type="button" style="padding:1px 8px;font-size:11px" onclick="editarCarpeta(\''+a.id+'\')">✎</button>'+
       (a.novedad&&a.novedad.toUpperCase().startsWith('SI')?'<br><b style="color:var(--danger)">Novedad UIDE:</b> '+esc(a.novedad):'')+
       (a.incidencia?'<br><b>Nota de UIDE:</b> '+esc(a.incidencia):'')+
-      '<br><b>Excel:</b> '+(a.filaCrono?'fila '+a.filaCrono+' del cronograma':'sin fila en el cronograma')+(a.filaSeg?' · fila '+a.filaSeg+' del seguimiento':'')+'</div></div>'+
-    cajaCorreos(a)+
-  '</div><div>'+
-    cajaTiempo(a)+
-    '<div class="box"><h4>Trazabilidad</h4>'+(evs||'<div class="mini">Aún no hay registros en el dashboard.</div>')+(hist?'<div class="mini" style="margin-top:10px"><b>Historial anterior (Excel)</b></div><div class="hist">'+esc(hist)+'</div>':'')+'</div>'+
-  '</div></div></div>';
+      '<br><b>Excel:</b> '+(a.filaCrono?'fila '+a.filaCrono+' del cronograma':'sin fila en el cronograma')+(a.filaSeg?' · fila '+a.filaSeg+' del seguimiento':'')+'</div></div>';
+  const panel={
+    calidad:cajaCalidad(a),
+    fechas:'<div class="box"><h4>Fechas del cronograma UIDE · '+(a.flujo==='IA'?'IA':'Autor')+(F.dePlan?'':' · calculadas (sin fila en el cronograma)')+'</h4>'+tl+'<div class="mini" style="margin-top:8px">Arriba: fecha del cronograma UIDE · abajo: fecha real en que pasó (≈ = aproximada del archivo de UIDE). Hoy '+fmt(HOY)+(s.encargo&&a.flujo==='Autor'?' · encargo enviado '+(/^\d{4}-\d{2}-\d{2}$/.test(s.encargo)?fmt(s.encargo):'(sin fecha)'):'')+'</div></div>'+
+      cajaComp(a)+(al.length?'<div class="box" style="border-color:#f5c2c2"><h4 style="color:var(--danger)">Alarmas</h4>'+al.map(x=>'<div style="font-size:13px;padding:3px 0"><span class="sq" style="background:'+(x.n>=3?'var(--danger)':x.n==2?'var(--warn)':'var(--dim)')+'"></span>'+esc(x.txt)+' <span class="mini">· le toca al '+x.q+'</span></div>').join('')+'</div>':''),
+    tiempo:cajaTiempo(a),
+    correos:cajaCorreos(a)+cajaVideo(a),
+    historial:'<div class="box"><h4>Trazabilidad</h4>'+(evs||'<div class="mini">Aún no hay registros en el dashboard.</div>')+(hist?'<div class="mini" style="margin-top:10px"><b>Historial anterior (Excel)</b></div><div class="hist">'+esc(hist)+'</div>':'')+'</div>',
+    datos:datosBox};
+  return '<div class="det" onclick="event.stopPropagation()">'+
+    '<div class="fi-head"><div style="min-width:0"><h2>'+esc(a.materia)+'</h2><div class="mini" style="margin-top:3px">'+esc(a.programa)+' · '+estHtml(a,s)+(s.responsable?(etiquetaEtapa(a,s).indexOf(s.responsable)<0?' · '+esc(s.responsable):''):' · <b style="color:var(--warn)">sin responsable</b>')+' · inicia '+fmt(a.inicio)+'</div><div class="fi-chips">'+chips+'</div></div>'+
+    '<button class="fi-x" onclick="cerrarFicha()" title="Cerrar (Esc)" aria-label="Cerrar">✕</button></div>'+
+    '<div class="fi-top">'+pasoSiguiente(a,s)+registrarBox+'</div>'+
+    '<div class="fi-tabs">'+tabs.map(([k,l])=>'<button class="fi-tab'+(k===tab?' on':'')+'" data-t="'+k+'" onclick="setTab(\''+k+'\')">'+l+(bd[k]||'')+'</button>').join('')+'</div>'+
+    '<div class="fi-body">'+tabs.map(([k])=>'<div class="fi-panel'+(k===tab?' on':'')+'" data-t="'+k+'">'+panel[k]+'</div>').join('')+'</div></div>';
 }
+let FICHA_TAB=null,FICHA_ID=null;
+function tabDefecto(a,s){return s.etapa==='rev'?'calidad':(s.etapa==='doc'||(s.etapa==='escr'&&a.flujo==='Autor'))?'correos':'fechas'}
+function setTab(k){FICHA_TAB=k;document.querySelectorAll('#ficha .fi-tab').forEach(b=>b.classList.toggle('on',b.dataset.t===k));document.querySelectorAll('#ficha .fi-panel').forEach(p=>p.classList.toggle('on',p.dataset.t===k))}
+function cerrarFicha(){ABIERTA=null;FICHA_TAB=null;renderAsig()}
+function renderFicha(){let el=document.getElementById('ficha');if(!el){el=document.createElement('div');el.id='ficha';el.className='ficha';document.body.appendChild(el)}
+  const a=ABIERTA&&DATOS.find(x=>x.id===ABIERTA),activa=document.getElementById('p-asig').classList.contains('active');
+  if(!a||!activa){el.classList.remove('show');FICHA_ID=null;return}
+  const ta=el.querySelector('textarea[id^="nota-"]'),nota=ta?ta.value:'',fe=el.querySelector('input[id^="fecha-"]'),fv=fe?fe.value:'',st=FICHA_ID===a.id?el.scrollTop:0;
+  el.innerHTML=detalle(a);el.classList.add('show');
+  if(FICHA_ID===a.id){const t2=el.querySelector('#nota-'+a.id);if(t2&&nota)t2.value=nota;const f2=el.querySelector('#fecha-'+a.id);if(f2&&fv)f2.value=fv}
+  el.scrollTop=st;FICHA_ID=a.id}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ABIERTA&&!document.querySelector('#ayuda.show')){cerrarFicha()}});
 function cajaTiempo(a){
   const s=ST[a.id],w=trab(s),te=tiemposEtapas(a);
   const catAct=w.ini?(w.cat||catSugerida(a,s)):(w.cat&&catsDe(a).includes(w.cat)&&w.cat===catSugerida(a,s)?w.cat:catSugerida(a,s));
@@ -788,76 +830,134 @@ function cajaTiempo(a){
     '<div class="mini" style="margin-top:6px">Días hábiles desde el primer registro en el dashboard'+(te.desde?' ('+fmt(ymd(new Date(te.desde)))+')':'')+'. Si empiezas otra asignatura, el dashboard te pregunta si pausar esta o trabajar las dos <b>en paralelo</b> (esas horas no se suman dos veces en tus totales). Se pausa sola al enviarla al docente o al coordinador. Si cambias la categoría con el reloj corriendo, se cierra un tramo y empieza otro. <b>Pausar</b> = la retomo después; <b>✓ Terminar</b> = ya acabé esa tarea.</div>'+
     lineaCat+(parA.ms>=6e4?'<div class="mini" style="margin-top:4px"><b>En paralelo:</b> '+fmtH(parA.ms)+' de este tiempo fueron con otro reloj corriendo a la vez.</div>':'')+lineaOp+(terms?'<div class="mini" style="margin-top:4px">'+terms+'</div>':'')+'<div class="mini" style="margin-top:4px"><b>Rondas con el profesor:</b> <span style="'+(dev>2?'color:var(--danger);font-weight:700':'')+'">'+dev+(dev>2?' (máximo 2)':'')+'</span>'+(s.rc?' · <b>Cambios pedidos por el coordinador:</b> '+s.rc:'')+'</div>'+
     (ses?'<div style="margin-top:8px">'+ses+'</div>':'')+'</div>'}
-/* ── Revisión de calidad (skill revision-materia-eig, 9 puntos) ── */
+/* ── Revisión de calidad ──
+   Pauta vigente: Base de revisión de 13 controles (0 a 12), hecha en ChatGPT. Al final de su resumen, ChatGPT agrega el bloque
+   FABRICA_REVISION_V2 (JSON) con el estado de cada control, los pendientes con su código y la aprobación por documento.
+   Las revisiones antiguas (9 puntos, bloque FABRICA_REVISION_V1) se siguen viendo como "pauta anterior". */
 const CAL_PUNTOS=['Tema y ¿Qué hemos aprendido? coinciden','Entre 3 y 5 subtemas','Imágenes y tablas (cantidad y rótulos)','El tema coincide con la matriz','Guion de infografía claro y secuencial','Guiones de video: título de la matriz, saludo y máx. 404 palabras','Video de presentación docente subido','El Saber más aporta información nueva','Tests con 30 preguntas'];
 const CAL_EST={bien:['Bien','ok'],revisar:['Revisar','hoy'],corregir:['Corregir','mal']};
+const CTRL=['Matriz de arranque','Tema frente a la matriz','Subtemas (3 a 5)','Imágenes, tablas y vídeos del Tema','¿Qué hemos aprendido?','Saber más','Test (30 preguntas)','Escenario de estudio y resolución','Guion de infografía','Guiones de vídeo','Vídeo docente','Ortografía y redacción','Coherencia integral y plantillas'];
+/* estado → [texto, clase, bloquea el paso al coordinador] */
+const E2={cumple:['Cumple','ok',0],concesion:['Con concesiones','ok',0],parcial:['Parcial','hoy',0],revisar:['Requiere revisión','mal',1],no_cumple:['No cumple','mal',1],no_verif:['No verificable','esp',0],excluido:['Excluido','esp',0]};
+const E2_ORD=['no_cumple','revisar','parcial','no_verif','concesion','excluido','cumple'];
 const CAL_VER={},CAL_PEGAR={};
-function calResumen(c){const r={bien:0,revisar:0,corregir:0};(c&&c.p||[]).forEach(x=>r[x.e]=(r[x.e]||0)+1);return r}
-function cal9(s){const c=s.cal;return !!(c&&c.p&&c.p.length===9&&c.p.every(x=>x.e==='bien'))}
+function calV2(c){return !!(c&&c.v===2)}
+function calEstado2(v){v=String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/_/g,' ');
+  if(/no cumple|incumple/.test(v))return 'no_cumple';if(/no verif/.test(v))return 'no_verif';if(/exclu/.test(v))return 'excluido';if(/parcial/.test(v))return 'parcial';
+  if(/requiere|revis|pendiente/.test(v))return 'revisar';if(/concesi/.test(v))return 'concesion';if(/cumple|bien|ok|correcto/.test(v))return 'cumple';return 'revisar'}
+function calResumen(c){if(calV2(c)){const r={};Object.keys(E2).forEach(k=>r[k]=0);c.c.forEach(x=>r[x.e]=(r[x.e]||0)+1);r.bloq=c.c.filter(x=>E2[x.e][2]).length;r.pend=(c.pe||[]).filter(x=>x.e!=='c').length;return r}
+  const r={bien:0,revisar:0,corregir:0};(c&&c.p||[]).forEach(x=>r[x.e]=(r[x.e]||0)+1);return r}
+/* ¿Lista para el coordinador? Pauta nueva: ningún control en "No cumple" ni "Requiere revisión". Pauta anterior: 9/9 en bien. */
+function cal9(s){const c=s.cal;if(!c)return false;if(calV2(c))return c.c.length===13&&!c.c.some(x=>E2[x.e][2]);return !!(c.p&&c.p.length===9&&c.p.every(x=>x.e==='bien'))}
 function calRonda(s){const c=s.cal;return c?(c.dev||c.nueva?c.r+1:c.r):1}
-/* Ronda nueva pendiente: el resultado anterior queda guardado y se espera el de la ronda siguiente */
 function calPend(s){const c=s.cal;return !!(c&&s.etapa==='rev'&&(c.dev||c.nueva))}
 function calNueva(id){const s=ST[id],c=s.cal;if(!c)return;
   if(!confirm('¿Empezar la revisión de calidad ronda '+(c.r+1)+'?\nEl resultado de la ronda '+c.r+' queda guardado en la trazabilidad.'))return;
   c.nueva=true;s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'nota',l:'Nueva revisión de calidad (ronda '+(c.r+1)+')',nota:'',por:s.responsable||''});
-  CAL_PEGAR[id]=true;guardar();render();toast('Ronda '+(c.r+1)+': pulsa 1 · Preparar para Claude')}
+  CAL_PEGAR[id]=true;guardar();render();toast('Ronda '+(c.r+1)+': pulsa 1 · Copiar datos para ChatGPT')}
 function calCancelarNueva(id){const s=ST[id];if(!s.cal)return;s.cal.nueva=false;CAL_PEGAR[id]=false;guardar();render();toast('Se mantiene la ronda '+s.cal.r)}
 function chipCal(a,s){const c=s.cal;
   if(!c)return s.etapa==='rev'?'<div class="t2">Calidad pendiente</div>':'';
   if(calPend(s))return '<div class="t2">Calidad R'+(c.r+1)+' pendiente</div>';
+  const r=calResumen(c);
+  if(calV2(c)){if(r.bloq)return '<div><span class="cr mal">R'+c.r+' · '+r.bloq+' por corregir</span></div>';
+    return '<div><span class="cr '+(r.pend||r.parcial?'hoy':'ok')+'">Calidad lista'+(r.pend?' · '+r.pend+' pend.':'')+'</span></div>'}
   if(cal9(s))return '<div><span class="cr ok">Calidad 9/9</span></div>';
-  const r=calResumen(c);return '<div><span class="cr '+(r.corregir?'mal':'hoy')+'">R'+c.r+' · '+[r.corregir?r.corregir+' por corregir':'',r.revisar?r.revisar+' por revisar':''].filter(Boolean).join(' · ')+'</span></div>'}
+  return '<div><span class="cr '+(r.corregir?'mal':'hoy')+'">R'+c.r+' · '+[r.corregir?r.corregir+' por corregir':'',r.revisar?r.revisar+' por revisar':''].filter(Boolean).join(' · ')+'</span></div>'}
 function copiarTexto(txt,ok){
   const plan=()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast(ok)}catch(e){prompt('Copia este texto:',txt)}ta.remove()};
   if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(txt).then(()=>toast(ok)).catch(plan);else plan()}
 function calPreparar(id){const a=DATOS.find(x=>x.id===id),s=ST[id];
   if(s.responsable&&!trab(s).ini)empezar(id,true);
-  copiarTexto('DASHBOARD_FABRICA · GENERACION_CONTENIDOS · asignatura_id='+a.id+' · ronda='+calRonda(s)+'\nRevisa la materia "'+a.materia+'" ('+a.programa+') con la pauta de 9 puntos y al final entrega el bloque FABRICA_REVISION_V1.\nCarpeta de la materia: '+(a.drive||'[pega aquí el enlace]')+'\nMatriz de arranque: [pega aquí el enlace y la pestaña "Materia N"]',
-    'Copiado: pégalo en Claude junto con la carpeta y la matriz'+(trab(s).ini?' · el reloj de trabajo está corriendo':''))}
-function calLeerBloque(txt){const i=txt.indexOf('FABRICA_REVISION_V1');if(i<0)return null;const r=txt.slice(i+19);const a=r.indexOf('{'),b=r.lastIndexOf('}');if(a<0||b<a)return null;try{return JSON.parse(r.slice(a,b+1))}catch(e){return null}}
+  copiarTexto('DASHBOARD_GENERACION_CONTENIDOS · asignatura_id='+a.id+' · ronda='+calRonda(s)+'\n'+
+    'Revisa la asignatura "'+a.materia+'" ('+a.programa+') con la Base de revisión (controles 0 a 12)'+(calRonda(s)>1?'. Es la ronda '+calRonda(s)+': compara con la revisión anterior':'')+'.\n'+
+    'Docente: '+(a.docente||'—')+'\nCarpeta de la asignatura: '+(a.drive||'[pega aquí el enlace]')+'\nMatriz de arranque: [pega aquí el enlace y la pestaña "Materia N"]\n'+
+    'Al final del resumen agrega el bloque FABRICA_REVISION_V2 con asignatura_id='+a.id+' y ronda='+calRonda(s)+'.',
+    'Copiado: pégalo en ChatGPT con la carpeta y la matriz'+(trab(s).ini?' · el reloj de trabajo está corriendo':''))}
+function calLeerBloque(txt,tag){const i=txt.lastIndexOf(tag);if(i<0)return null;const r=txt.slice(i+tag.length);const a=r.indexOf('{');if(a<0)return null;
+  let d=0,k=a,str=false,esc_=false;for(;k<r.length;k++){const ch=r[k];if(str){if(esc_)esc_=false;else if(ch==='\\')esc_=true;else if(ch==='"')str=false;continue}if(ch==='"')str=true;else if(ch==='{')d++;else if(ch==='}'){d--;if(!d)break}}
+  const js=r.slice(a,k+1).replace(/[“”]/g,'"');try{return JSON.parse(js)}catch(e){return null}}
 function calEstado(v){v=String(v||'').toLowerCase();return /corr|❌/.test(v)?'corregir':/rev|⚠/.test(v)?'revisar':'bien'}
-function calCompactar(c){let L=[180,140,160];const arma=()=>({r:c.r,f:c.f,por:c.por,dev:c.dev,nueva:false,p:c.p.map(x=>({n:x.n,e:x.e,f:String(x.f||'').slice(0,L[0]),a:String(x.a||'').slice(0,L[1]),m:x.m||0})),ac:c.ac.slice(0,6).map(x=>String(x).slice(0,L[2])),nc:c.nc});
-  let o=arma();while(JSON.stringify(o).length>3800&&L[0]>40){L=L.map(x=>Math.floor(x*0.75));o=arma()}return o}
-function calImportar(id){const a=DATOS.find(x=>x.id===id),s=ST[id];const el=document.getElementById('cal-txt-'+id);const j=calLeerBloque(el?el.value:'');
-  if(!j||!Array.isArray(j.puntos)){toast('No encontré el bloque FABRICA_REVISION_V1. Pega la respuesta completa de Claude.');return}
-  if(j.asignatura_id&&j.asignatura_id!==id&&!confirm('Ese resultado dice ser de otra asignatura ('+j.asignatura_id+' · '+(j.materia||'')+'). ¿Usarlo igual para "'+a.materia+'"?'))return;
-  const p=[];for(let n=1;n<=9;n++){const x=j.puntos.find(q=>+q.n===n);p.push(x?{n,e:calEstado(x.estado),f:x.falla||x.bien||'',a:x.accion||''}:{n,e:'revisar',f:'Este punto no vino en el resultado',a:''})}
-  const c=calCompactar({r:calRonda(s),f:ymd(new Date()),por:s.responsable||'',dev:false,p,ac:(j.acciones||[]).map(String),nc:(j.no_corresponden||[]).slice(0,4).map(x=>({ar:String(x.archivo||'').slice(0,80),m:String(x.motivo||'').slice(0,120)}))});
+function calCompactar(c){let L=[180,140,160];
+  const arma=()=>c.v===2?{v:2,r:c.r,f:c.f,por:c.por,dev:c.dev,nueva:false,rid:String(c.rid||'').slice(0,40),
+      c:c.c.map(x=>({n:x.n,e:x.e,t:String(x.t||'').slice(0,L[0]),m:x.m||0})),pe:(c.pe||[]).slice(0,10).map(x=>({id:String(x.id||'').slice(0,30),c:x.c,v:x.v,e:x.e,t:String(x.t||'').slice(0,L[1]),m:x.m||0})),pc:c.pc||0,ap:c.ap||null}
+    :{r:c.r,f:c.f,por:c.por,dev:c.dev,nueva:false,p:c.p.map(x=>({n:x.n,e:x.e,f:String(x.f||'').slice(0,L[0]),a:String(x.a||'').slice(0,L[1]),m:x.m||0})),ac:c.ac.slice(0,6).map(x=>String(x).slice(0,L[2])),nc:c.nc};
+  let o=arma();while(JSON.stringify(o).length>3800&&L[0]>30){L=L.map(x=>Math.floor(x*0.75));o=arma()}return o}
+function calImportar(id){const a=DATOS.find(x=>x.id===id),s=ST[id];const el=document.getElementById('cal-txt-'+id),txt=el?el.value:'';
+  const j2=calLeerBloque(txt,'FABRICA_REVISION_V2'),j1=j2?null:calLeerBloque(txt,'FABRICA_REVISION_V1');
+  const j=j2||j1;
+  if(!j||!(Array.isArray(j.controles)||Array.isArray(j.puntos))){toast(/FABRICA_REVISION_V2/.test(txt)?'El bloque FABRICA_REVISION_V2 está incompleto o mal copiado. Copia la respuesta completa de ChatGPT.':'No encontré el bloque FABRICA_REVISION_V2 al final. Pídele a ChatGPT que lo agregue y copia la respuesta completa.');return}
+  if(j.asignatura_id&&j.asignatura_id!==id&&!confirm('Ese resultado dice ser de otra asignatura ('+j.asignatura_id+' · '+(j.materia||j.asignatura||'')+'). ¿Usarlo igual para "'+a.materia+'"?'))return;
+  let c,falt=0;
+  if(j2){const cs=[];for(let n=0;n<=12;n++){const x=j.controles.find(q=>+q.n===n);if(!x)falt++;cs.push(x?{n,e:calEstado2(x.estado),t:x.resumen||x.nota||''}:{n,e:'revisar',t:'Este control no vino en el resultado'})}
+    const pe=(j.pendientes||[]).map(x=>({id:x.id||'',c:+x.control,v:/gener|equipo/i.test(x.via||'')?'g':'d',e:/corregid|resuelt|cerrad|hecho/i.test(x.estado||'')?'c':'p',t:x.texto||''}));
+    const ap=j.aprobacion&&(j.aprobacion.documentos!=null)?{d:+j.aprobacion.documentos||0,a:+j.aprobacion.aprobados||0,r:+j.aprobacion.por_revalidar||0}:null;
+    c=calCompactar({v:2,r:calRonda(s),f:ymd(new Date()),por:s.responsable||'',dev:false,rid:j.revision||'',c:cs,pe:pe.filter(x=>x.e==='p'),pc:pe.filter(x=>x.e==='c').length,ap})}
+  else{const p=[];for(let n=1;n<=9;n++){const x=j.puntos.find(q=>+q.n===n);p.push(x?{n,e:calEstado(x.estado),f:x.falla||x.bien||'',a:x.accion||''}:{n,e:'revisar',f:'Este punto no vino en el resultado',a:''})}
+    c=calCompactar({r:calRonda(s),f:ymd(new Date()),por:s.responsable||'',dev:false,p,ac:(j.acciones||[]).map(String),nc:(j.no_corresponden||[]).slice(0,4).map(x=>({ar:String(x.archivo||'').slice(0,80),m:String(x.motivo||'').slice(0,120)}))})}
   s.cal=c;calAjVideo(s);const r=calResumen(c);
-  s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'calidad',l:'Revisión de calidad ronda '+c.r+': '+r.bien+' bien · '+r.revisar+' por revisar · '+r.corregir+' por corregir',nota:c.ac.slice(0,3).join(' · ').slice(0,300),por:s.responsable||''});
-  CAL_PEGAR[id]=false;guardar();render();toast(cal9(s)?'Calidad 9/9: lista para pasar al coordinador':'Resultado guardado: '+(r.corregir+r.revisar)+' punto(s) por ajustar')}
-function calCiclo(id,n){const s=ST[id];if(!s.cal)return;const x=s.cal.p.find(q=>q.n===n);const o=['bien','revisar','corregir'];x.e=o[(o.indexOf(x.e)+1)%3];x.m=1;guardar();renderAsig()}
-function calCorreo(a){const s=ST[a.id],c=s.cal;
-  const lin=c.p.filter(x=>x.e!=='bien').map(x=>'• '+CAL_PUNTOS[x.n-1]+': '+(x.a||x.f||'por revisar'));
-  (c.nc||[]).forEach(x=>lin.push('• Revisar el documento "'+x.ar+'": '+x.m));
-  return 'Estimado/a '+(a.docente||'docente')+':\n\nHemos revisado los contenidos de la asignatura '+a.materia+(a.programa?' ('+a.programa+')':'')+'. Para poder continuar con el proceso, le pedimos por favor los siguientes ajustes:\n\n'+lin.join('\n')+
-    '\n\nQuedamos atentos a los documentos corregidos. Puede responder directamente a este correo.\n\nCordialmente,\n\n'+(CFG.FIRMA||'Equipo de Generación de Contenidos · EIG Campus')}
+  const resumen=calV2(c)?'Revisión de calidad ronda '+c.r+(c.rid?' ('+c.rid+')':'')+': '+(r.cumple+r.concesion)+' cumplen · '+r.parcial+' parciales · '+r.bloq+' por corregir · '+r.no_verif+' no verificables · '+r.pend+' pendientes'
+    :'Revisión de calidad ronda '+c.r+': '+r.bien+' bien · '+r.revisar+' por revisar · '+r.corregir+' por corregir';
+  s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'calidad',l:resumen,nota:calV2(c)?(c.pe||[]).slice(0,3).map(x=>x.id+': '+x.t).join(' · ').slice(0,300):c.ac.slice(0,3).join(' · ').slice(0,300),por:s.responsable||''});
+  CAL_PEGAR[id]=false;guardar();render();
+  toast(falt?'Ojo: faltaron '+falt+' control(es) en el bloque; quedaron en "Requiere revisión"':cal9(s)?'Calidad lista para el coordinador'+(r.pend?' · '+r.pend+' pendiente(s) a la vista':''):'Resultado guardado: '+(calV2(c)?r.bloq:r.corregir+r.revisar)+' por corregir')}
+function calCiclo(id,n){const s=ST[id];if(!s.cal)return;
+  if(calV2(s.cal)){const x=s.cal.c.find(q=>q.n===n);x.e=E2_ORD[(E2_ORD.indexOf(x.e)+1)%E2_ORD.length];x.m=1}
+  else{const x=s.cal.p.find(q=>q.n===n);const o=['bien','revisar','corregir'];x.e=o[(o.indexOf(x.e)+1)%3];x.m=1}
+  guardar();renderAsig()}
+function calPendTog(id,k){const s=ST[id],x=s.cal&&s.cal.pe&&s.cal.pe[k];if(!x)return;x.e=x.e==='c'?'p':'c';x.m=1;guardar();renderAsig()}
+function calCorreo(a){const s=ST[a.id],c=s.cal;let lin;
+  if(calV2(c)){lin=(c.pe||[]).filter(x=>x.e!=='c'&&x.v!=='g').map(x=>'• '+CTRL[x.c]+(x.id?' ('+x.id+')':'')+': '+x.t);
+    const conPend=new Set((c.pe||[]).filter(x=>x.e!=='c').map(x=>x.c));
+    c.c.filter(x=>E2[x.e][2]&&!conPend.has(x.n)).forEach(x=>lin.push('• '+CTRL[x.n]+': '+(x.t||'por revisar')))}
+  else{lin=c.p.filter(x=>x.e!=='bien').map(x=>'• '+CAL_PUNTOS[x.n-1]+': '+(x.a||x.f||'por revisar'));(c.nc||[]).forEach(x=>lin.push('• Revisar el documento "'+x.ar+'": '+x.m))}
+  return 'Estimado/a '+(a.docente||'docente')+':\n\nHemos revisado los contenidos de la asignatura '+a.materia+(a.programa?' ('+a.programa+')':'')+'. Para poder continuar con el proceso, le pedimos por favor los siguientes ajustes:\n\n'+(lin.length?lin.join('\n'):'• (escribe aquí los ajustes)')+
+    '\n\nQuedamos atentos a los documentos corregidos. Cuando los cargue, por favor confírmenoslo respondiendo a este mismo correo.\n\nCordialmente,\n\nEquipo de Generación de Contenidos'}
 function calDevolver(id){const a=DATOS.find(x=>x.id===id),s=ST[id];if(!s.cal){toast('Primero pega el resultado de la revisión');return}
   if((s.rondas||0)>=2){const m=pedirAut(s);if(!m)return;AUT_RONDA[id]=m}
-  if(cal9(s)&&!confirm('La revisión está en 9/9. ¿Seguro que quieres devolverla al docente?'))return;
-  copiarTexto(calCorreo(a),'Correo copiado: pégalo en Outlook respondiendo al profesor');
-  const r=calResumen(s.cal);const ta=document.getElementById('nota-'+id);if(ta)ta.value='Devolución con informe de calidad ronda '+s.cal.r+': '+r.corregir+' por corregir, '+r.revisar+' por revisar';
+  const c=s.cal,r=calResumen(c),v2=calV2(c);
+  if(cal9(s)&&!(v2&&(c.pe||[]).some(x=>x.e!=='c'&&x.v!=='g'))&&!confirm('La revisión está lista para el coordinador. ¿Seguro que quieres devolverla al docente?'))return;
+  copiarTexto(calCorreo(a),'Correo copiado: pégalo en Outlook respondiendo en el hilo (Responder a todos)');
+  const ta=document.getElementById('nota-'+id);if(ta)ta.value=v2?'Devolución con informe de calidad ronda '+c.r+': '+r.bloq+' por corregir, '+(c.pe||[]).filter(x=>x.e!=='c'&&x.v!=='g').length+' pendientes para el docente':'Devolución con informe de calidad ronda '+c.r+': '+r.corregir+' por corregir, '+r.revisar+' por revisar';
   s.cal.dev=true;registrar(id,'alDocente')}
+function calLinea(s){const c=s.cal,r=calResumen(c);
+  if(calV2(c))return (cal9(s)?'<span class="cr ok">Lista</span>':'<span class="cr mal">'+r.bloq+' por corregir</span>')+' <span class="mini">· '+(r.cumple+r.concesion)+' de 13 cumplen'+(r.parcial?' · '+r.parcial+' parcial':'')+(r.pend?' · '+r.pend+' pendientes':'')+' · ronda '+c.r+' · '+fmt(c.f)+(c.dev?' · devuelta al docente':'')+'</span>';
+  return (cal9(s)?'<span class="cr ok">9/9</span>':'<span class="cr '+(r.corregir?'mal':'hoy')+'">'+r.corregir+' por corregir · '+r.revisar+' por revisar</span>')+' <span class="mini">· pauta anterior (9 puntos) · ronda '+c.r+' · '+fmt(c.f)+(c.dev?' · devuelta al docente':'')+'</span>'}
+function calCuerpo(a,c,soloLectura){const id=a.id;
+  if(!calV2(c)){const malos=c.p.filter(x=>x.e!=='bien'),buenos=c.p.filter(x=>x.e==='bien');
+    const fila=x=>'<div style="display:grid;grid-template-columns:20px minmax(0,1fr) 84px;gap:8px;align-items:start;padding:6px 0;border-top:1px dashed var(--border);font-size:12.5px"><span class="mini">'+x.n+'</span><div>'+CAL_PUNTOS[x.n-1]+(x.e!=='bien'&&(x.f||x.a)?'<div class="mini">'+esc(x.f)+(x.a?' → '+esc(x.a):'')+'</div>':'')+'</div><span class="cr '+CAL_EST[x.e][1]+'" style="'+(soloLectura?'':'cursor:pointer;')+'text-align:center" '+(soloLectura?'':'title="Clic para cambiar" onclick="calCiclo(\''+id+'\','+x.n+')"')+'>'+CAL_EST[x.e][0]+(x.m?' ✎':'')+'</span></div>';
+    return '<div class="mini" style="margin:8px 0 2px">Pauta anterior (9 puntos) · ronda '+c.r+' · '+fmt(c.f)+(c.por?' · '+esc(c.por):'')+'</div>'+malos.map(fila).join('')+
+      (buenos.length?(CAL_VER[id]?buenos.map(fila).join(''):'<div class="mini" style="padding:6px 0;cursor:pointer;border-top:1px dashed var(--border)" onclick="CAL_VER[\''+id+'\']=true;renderAsig()">+ '+buenos.length+' punto(s) en bien (ver)</div>'):'')}
+  const r=calResumen(c),ord=c.c.slice().sort((x,y)=>E2_ORD.indexOf(x.e)-E2_ORD.indexOf(y.e)||x.n-y.n);
+  const ver=ord.filter(x=>['no_cumple','revisar','parcial','no_verif'].includes(x.e)),ok=ord.filter(x=>!ver.includes(x));
+  const fila=x=>'<div style="display:grid;grid-template-columns:22px minmax(0,1fr) 112px;gap:8px;align-items:start;padding:6px 0;border-top:1px dashed var(--border);font-size:12.5px"><span class="mini">'+x.n+'</span><div>'+CTRL[x.n]+(x.t&&x.e!=='cumple'?'<div class="mini">'+esc(x.t)+'</div>':'')+'</div><span class="cr '+E2[x.e][1]+'" style="'+(soloLectura?'':'cursor:pointer;')+'text-align:center" '+(soloLectura?'':'title="Clic para cambiar" onclick="calCiclo(\''+id+'\','+x.n+')"')+'>'+E2[x.e][0]+(x.m?' ✎':'')+'</span></div>';
+  const cuenta=(k,l)=>r[k]?'<span class="cr '+E2[k][1]+'" style="margin-right:4px">'+r[k]+' '+l+'</span>':'';
+  const pe=(c.pe||[]);
+  return '<div class="mini" style="margin:8px 0 4px">Ronda '+c.r+(c.rid?' · '+esc(c.rid):'')+' · '+fmt(c.f)+(c.por?' · '+esc(c.por):'')+'</div>'+
+    '<div style="margin-bottom:6px">'+cuenta('cumple','cumplen')+cuenta('concesion','con concesiones')+cuenta('parcial','parciales')+cuenta('revisar','requieren revisión')+cuenta('no_cumple','no cumplen')+cuenta('no_verif','no verificables')+cuenta('excluido','excluidos')+'</div>'+
+    (c.ap?'<div class="mini" style="margin-bottom:6px"><b>Aprobación para producción:</b> '+c.ap.a+' de '+c.ap.d+' documentos aprobados'+(c.ap.r?' · <b style="color:#b45309">'+c.ap.r+' por revalidar</b> (se modificaron después de aprobarlos)':'')+'</div>':'')+
+    (pe.length||c.pc?'<div style="margin:8px 0 2px;font-size:12px;font-weight:600">Pendientes'+(c.pc?' <span class="mini" style="font-weight:400">· '+c.pc+' ya corregidos</span>':'')+'</div>'+
+      pe.map((x,k)=>'<div style="display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:8px;align-items:start;padding:5px 0;border-top:1px dashed var(--border);font-size:12.5px'+(x.e==='c'?';opacity:.55':'')+'"><div><b>'+esc(x.id||('Control '+x.c))+'</b> <span class="mini">· '+(CTRL[x.c]||'')+' · '+(x.v==='g'?'lo corrige el equipo':'le toca al docente')+'</span><div class="mini">'+esc(x.t)+'</div></div><span class="cr '+(x.e==='c'?'ok':'hoy')+'" style="text-align:center;'+(soloLectura?'':'cursor:pointer')+'" '+(soloLectura?'':'title="Clic para marcar como corregido" onclick="calPendTog(\''+id+'\','+k+')"')+'>'+(x.e==='c'?'Corregido':'Pendiente')+(x.m?' ✎':'')+'</span></div>').join(''):'')+
+    '<div style="margin:10px 0 2px;font-size:12px;font-weight:600">Controles</div>'+ver.map(fila).join('')+
+    (ok.length?(CAL_VER[id]?ok.map(fila).join(''):'<div class="mini" style="padding:6px 0;cursor:pointer;border-top:1px dashed var(--border)" onclick="CAL_VER[\''+id+'\']=true;renderAsig()">+ '+ok.length+' control(es) que cumplen o están excluidos (ver)</div>'):'')}
 function cajaCalidad(a){const s=ST[a.id],c=s.cal;
-  if(s.etapa!=='rev'){if(!c)return '';const r=calResumen(c);
-    return '<div class="box"><h4>Revisión de calidad</h4><div style="font-size:13px">'+(cal9(s)?'<span class="cr ok">9/9</span>':'<span class="cr '+(r.corregir?'mal':'hoy')+'">'+r.corregir+' por corregir · '+r.revisar+' por revisar</span>')+' <span class="mini">· ronda '+c.r+' · '+fmt(c.f)+(c.dev?' · devuelta al docente':'')+'</span></div></div>'}
+  if(s.etapa!=='rev'){if(!c)return '<div class="box"><h4>Revisión de calidad</h4><div class="mini">La revisión de calidad se hace cuando la asignatura está en <b>Por revisar</b>.</div></div>';
+    return '<div class="box"><h4>Revisión de calidad</h4><div style="font-size:13px">'+calLinea(s)+'</div>'+calCuerpo(a,c,true)+'</div>'}
   const pend=calPend(s);
   const pegar=CAL_PEGAR[a.id]||!c||pend;
   let h='<div class="box" style="border-color:#c9c3f3"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap"><h4 style="margin:0">Revisión de calidad · ronda '+calRonda(s)+'</h4><span class="acts">'+
-    '<button class="btn" onclick="calPreparar(\''+a.id+'\')">1 · Preparar para Claude</button><button class="btn" onclick="CAL_PEGAR[\''+a.id+'\']=true;renderAsig()">2 · Pegar resultado</button>'+(c&&!pend?'<button class="btn" style="border-color:#c9c3f3;color:#5b4fc7" onclick="calNueva(\''+a.id+'\')" title="Para revisar otra vez la materia: después de corregirla el equipo o si el coordinador pidió cambios">＋ Nueva revisión</button>':'')+'</span></div>'+
-    (pend?'<div class="note" style="margin:0 0 10px">'+(c.dev?'El docente ya devolvió sus ajustes: ':'Nueva revisión: ')+'<b>ronda '+(c.r+1)+'</b>. Pulsa <b>1 · Preparar para Claude</b> y pega aquí el resultado nuevo. La ronda '+c.r+' ('+fmt(c.f)+') queda guardada abajo.'+(c.nueva&&!c.dev?' <a href="#" onclick="calCancelarNueva(\''+a.id+'\');return false">Cancelar y seguir con la ronda '+c.r+'</a>':'')+'</div>':'');
-  if(pegar)h+='<div class="mini" style="margin-bottom:6px">Pega aquí la respuesta completa de Claude (incluye el bloque FABRICA_REVISION_V1).</div><textarea id="cal-txt-'+a.id+'" style="min-height:70px"></textarea><div class="row2"><button class="btn pri" onclick="calImportar(\''+a.id+'\')">Importar resultado</button>'+(c?'<button class="btn" onclick="CAL_PEGAR[\''+a.id+'\']=false;renderAsig()">Cancelar</button>':'')+'</div>';
-  if(c&&pend){const r=calResumen(c);
-    h+='<div class="mini" style="margin:10px 0 2px;cursor:pointer" onclick="CAL_VER[\'ant'+a.id+'\']=!CAL_VER[\'ant'+a.id+'\'];renderAsig()">'+(CAL_VER['ant'+a.id]?'▾':'▸')+' Ronda anterior ('+c.r+' · '+fmt(c.f)+'): '+r.corregir+' por corregir · '+r.revisar+' por revisar · '+r.bien+' bien</div>'+
-      (CAL_VER['ant'+a.id]?c.p.filter(x=>x.e!=='bien').map(x=>'<div style="padding:4px 0;border-top:1px dashed var(--border);font-size:12px">'+x.n+'. '+CAL_PUNTOS[x.n-1]+'<div class="mini">'+esc(x.f)+(x.a?' → '+esc(x.a):'')+'</div></div>').join(''):'')+
+    '<button class="btn" onclick="calPreparar(\''+a.id+'\')">1 · Copiar datos para ChatGPT</button><button class="btn" onclick="CAL_PEGAR[\''+a.id+'\']=true;renderAsig()">2 · Pegar resultado</button>'+(c&&!pend?'<button class="btn" style="border-color:#c9c3f3;color:#5b4fc7" onclick="calNueva(\''+a.id+'\')" title="Para revisar otra vez la materia: después de corregirla el equipo o si el coordinador pidió cambios">＋ Nueva revisión</button>':'')+'</span></div>'+
+    (pend?'<div class="note" style="margin:0 0 10px">'+(c.dev?'El docente ya devolvió sus ajustes: ':'Nueva revisión: ')+'<b>ronda '+(c.r+1)+'</b>. Pulsa <b>1 · Copiar datos para ChatGPT</b> y pega aquí el resultado nuevo. La ronda '+c.r+' ('+fmt(c.f)+') queda guardada abajo.'+(c.nueva&&!c.dev?' <a href="#" onclick="calCancelarNueva(\''+a.id+'\');return false">Cancelar y seguir con la ronda '+c.r+'</a>':'')+'</div>':'');
+  if(pegar)h+='<div class="mini" style="margin-bottom:6px">Pega aquí la respuesta completa de ChatGPT (con el bloque <b>FABRICA_REVISION_V2</b> al final).</div><textarea id="cal-txt-'+a.id+'" style="min-height:70px"></textarea><div class="row2"><button class="btn pri" onclick="calImportar(\''+a.id+'\')">Importar resultado</button>'+(c&&!pend?'<button class="btn" onclick="CAL_PEGAR[\''+a.id+'\']=false;renderAsig()">Cancelar</button>':'')+'</div>';
+  if(c&&pend){
+    h+='<div class="mini" style="margin:10px 0 2px;cursor:pointer" onclick="CAL_VER[\'ant'+a.id+'\']=!CAL_VER[\'ant'+a.id+'\'];renderAsig()">'+(CAL_VER['ant'+a.id]?'▾':'▸')+' Ronda anterior: '+calLinea(s)+'</div>'+
+      (CAL_VER['ant'+a.id]?calCuerpo(a,c,true):'')+
       '<div class="row2" style="margin-top:12px;flex-wrap:wrap"><button class="btn" onclick="registrar(\''+a.id+'\',\'aCoord\')">Enviar al coordinador sin nueva revisión (requiere motivo)</button></div>';
     return h+'</div>'}
-  if(c){const malos=c.p.filter(x=>x.e!=='bien'),buenos=c.p.filter(x=>x.e==='bien');
-    const fila=x=>'<div style="display:grid;grid-template-columns:20px minmax(0,1fr) 84px;gap:8px;align-items:start;padding:6px 0;border-top:1px dashed var(--border);font-size:12.5px"><span class="mini">'+x.n+'</span><div>'+CAL_PUNTOS[x.n-1]+(x.e!=='bien'&&(x.f||x.a)?'<div class="mini">'+esc(x.f)+(x.a?' → '+esc(x.a):'')+'</div>':'')+'</div><span class="cr '+CAL_EST[x.e][1]+'" style="cursor:pointer;text-align:center" title="Clic para cambiar" onclick="calCiclo(\''+a.id+'\','+x.n+')">'+CAL_EST[x.e][0]+(x.m?' ✎':'')+'</span></div>';
-    h+='<div class="mini" style="margin:8px 0 2px">Resultado de la ronda '+c.r+' · '+fmt(c.f)+(c.por?' · '+esc(c.por):'')+'</div>'+malos.map(fila).join('')+
-      (buenos.length?(CAL_VER[a.id]?buenos.map(fila).join(''):'<div class="mini" style="padding:6px 0;cursor:pointer;border-top:1px dashed var(--border)" onclick="CAL_VER[\''+a.id+'\']=true;renderAsig()">+ '+buenos.length+' punto(s) en bien (ver)</div>'):'')+
-      ((c.nc||[]).length?'<div style="margin-top:8px;font-size:12px;color:var(--danger)">⚠️ Posibles documentos que no corresponden: '+c.nc.map(x=>esc(x.ar)+' ('+esc(x.m)+')').join(' · ')+'</div>':'')+
-      '<div class="row2" style="margin-top:12px;flex-wrap:wrap"><button class="btn" style="border-color:#f0b4b4;color:var(--danger)" onclick="calDevolver(\''+a.id+'\')">Devolver al docente con el informe</button><button class="btn'+(cal9(s)?' pri':'')+'" onclick="registrar(\''+a.id+'\',\'aCoord\')">Aprobar → coordinador'+(cal9(s)?'':' (requiere 9/9 o motivo)')+'</button></div>';}
+  if(c){const r=calResumen(c),v2=calV2(c);
+    h+='<div style="font-size:13px;margin-top:4px">'+calLinea(s)+'</div>'+calCuerpo(a,c,false)+
+      (cal9(s)&&v2&&(r.pend||r.parcial)?'<div class="note" style="margin:10px 0 0">Está <b>lista para el coordinador</b>: no hay controles en "No cumple" ni "Requiere revisión". Quedan pendientes menores a la vista; si le tocan al docente, puedes devolvérsela o enviarla igual.</div>':'')+
+      '<div class="row2" style="margin-top:12px;flex-wrap:wrap"><button class="btn" style="border-color:#f0b4b4;color:var(--danger)" onclick="calDevolver(\''+a.id+'\')">Devolver al docente con el informe</button><button class="btn'+(cal9(s)?' pri':'')+'" onclick="registrar(\''+a.id+'\',\'aCoord\')">Aprobar → coordinador'+(cal9(s)?'':' (requiere motivo)')+'</button></div>';}
   return h+'</div>'}
 function proxRecordatorio(a){const s=ST[a.id];if(s.recordatorios===false)return 'Pausados para esta asignatura';
   let base,tipos;const C=compAct(a,s);
@@ -898,8 +998,8 @@ function registrarComp(id){const a=DATOS.find(x=>x.id===id),s=ST[id];const f=(do
 function registrar(id,k){
   const FR=fechaRegistro(id);
   const a=DATOS.find(x=>x.id===id),s=ST[id];const ta=document.getElementById('nota-'+id);let nota=ta?ta.value.trim():'';
-  if(k==='aCoord'&&!cal9(s)){const m=prompt('Esta asignatura no tiene la revisión de calidad en 9/9.\nPara pasarla al coordinador escribe el motivo (queda en la trazabilidad):','');
-    if(!m||!m.trim()){toast('Sin motivo no se puede pasar al coordinador');return}nota='Pasó sin calidad 9/9. Motivo: '+m.trim()+(nota?' · '+nota:'')}
+  if(k==='aCoord'&&!cal9(s)){const m=prompt('La revisión de calidad de esta asignatura no está lista (hay controles en "No cumple" o "Requiere revisión", o no se ha hecho).\nPara pasarla al coordinador escribe el motivo (queda en la trazabilidad):','');
+    if(!m||!m.trim()){toast('Sin motivo no se puede pasar al coordinador');return}nota='Pasó sin la calidad lista. Motivo: '+m.trim()+(nota?' · '+nota:'')}
   if(k==='alDocente'&&(s.rondas||0)>=2){let m=AUT_RONDA[id];delete AUT_RONDA[id];if(m==null)m=pedirAut(s);if(!m)return;nota='Ronda '+((s.rondas||0)+1)+' autorizada por: '+m+(nota?' · '+nota:'')}
   if(k==='nota'){if(!nota){toast('Escribe la nota primero');return}s.eventos.push({f:FR.f,ts:FR.ts,t:'nota',l:'Nota'+(FR.f!==ymd(new Date())?' (registrada el '+fmt(ymd(new Date()))+')':''),nota,por:s.responsable||''});guardar();render();toast('Nota guardada · '+fmtc(FR.f));return}
   const e=EVENTOS[k];
@@ -1056,7 +1156,9 @@ const VID={pend:'Pendiente',sol:'Solicitado',rec:'Recibido',na:'No aplica'};
 function vidDe(s){return s.video||{e:'pend',f:'',n:0}}
 function vidPendiente(s){const v=vidDe(s);return v.e==='pend'||v.e==='sol'}
 /* Si el video ya llegó, el punto 7 de la revisión de calidad queda en Bien */
-function calAjVideo(s){if(vidDe(s).e==='rec'&&s.cal&&s.cal.p){const x=s.cal.p.find(q=>q.n===7);if(x&&x.e!=='bien'){x.e='bien';x.f='Video recibido (registrado en el dashboard)';x.a='';x.m=1}}}
+function calAjVideo(s){if(vidDe(s).e!=='rec'||!s.cal)return;
+  if(calV2(s.cal)){const x=s.cal.c.find(q=>q.n===10);if(x&&(x.e==='no_cumple'||x.e==='revisar')){x.e='no_verif';x.t='Vídeo recibido (registrado en el dashboard); contenido audiovisual no verificado';x.m=1}return}
+  if(s.cal.p){const x=s.cal.p.find(q=>q.n===7);if(x&&x.e!=='bien'){x.e='bien';x.f='Video recibido (registrado en el dashboard)';x.a='';x.m=1}}}
 function setVideo(id,e){const s=ST[id],FR=fechaRegistro(id),v=Object.assign({},vidDe(s));
   if(e==='sol'){v.e='sol';v.f=FR.f;v.n=(v.n||0)+1}else{v.e=e;v.f=e==='pend'?'':FR.f}
   s.video=v;calAjVideo(s);
@@ -1068,7 +1170,7 @@ function cajaVideo(a){const s=ST[a.id],v=vidDe(s),d=v.e==='sol'&&v.f?diasHab(v.f
   const b=(e,l)=>'<button class="btn" style="padding:4px 10px;font-size:12px" onclick="setVideo(\''+a.id+'\',\''+e+'\')">'+l+'</button>';
   return '<div class="box"><h4>Video de presentación del docente</h4><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:'+col+';font-size:13px">'+txt+'</b><span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'+
     (v.e!=='rec'?b('sol',v.e==='sol'?'Lo volví a pedir':'Pedí el video al profesor')+b('rec','✓ Recibido'):'')+(v.e!=='na'&&v.e!=='rec'?b('na','No aplica'):'')+(v.e!=='pend'?b('pend','Deshacer'):'')+'</span></div>'+
-    '<div class="mini" style="margin-top:6px">Usa la fecha de ¿Cuándo pasó? (abajo) si lo registras después. Al pedirlo, si en 5 días hábiles no llega, sale una alarma para volver a pedirlo.</div></div>'}
+    '<div class="mini" style="margin-top:6px">Usa la fecha de ¿Cuándo pasó? (arriba, en Registrar lo que pasó) si lo registras después. Al pedirlo, si en 5 días hábiles no llega, sale una alarma para volver a pedirlo.</div></div>'}
 function fechaEvento(s,tipos){const e=s.eventos.find(x=>tipos.includes(x.t));return e?e.f:''}
 function celda(plan,real,hecho){
   if(!plan)return '<span class="cp">—</span>';
@@ -1124,20 +1226,20 @@ async function iniciar(){
   if(API.indexOf('http')!==0){estadoSync('⚠ Falta pegar la URL del Apps Script en el archivo (const API).',true);return}
   for(let i=0;i<3;i++){if(await cargarSheet())break;await new Promise(r=>setTimeout(r,3000))}
   if(!DATOS.length)return;initFiltros();render();
-  setInterval(()=>{if(document.hidden)return;const ta=document.querySelector('.det textarea');if(ta&&(ta===document.activeElement||ta.value))return;
+  setInterval(()=>{if(document.hidden)return;const ta=document.querySelector('#ficha.show textarea:focus')||[...document.querySelectorAll('#ficha.show textarea')].find(x=>x.value);if(ta)return;
     cargarSheet().then(ok=>{if(ok){render()}})},120000);
 }
 const FAQ=[
 ['¿Cómo me asigno una asignatura?','asignar asignarme responsable tomar mia quien tiene','Abre la asignatura y, en la caja azul <b>Siguiente paso</b> o abajo en <b>Responsable</b>, elige tu nombre. Las asignaturas ya vienen repartidas por carga: filtra <b>Todas las personas → tu nombre</b> para ver las tuyas.'],
 ['El profesor ya entregó el material','entrego entregó llego llegó material recibido mando contenido profesor docente','En la asignatura, caja <b>Registrar lo que pasó</b>: dale <b>Material recibido del docente</b>. Si llegó otro día, primero pon esa fecha en <b>¿Cuándo pasó?</b>. La asignatura pasa a <b>Por revisar</b>.'],
-['¿Cómo hago la revisión de calidad?','revision calidad claude chatgpt 9 puntos pauta revisar material preparar pegar resultado importar','1) <b>1 · Preparar para Claude</b> (copia el texto y el reloj arranca solo) y pégalo en Claude con la carpeta y la matriz. 2) Copia TODA la respuesta de Claude y dale <b>2 · Pegar resultado</b> → <b>Importar resultado</b>. Quedan los 9 puntos. Revisa tú también el documento antes de decidir.'],
-['¿Cómo le devuelvo la asignatura al profesor?','devolver devolucion enviar profesor docente ajustes correcciones informe correo','Desde la caja de calidad: <b>Devolver al docente con el informe</b>. Copia el correo listo, pégalo en Outlook respondiendo en el mismo hilo y envíalo. El dashboard registra el envío, suma una ronda y la pasa a <b>Con el docente</b>.'],
+['¿Cómo hago la revisión de calidad?','revision revisión calidad claude chatgpt 13 controles pauta base revisar material preparar copiar pegar resultado importar','En la asignatura, pestaña <b>Calidad</b>: 1) <b>1 · Copiar datos para ChatGPT</b> (el reloj arranca solo) y pégalo en ChatGPT con la carpeta y la matriz. 2) Copia TODA la respuesta de ChatGPT (al final debe venir el bloque <b>FABRICA_REVISION_V2</b>) y dale <b>2 · Pegar resultado</b> → <b>Importar resultado</b>. Quedan los 13 controles, los pendientes con su código y la aprobación por documento. Revisa tú también antes de decidir.'],
+['¿Cómo le devuelvo la asignatura al profesor?','devolver devolucion enviar profesor docente ajustes correcciones informe correo','En la pestaña Calidad: <b>Devolver al docente con el informe</b>. Copia el correo listo, pégalo en Outlook respondiendo en el mismo hilo y envíalo. El dashboard registra el envío, suma una ronda y la pasa a <b>Con el docente</b>.'],
 ['El profesor me devolvió los ajustes','ajustes recibidos devolvio devolvió correcciones respondio respondió volvio volvió segunda ronda','En <b>Registrar lo que pasó</b>: <b>Ajustes recibidos del docente</b> (con la fecha real en ¿Cuándo pasó? si fue otro día). Vuelve a <b>Por revisar</b> y se hace una nueva revisión (2.ª ronda).'],
 ['Ya van 2 rondas con el profesor','mas más dos 2 tres 3 rondas tercera cuarta muchas devoluciones maximo máximo limite límite autorizacion autorización','El máximo acordado son <b>2 rondas</b> con el profesor. Lo que falte después lo termina el equipo (con IA). Si de todos modos hay una 3.ª ronda, al enviarla el dashboard te pide <b>quién la autorizó</b> y lo deja en la trazabilidad; también sale una alarma. En el reloj usa la categoría de <b>3.ª ronda</b>.'],
 ['El coordinador pidió cambios','coordinador cambios pidio pidió ajustes coordinacion coordinación devolvio devolvió corregir','En la asignatura: <b>El coordinador pidió cambios</b> (en Registrar lo que pasó). Vuelve a Por revisar como <b>Ajustes de coordinación</b> y el reloj sugiere esa categoría. Haz los cambios (o devuélvela al profesor si le tocan a él); si cambió bastante, <b>＋ Nueva revisión</b>. Al terminar, <b>Reenviado al coordinador</b>. El dashboard cuenta las rondas con el coordinador.'],
-['El profesor pidió más tiempo o prometió una fecha','compromiso comprometio comprometió prometio prometió pidio pidió mas más tiempo plazo prorroga prórroga nueva fecha acordamos acordada','Abre la asignatura y, en la caja <b>Compromiso del profesor</b>, pon la fecha que prometió y <b>Registrar compromiso</b>. Se copia una <b>constancia</b>: pégala respondiendo en el hilo (Responder a todos), así queda por escrito ante el profesor y Juanito. Ese día aparece en <b>Hoy toca</b> y le llega un recordatorio automático; si no cumple, 3 días después sale el último aviso y la alarma en rojo.'],
+['El profesor pidió más tiempo o prometió una fecha','compromiso comprometio comprometió prometio prometió pidio pidió mas más tiempo plazo prorroga prórroga nueva fecha acordamos acordada','Abre la asignatura y, en la pestaña <b>Fechas</b>, caja <b>Compromiso del profesor</b>, pon la fecha que prometió y <b>Registrar compromiso</b>. Se copia una <b>constancia</b>: pégala respondiendo en el hilo (Responder a todos), así queda por escrito ante el profesor y Juanito. Ese día aparece en <b>Hoy toca</b> y le llega un recordatorio automático; si no cumple, 3 días después sale el último aviso y la alarma en rojo.'],
 ['Trabajo en dos asignaturas a la vez','dos asignaturas a la vez paralelo simultaneo simultáneo dos relojes al mismo tiempo','Al darle <b>Empezar</b> en otra asignatura, el dashboard pregunta: <b>Aceptar</b> = las dos a la vez (en paralelo) · <b>Cancelar</b> = pausa la otra. Las horas en paralelo se reparten entre las dos asignaturas, así tus totales no se inflan, y se marcan "en paralelo".'],
-['¿Cómo la paso al coordinador?','coordinador coordinacion coordinación pasar aprobar 9/9 enviar coordinador','Cuando la revisión de calidad está en <b>9/9</b>, usa <b>Aprobar → coordinador</b> en la caja de calidad. Si no está en 9/9, te pide un motivo obligatorio que queda en la trazabilidad.'],
+['¿Cómo la paso al coordinador?','coordinador coordinacion coordinación pasar aprobar lista 9/9 enviar coordinador','Cuando la revisión de calidad está <b>lista</b> (ningún control en "No cumple" ni "Requiere revisión"), usa <b>Aprobar → coordinador</b> en la pestaña Calidad o <b>Enviado al coordinador</b> en Registrar lo que pasó. "No verificable", "Excluido", "Con concesiones" y "Parcial" no la frenan. Si no está lista, te pide un motivo que queda en la trazabilidad.'],
 ['El coordinador aprobó','coordinador aprobo aprobó aprobada fabrica fábrica entregar pasar fabrica','En <b>Registrar lo que pasó</b>: <b>Aprobado por coordinador → entregado a Fábrica</b>. Ojo: eso no la crea sola en el dashboard de la Fábrica.'],
 ['El coordinador pidió cambios','coordinador pidio pidió cambios rechazo devolvio devolvió coordinador','En <b>Registrar lo que pasó</b>: <b>El coordinador pidió cambios</b>. Vuelve a <b>Por revisar</b>.'],
 ['Estoy registrando algo que pasó otro día','fecha real otro dia día tarde atrasado registrar despues después antes pasado cuando paso pasó','Antes de dar clic al botón, cambia la fecha en <b>¿Cuándo pasó?</b> (no acepta fechas futuras). Así los tiempos quedan con la fecha real.'],
@@ -1163,8 +1265,11 @@ const FAQ=[
 ['¿Qué significa tarde, vencido, hecho?','tarde vencido hecho significa rojo naranja verde en dias días cronograma colores','<b>tarde N d</b>: ya pasó, N días después de la fecha de UIDE. <b>vencido N d</b>: todavía no pasa y la fecha ya se venció. <b>✓ dd/mm</b>: pasó a tiempo. <b>✓ hecho</b>: pasó pero falta su fecha real. <b>en N d</b>: faltan N días.'],
 ['¿Cómo leo la línea de tiempo?','linea línea tiempo puntos arriba abajo fecha uide real colores azul verde rojo','Arriba la fecha de UIDE, abajo la real. 🟢 hecho · 🔵 lo que toca ahora · 🔴 atrasado · ⚪ todavía no. "≈" es una fecha aproximada que vino del archivo de UIDE.'],
 ['¿Qué son las alarmas?','alarma alarmas rojo meta dias días habiles hábiles','Avisan lo que se está atrasando y a quién le toca. Ejemplo: "Por revisar: 4 días hábiles (meta 2)" = el equipo tiene el material hace 4 días y la meta interna es 2. Las ves en la página <b>Alarmas</b> (agrupadas <b>por persona</b>: busca tu nombre) y en cada asignatura. Arriba puedes cambiar a <b>Por quién tiene la pelota</b> (equipo, docente o coordinador).'],
-['¿Cómo hago una nueva revisión de calidad?','nueva revision revisión calidad otra vez de nuevo ronda volver a revisar corregimos corregí cambios coordinador','En la caja <b>Revisión de calidad</b>, pulsa <b>＋ Nueva revisión</b>: empieza la ronda siguiente, la anterior queda guardada (plegada abajo y en la trazabilidad). Luego <b>1 · Preparar para Claude</b> y <b>2 · Pegar resultado</b>. Úsalo cuando la corrige el equipo o cuando el coordinador pidió cambios. Si el docente devolvió sus ajustes, la ronda nueva empieza sola.'],
-['¿Cómo marco que la envié al coordinador?','coordinador enviado enviada envie envié coordinacion coordinación pasar aprobar','Dos caminos, hacen lo mismo: en <b>Registrar lo que pasó</b>, botón <b>Enviado al coordinador</b> (con la fecha en ¿Cuándo pasó?), o en la caja de Revisión de calidad, <b>Aprobar → coordinador</b>. Si la calidad no está en 9/9 te pide el motivo. El correo al coordinador lo envías tú, a mano.'],
+['¿Cómo hago una nueva revisión de calidad?','nueva revision revisión calidad otra vez de nuevo ronda volver a revisar corregimos corregí cambios coordinador','En la pestaña <b>Calidad</b>, pulsa <b>＋ Nueva revisión</b>: empieza la ronda siguiente, la anterior queda guardada (plegada abajo y en la trazabilidad). Luego <b>1 · Copiar datos para ChatGPT</b> y <b>2 · Pegar resultado</b>. Úsalo cuando la corrige el equipo o cuando el coordinador pidió cambios. Si el docente devolvió sus ajustes, la ronda nueva empieza sola.'],
+['¿Cómo marco que la envié al coordinador?','coordinador enviado enviada envie envié coordinacion coordinación pasar aprobar','Dos caminos, hacen lo mismo: en <b>Registrar lo que pasó</b>, botón <b>Enviado al coordinador</b> (con la fecha en ¿Cuándo pasó?), o en la pestaña Calidad, <b>Aprobar → coordinador</b>. Si la calidad no está lista te pide el motivo. El correo al coordinador lo envías tú, a mano.'],
+['¿Qué significan los estados de calidad?','estados calidad cumple concesiones parcial requiere revision revisión no cumple no verificable excluido controles 13','<b>Cumple</b> y <b>Con concesiones</b>: bien. <b>Parcial</b>: aviso en amarillo, no frena. <b>No verificable</b>: la revisión es de texto y no puede ver imágenes ni el vídeo (es normal en los controles 3 y 10). <b>Excluido</b>: no se revisa por decisión (p. ej. la matriz). <b>Requiere revisión</b> y <b>No cumple</b>: hay que corregir antes de pasarla al coordinador. Puedes cambiar un estado a mano con un clic (queda marcado ✎).'],
+['ChatGPT no trajo el bloque FABRICA_REVISION_V2','bloque fabrica_revision_v2 no encontre encontré error importar chatgpt falta bloque json','Pídele a ChatGPT: "Agrega al final el bloque FABRICA_REVISION_V2". Copia la respuesta COMPLETA (no solo el resumen) y vuelve a darle <b>Importar resultado</b>. Si dice que es de otra asignatura, revisa que el asignatura_id sea el de esta.'],
+['¿Dónde quedó todo al abrir una asignatura?','ficha pestañas donde dónde quedo quedó panel abrir asignatura cajas calidad fechas tiempo correos historial datos responsable etapa','Al hacer clic en una asignatura se abre su <b>ficha</b> a la derecha (se cierra con ✕ o Esc). Arriba: el siguiente paso y <b>Registrar lo que pasó</b>. Debajo, pestañas: <b>Calidad</b>, <b>Fechas</b> (línea de tiempo, compromiso y alarmas), <b>Tiempo</b> (reloj), <b>Correos</b> (recordatorios y vídeo), <b>Historial</b> y <b>Datos</b> (docente, carpeta, cambiar responsable o corregir etapa).'],
 ['¿Qué me toca hoy?','hoy toca vence hoy que hago hoy qué hago hoy pendientes del dia día tareas','En <b>Alarmas</b>, la primera tarjeta es <b>📌 Hoy toca</b>: todo lo que vence hoy (encargos, entregas del profesor, plazos de ajustes, envíos al profesor, tope de Fábrica), agrupado por persona. Hazlo o regístralo antes de terminar el día. Lo de los próximos días está en <b>Próximas fechas</b>.'],
 ['¿En qué orden sale la lista de asignaturas?','orden ordenar lista cronologico cronológico fecha proxima próxima primero arriba','Por defecto, por la <b>próxima fecha</b> de cada asignatura: arriba lo atrasado (en rojo), luego lo de hoy (en azul) y después lo que viene. La columna <b>Próxima fecha</b> dice qué toca y cuándo. Con el último filtro puedes cambiar a <b>alarmas primero</b> o <b>fecha de inicio</b>; el dashboard recuerda tu elección.'],
 ['Ya la escribí con IA y sale "enviar en N d"','lista para enviar ia escrita antes adelantada enviar en','Está bien: la escribiste antes de tiempo. "enviar en N d" cuenta los días que faltan para la fecha de UIDE de entregársela al profesor. Puedes enviarla antes con <b>Enviado al docente</b>.'],
