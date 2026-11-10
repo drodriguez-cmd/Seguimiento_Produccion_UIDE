@@ -849,6 +849,14 @@ textarea{resize:vertical;min-height:70px}
     <button class="btn btn-primary" onclick="document.getElementById('modal-meta').style.display='none'">¡Entendido! 💪</button>
   </div>
 </div>
+<div id="modal-avance" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9996;align-items:center;justify-content:center" onclick="if(event.target===this)cerrarAvance()">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:24px;max-width:440px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+    <div style="font-size:38px;line-height:1;margin-bottom:8px">✅</div>
+    <div id="modal-avance-tit" style="font-family:var(--fhead);font-size:18px;font-weight:700;margin-bottom:8px"></div>
+    <div id="modal-avance-txt" style="font-size:13px;line-height:1.6;margin-bottom:16px"></div>
+    <button class="btn btn-primary" onclick="cerrarAvance()">¡A seguir! 💪</button>
+  </div>
+</div>
 <div id="modal-reporte" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9997;align-items:center;justify-content:center" onclick="if(event.target===this)calCerrarReporte()">
   <div id="modal-reporte-caja" style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:22px 24px;max-width:620px;width:92%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)"></div>
 </div>
@@ -900,7 +908,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026110901;
+const DASHBOARD_VERSION = 2026111004;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1082,51 +1090,150 @@ function estadoLanzamiento(a){
   if(vOk) return { txt:'✅🎬 Video listo · falta diseño', c:'#7c3aed', bg:'rgba(124,58,237,.1)', sub:'diseño '+disenoHechosAsig(a)+'/12' };
   return { txt:'En producción', c:'#d97706', bg:'rgba(217,119,6,.1)', sub:'diseño '+disenoHechosAsig(a)+'/12 · video '+vh+'/6' };
 }
+// Mes elegido en Próximos lanzamientos (10-nov-2026, Juan Diego): los cuadros de cada mes se pueden clickear y la
+// lista de abajo muestra solo ese mes (primero lo que falta, luego lo ya entregado). Por defecto, el mes del
+// próximo lanzamiento con algo por entregar (en noviembre ya todo salió → diciembre).
+let _lanzMes = null;
+// ── Pronóstico por mes (10-nov-2026, Juan Diego): "a este ritmo, este mes termina el X", comparado con el tope de
+// fábrica. Ritmo = entregables terminados por el equipo (diseño y video por separado) en los últimos 10 días
+// hábiles (sin contar hoy), por día hábil. Lo que falta de un mes incluye lo de los meses anteriores, porque la cola
+// va por fecha de lanzamiento. Solo cuenta lo que ya llegó a la Fábrica (no lo que instruccional aún no entrega) y no
+// cuenta las Pausadas ni el cierre (banner y revisión).
+const PRONOSTICO_DIAS = 10;
+function _ritmoEquipo(hoy){
+  const desde = _diaHabilAnterior(hoy, PRONOSTICO_DIAS);
+  const t0 = new Date(desde+'T00:00:00').getTime(), t1 = new Date(hoy+'T00:00:00').getTime();
+  const r = { diseno:0, video:0 };
+  _creditosEntregables().forEach(c=>{ if(c.fin>=t0 && c.fin<t1) r[c.frente]++; });
+  return { diseno:r.diseno/PRONOSTICO_DIAS, video:r.video/PRONOSTICO_DIAS, desde };
+}
+function _fechaAlRitmo(hoy, falta, porDia){
+  if(falta<=0) return hoy;
+  if(!(porDia>0)) return null;
+  const n = Math.ceil(falta/porDia - 1e-9); let d = hoy, k = 0, guard = 0;
+  while(guard++<800){ if(_topeEsHabil(d)){ k++; if(k>=n) return d; } d=_topeSumarDias(d,1); }
+  return null;
+}
+function pronosticoMeses(conFecha, meses, hoy){
+  const rit = _ritmoEquipo(hoy), out = {};
+  const vivas = conFecha.filter(a=>a.status!=='Completada' && a.status!=='Pausada' && /^\d{4}-\d{2}/.test(a.fechaLimite||''));
+  meses.filter(m=>m!=='sin').forEach(m=>{
+    const hasta = vivas.filter(a=>a.fechaLimite.slice(0,7)<=m);
+    const delMes = vivas.filter(a=>a.fechaLimite.slice(0,7)===m);
+    if(!delMes.length) return;
+    const fd = hasta.reduce((s,a)=>s+(ENTREGABLES_POR_MATERIA.diseno-disenoHechosAsig(a)),0);
+    const fv = hasta.reduce((s,a)=>s+(ENTREGABLES_POR_MATERIA.video-videoHechosAsig(a)),0);
+    const d = _fechaAlRitmo(hoy, fd, rit.diseno), v = _fechaAlRitmo(hoy, fv, rit.video);
+    const fin = (d===null||v===null) ? null : (d>v?d:v);
+    const cuello = (d===null) ? 'diseño' : (v===null) ? 'video' : (d>=v ? 'diseño' : 'video');
+    const tope = delMes.map(a=>fechaTopeFabrica(a.fechaLimite)).sort()[0];
+    out[m] = { fin, d, v, fd, fv, tope, cuello, ritmoD:rit.diseno, ritmoV:rit.video, llega: fin!==null && fin<=tope };
+  });
+  return out;
+}
+function _ddmm(ymd){ if(!ymd) return '—'; const p=ymd.split('-'); return p[2]+'/'+p[1]; }
+// ── "Solo mías" en la lista del mes (10-nov-2026): filtra por la persona elegida (diseño o video).
+let _lanzSoloMias = false;
+function _lanzEsMia(a, yo){
+  if(!yo) return false;
+  const lab = a.celula ? (CELULA_CFG[a.celula]?.label || a.celula) : '';
+  return (!!lab && _mismaPersonaAus(lab, yo)) || (!!a.videoPersona && _mismaPersonaAus(a.videoPersona, yo));
+}
+function _lanzPersonas(){
+  return [...UNIDADES_DISENO.map(id=>CELULA_CFG[id]?.label||id), ...VIDEO_PERSONAS];
+}
+// Se guarda aparte del "Soy:" de Comentarios/Calidad (lanzSoyNombre), para que coordinación pueda mirar "las de
+// David" sin cambiar el nombre con el que firma sus comentarios. Si nunca se eligió aquí, se usa el de "Soy:".
+function _lanzYo(){ try{ const v=localStorage.getItem('lanzSoyNombre'); return v!==null ? v : (localStorage.getItem('revisorNombre')||''); }catch(e){ return ''; } }
+function _lanzSoy(v){ try{ localStorage.setItem('lanzSoyNombre', v||''); }catch(e){} _lanzSoloMias = !!v; renderCelulasDir(); }
+function _lanzElegirMes(m){ _lanzMes = m; renderCelulasDir(); }
 function lanzamientosHTML(todas){
   const hoy=_ymdLocal(new Date());   // fecha local (today() es UTC y después de las 7 p. m. daría mañana)
   const conFecha=todas.filter(a=>a.tipo==='celula' || a.status===ST_REVISION);
   const mesDe=a=>/^\d{4}-\d{2}/.test(a.fechaLimite||'') ? a.fechaLimite.slice(0,7) : 'sin';
-  // Metas por mes: solo los meses que aún tienen algo por entregar
   const meses={};
   conFecha.forEach(a=>{ const m=mesDe(a); (meses[m]=meses[m]||{total:0,faltan:0}).total++; if(a.status!=='Completada') meses[m].faltan++; });
   // El mes en curso sale siempre (aunque ya esté todo entregado: también es bueno verlo)
   const mesesAbiertos=Object.keys(meses).filter(m=>m!=='sin' && (meses[m].faltan>0 || m===hoy.slice(0,7))).sort();
-  const nombreMes=m=>{ const [y,mm]=m.split('-'); return _MESES[Number(mm)-1]+(y!==hoy.slice(0,4)?' '+y:''); };
-  const metas=mesesAbiertos.map(m=>{ const x=meses[m], hechas=x.total-x.faltan, pct=Math.round(hechas/x.total*100);
-    const urg = m<=hoy.slice(0,7) && x.faltan>0;
-    if(!x.faltan) return `<div style="flex:1;min-width:130px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:10px 12px">
+  if(meses.sin && meses.sin.faltan>0) mesesAbiertos.push('sin');
+  if(!mesesAbiertos.length) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No hay materias por entregar ✅</div>`;
+  const nombreMes=m=>{ if(m==='sin') return 'Sin fecha'; const [y,mm]=m.split('-'); return _MESES[Number(mm)-1]+(y!==hoy.slice(0,4)?' '+y:''); };
+  // Mes elegido: el que se clickeó (si sigue en la lista) o, por defecto, el primero con algo por entregar
+  const porDefecto = mesesAbiertos.find(m=>m!=='sin' && meses[m].faltan>0) || mesesAbiertos[0];
+  const sel = mesesAbiertos.includes(_lanzMes) ? _lanzMes : porDefecto;
+  // Las que no tienen fecha de lanzamiento no van en un cuadro (casi todas son viejas y ya entregadas): solo un
+  // enlace pequeño con las que faltan.
+  let prono = {}; try{ prono = pronosticoMeses(conFecha, mesesAbiertos, hoy); }catch(e){ console.warn('[Pronóstico]', e); }
+  const pronoHTML = m => { const p=prono[m]; if(!p) return '';
+    const tip = `A este ritmo (últimos ${PRONOSTICO_DIAS} días hábiles): diseño ${p.ritmoD.toFixed(1)} entregables/día, video ${p.ritmoV.toFixed(1)}/día. `
+      + `Faltan ${p.fd} de diseño y ${p.fv} videos hasta este mes (incluye los meses anteriores). `
+      + `Diseño termina ≈ ${_ddmm(p.d)}, video ≈ ${_ddmm(p.v)}. Tope de fábrica más cercano del mes: ${_ddmm(p.tope)}. `
+      + `Solo cuenta lo que ya llegó a la Fábrica; no incluye el cierre.`;
+    if(p.fin===null) return `<div title="${tip}" style="font-size:10px;color:var(--muted);margin-top:4px">📈 Sin ritmo reciente de ${p.cuello} para estimar</div>`;
+    const col = p.llega ? '#15803d' : '#dc2626';
+    return `<div title="${tip}" style="font-size:10px;margin-top:4px;color:${col};font-weight:600">${p.llega?'📈':'⚠️'} A este ritmo: ${_ddmm(p.fin)}</div>
+      <div title="${tip}" style="font-size:10px;color:var(--muted)">tope ${_ddmm(p.tope)} · ${p.llega?'llega a tiempo':'se pasa por '+p.cuello}</div>`; };
+  const metas=mesesAbiertos.filter(m=>m!=='sin').map(m=>{ const x=meses[m], hechas=x.total-x.faltan, pct=Math.round(hechas/x.total*100);
+    const urg = m!=='sin' && m<=hoy.slice(0,7) && x.faltan>0;
+    const on = m===sel;
+    const base = `flex:1;min-width:130px;border-radius:10px;padding:10px 12px;cursor:pointer;transition:box-shadow .15s,transform .15s;`;
+    const marca = on ? 'box-shadow:0 0 0 2px #6366f1;' : '';
+    const attrs = `class="lanz-mes" role="button" tabindex="0" title="Ver las materias que lanzan en ${nombreMes(m)}" onclick="_lanzElegirMes('${m}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_lanzElegirMes('${m}')}"`;
+    const pie = on ? `<div style="font-size:10px;color:#6366f1;margin-top:3px;font-weight:600">▼ Viendo este mes</div>` : '';
+    if(!x.faltan) return `<div ${attrs} style="${base}border:1px solid #bbf7d0;background:#f0fdf4;${marca}">
       <div style="font-size:11px;color:#15803d;text-transform:capitalize;font-weight:600">${nombreMes(m)}</div>
       <div style="font-size:13px;margin-top:2px;color:#15803d"><b style="font-size:18px">✅ ${x.total}</b> entregadas</div>
-      <div style="font-size:10px;color:#15803d;margin-top:3px">¡Todas las del mes!</div></div>`;
-    return `<div style="flex:1;min-width:130px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;${urg?'border-top:3px solid #dc2626':''}">
+      <div style="font-size:10px;color:#15803d;margin-top:3px">¡Todas las del mes!</div>${pie}</div>`;
+    return `<div ${attrs} style="${base}border:1px solid var(--border);${urg?'border-top:3px solid #dc2626;':''}${on?'background:rgba(99,102,241,.06);':''}${marca}">
       <div style="font-size:11px;color:var(--muted);text-transform:capitalize;font-weight:600">${nombreMes(m)}</div>
-      <div style="font-size:13px;margin-top:2px"><b style="font-size:18px;color:${urg?'#dc2626':'var(--text)'}">${x.faltan}</b> de ${x.total} por entregar</div>
+      <div style="font-size:13px;margin-top:2px;white-space:nowrap"><b style="font-size:18px;color:${urg?'#dc2626':'var(--text)'}">${x.faltan}</b> de ${x.total} por entregar</div>
       <div style="height:4px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:#16a34a"></div></div>
-      <div style="font-size:10px;color:var(--muted);margin-top:3px">${hechas} entregada${hechas===1?'':'s'}</div></div>`; }).join('');
-  const pend=conFecha.filter(a=>a.status!=='Completada')
+      <div style="font-size:10px;color:var(--muted);margin-top:3px">${hechas} entregada${hechas===1?'':'s'}</div>${pronoHTML(m)}${pie}</div>`; }).join('');
+  const sinF = mesesAbiertos.includes('sin') ? meses.sin.faltan : 0;
+  const sinLink = sinF ? `<div class="lanz-mes" role="button" tabindex="0" onclick="_lanzElegirMes('sin')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_lanzElegirMes('sin')}" style="flex-basis:100%;font-size:11px;cursor:pointer;color:${sel==='sin'?'#6366f1':'var(--muted)'};font-weight:${sel==='sin'?'600':'400'};padding:2px 2px 0">${sel==='sin'?'▼ ':''}${sinF} sin fecha de lanzamiento · ver</div>` : '';
+  const yo = _lanzYo();
+  const yoEsEquipo = !!yo && _lanzPersonas().some(n=>_mismaPersonaAus(n, yo));
+  const soloMias = _lanzSoloMias && yoEsEquipo;
+  const delMesTodo = conFecha.filter(a=>mesDe(a)===sel);
+  const delMes = soloMias ? delMesTodo.filter(a=>_lanzEsMia(a, yo)) : delMesTodo;
+  const chipF = (on, txt, js) => `<button class="chip ${on?'active':''}" style="font-size:11px;padding:3px 10px" onclick="${js}">${txt}</button>`;
+  const filtroHTML = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 20px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted)">Ver:
+      ${chipF(!soloMias, 'Todas · '+delMesTodo.length, "_lanzSoloMias=false;renderCelulasDir()")}
+      ${yoEsEquipo
+        ? chipF(soloMias, '👤 Solo mías · '+delMesTodo.filter(a=>_lanzEsMia(a,yo)).length, "_lanzSoloMias=true;renderCelulasDir()")+`<span style="margin-left:auto">Soy <b>${_cEsc(yo)}</b> · <a href="#" onclick="event.preventDefault();_lanzSoy('')" style="color:var(--muted)">cambiar</a></span>`
+        : `<select onchange="_lanzSoy(this.value)" style="font-size:11px;padding:3px 6px;width:auto;max-width:220px"><option value="">👤 Solo mías: elige tu nombre…</option>${_lanzPersonas().map(n=>`<option value="${_cEsc(n)}">${_cEsc(n)}</option>`).join('')}</select>`}
+    </div>`;
+  const pend = delMes.filter(a=>a.status!=='Completada')
     .sort((p,q)=>String(p.fechaLimite||'9999').localeCompare(String(q.fechaLimite||'9999')) || compararPorUrgencia(p,q));
-  if(!pend.length) return `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No hay materias por entregar ✅</div>`;
-  let mesActual=null;
-  const filas=pend.map(a=>{
-    const m=mesDe(a); let cab='';
-    if(m!==mesActual){ mesActual=m; const x=meses[m];
-      cab=`<div style="padding:8px 20px;background:var(--bg3);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${m==='sin'?'Sin fecha de lanzamiento':'Lanzan en '+nombreMes(m)+' · faltan '+x.faltan+' de '+x.total}</div>`; }
-    const e=estadoLanzamiento(a);
+  const hechasL = sel==='sin' ? [] : delMes.filter(a=>a.status==='Completada')
+    .sort((p,q)=>new Date(q.fechaCompletado||0)-new Date(p.fechaCompletado||0));
+  const cabecera = t => `<div style="padding:8px 20px;background:var(--bg3);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${t}</div>`;
+  const fila = (a, chip) => {
     const dias = a.fechaLimite ? Math.round((Date.parse(a.fechaLimite+'T12:00:00')-Date.parse(hoy+'T12:00:00'))/86400000) : null;
-    const diasTxt = dias===null ? '' : dias<0 ? 'venció hace '+(-dias)+' d' : dias===0 ? 'lanza hoy' : 'en '+dias+' d';
-    const diasCol = dias===null ? 'var(--muted)' : dias<=7 ? '#dc2626' : dias<=21 ? '#d97706' : 'var(--muted)';
+    const hecha = a.status==='Completada';
+    const diasTxt = hecha || dias===null ? '' : dias<0 ? 'venció hace '+(-dias)+' d' : dias===0 ? 'lanza hoy' : 'en '+dias+' d';
+    const diasCol = hecha || dias===null ? 'var(--muted)' : dias<=7 ? '#dc2626' : dias<=21 ? '#d97706' : 'var(--muted)';
     const quien=[a.celula?(CELULA_CFG[a.celula]?.label||a.celula):'', a.videoPersona?('🎬 '+a.videoPersona.split(' ')[0]):''].filter(Boolean).join(' · ');
-    return cab+`<div style="display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border)">
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 20px;border-bottom:1px solid var(--border)${hecha?';opacity:.8':''}">
       <div style="width:52px;flex-shrink:0;text-align:center">
         <div style="font-size:13px;font-weight:700;color:${diasCol}">${a.fechaLimite?_cFmt(a.fechaLimite).slice(0,5):'—'}</div>
         <div style="font-size:10px;color:${diasCol}">${diasTxt}</div></div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${String(a.nombre).replace(/"/g,'&quot;')}">${prioMarca(a)} ${a.nombre}</div>
-        <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${quien||a.prog||''}${e.sub?' · '+e.sub:''}</div></div>
-      <span style="font-size:10px;font-weight:600;padding:3px 9px;border-radius:99px;background:${e.bg};color:${e.c};flex-shrink:0;white-space:nowrap">${e.txt}</span>
-    </div>`; }).join('');
-  return `<div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border)">${metas}</div>
-    <div style="max-height:620px;overflow-y:auto">${filas}</div>`;
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${String(a.nombre).replace(/"/g,'&quot;')}">${hecha?'':prioMarca(a)+' '}${a.nombre}</div>
+        <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${quien||a.prog||''}${chip.sub?' · '+chip.sub:''}</div></div>
+      <span style="font-size:10px;font-weight:600;padding:3px 9px;border-radius:99px;background:${chip.bg};color:${chip.c};flex-shrink:0;white-space:nowrap">${chip.txt}</span>
+    </div>`; };
+  const x = meses[sel];
+  let filas = '';
+  if(pend.length) filas += cabecera(soloMias ? 'Tus materias de '+nombreMes(sel)+' · faltan '+pend.length : sel==='sin' ? 'Sin fecha de lanzamiento · faltan '+x.faltan : 'Lanzan en '+nombreMes(sel)+' · faltan '+x.faltan+' de '+x.total) + pend.map(a=>fila(a, estadoLanzamiento(a))).join('');
+  if(hechasL.length) filas += cabecera('✅ Ya entregadas · '+hechasL.length) + hechasL.map(a=>{
+    const f = a.fechaCompletado ? new Date(a.fechaCompletado) : null;
+    const ftxt = f && !isNaN(f) ? ' '+String(f.getDate()).padStart(2,'0')+'/'+String(f.getMonth()+1).padStart(2,'0') : '';
+    return fila(a, { txt:'✅ Entregada'+ftxt, c:'#15803d', bg:'rgba(22,163,74,.1)' }); }).join('');
+  if(!filas) filas = `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">${soloMias?'No tienes materias de este mes 🙌':'Nada en este mes'}</div>`;
+  return `<style>.lanz-mes:hover{box-shadow:0 2px 10px rgba(0,0,0,.08);transform:translateY(-1px)}.lanz-mes:focus-visible{outline:2px solid #6366f1;outline-offset:2px}</style>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border)">${metas}${sinLink}</div>
+    ${filtroHTML}<div style="max-height:620px;overflow-y:auto">${filas}</div>`;
 }
 function renderCelulasDir(){
   const el = document.getElementById('celulas-dir-content');
@@ -1228,7 +1335,7 @@ function renderCelulasDir(){
           <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
         </div>
         <div style="font-size:11px;font-weight:600;color:${barColor};text-align:right">${cierre ? 'cierre '+avCierre.hechos+'/'+avCierre.total : asigActiva ? 'diseño '+dHechos+'/12' : '0%'}</div>
-        ${asigBarra ? `<div style="font-size:10px;color:var(--muted);text-align:right" title="Avance de toda la materia: diseño y video juntos">total ${progAsigVista(asigBarra)}%</div>` : ''}
+        ${asigBarra ? `<div style="font-size:10px;color:var(--muted);text-align:right" title="Avance de toda la materia: diseño y video juntos">total asignatura ${progAsigVista(asigBarra)}%</div>` : ''}
       </div>
       <div style="text-align:center;min-width:60px">
         <div style="font-size:11px;color:var(--muted)">Días</div>
@@ -1320,7 +1427,7 @@ function renderCelulasDir(){
           <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
         </div>
         <div style="font-size:11px;font-weight:600;color:${barColor};text-align:right">${cierreV ? 'cierre '+avC.hechos+'/'+avC.total : P ? 'videos '+hechos+'/'+VIDEO_KEYS.length : '0%'}</div>
-        ${(P||cierreV) ? `<div style="font-size:10px;color:var(--muted);text-align:right" title="Avance de toda la materia: diseño y video juntos">total ${progAsigVista(P?P.a:cierreV)}%</div>` : ''}
+        ${(P||cierreV) ? `<div style="font-size:10px;color:var(--muted);text-align:right" title="Avance de toda la materia: diseño y video juntos">total asignatura ${progAsigVista(P?P.a:cierreV)}%</div>` : ''}
       </div>
       <div style="text-align:center;min-width:60px">
         <div style="font-size:11px;color:var(--muted)">Días</div>
@@ -1838,8 +1945,53 @@ function celebrarMetaSiToca(persona, rol){
       'Antes de cerrar la semana, recuerda revisar que cada entregable:'+
       '<div style="text-align:left;display:inline-block;margin:8px 0">✅ cumpla con los estándares de calidad<br>✅ no tenga errores<br>✅ esté subido en su carpeta correspondiente</div><br>'+
       '<span style="font-size:12px;color:var(--muted)">Así evitamos incidencias y reprocesos. ¡Gran trabajo! 💪</span>';
-    setTimeout(()=>{ document.getElementById('modal-meta').style.display='flex'; try{ sonidoFelicitacion(); }catch(e){} }, 1200);
+    setTimeout(()=>{ cerrarAvance(); document.getElementById('modal-meta').style.display='flex'; try{ sonidoFelicitacion(); }catch(e){} }, 1200);
+    return true;
   }catch(e){ console.log('[META SEMANAL] error:', e); }
+  return false;
+}
+// ══ AVANCE AL COMPLETAR UN TIMER (10-nov-2026, Juan Diego) ══
+// Cada timer que marca un entregable NUEVO muestra una ventana: qué se completó, cuántos van de la materia
+// (diseño n/12, video n/6), cuáles faltan, la meta semanal y el recordatorio de subirlo a su carpeta.
+// No sale si en ese momento aparece otra ventana más importante (Cierre, frente terminado o meta semanal), ni con
+// tareas que no marcan entregable (guiones, banner…), ni si el entregable ya estaba marcado.
+const _AV_NOMBRE = { html:'HTML', genially:'Genially', infografia:'Infografía', imagenes:'Imágenes',
+  video_intro:'Video intro', video_profesor:'Video profesor', geniallys_rda:'Geniallys RDA', video_c1:'Video clase 1', video_c2:'Video clase 2', video_c3:'Video clase 3' };
+const _AV_CLASE = { u1:'Clase 1', u2:'Clase 2', u3:'Clase 3' };
+function _avNombre(unitKey, assetKey){ return (_AV_NOMBRE[assetKey]||assetKey) + (_AV_CLASE[unitKey] ? ' · '+_AV_CLASE[unitKey] : ''); }
+function _avFaltan(a, esVideo){
+  if(esVideo) return ['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'].filter(k=>!a?.assets?.global?.[k]).map(k=>_avNombre('global',k));
+  const out=[]; ['u1','u2','u3'].forEach(u=>['html','genially','infografia','imagenes'].forEach(k=>{ if(!a?.assets?.[u]?.[k]) out.push((_AV_NOMBRE[k]||k)+' C'+u.slice(1)); })); return out;
+}
+function _modalVisible(id){ const el=document.getElementById(id); return !!el && el.style.display==='flex'; }
+function cerrarAvance(){ const el=document.getElementById('modal-avance'); if(el) el.style.display='none'; }
+function mostrarAvanceTimer(sesion, a, marcoNuevo, hayOtraVentana){
+  try{
+    if(!a || !marcoNuevo || hayOtraVentana) return false;
+    const map=_mapaEntregable(sesion.tarea, sesion.unidad); if(!map) return false;
+    const esVideo = map.unitKey==='global';
+    const total = esVideo ? ENTREGABLES_POR_MATERIA.video : ENTREGABLES_POR_MATERIA.diseno;
+    const hechos = esVideo ? videoHechosAsig(a) : disenoHechosAsig(a);
+    const faltan = _avFaltan(a, esVideo);
+    const persona = sesion.persona||'', pila = persona.trim().split(/\s+/)[0] || '';
+    const revisor = (()=>{ try{ return localStorage.getItem('revisorNombre')||''; }catch(e){ return ''; } })();
+    const yo = !revisor || _mismaPersonaAus(revisor, persona);
+    const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const pct = Math.round(hechos/total*100);
+    let meta=''; try{ const m=metaSemanal(persona, esVideo?'video':'diseno'); if(m && m.meta>0) meta='<div style="font-size:12px;color:var(--muted);margin-top:8px">🎯 Meta semanal: <b>'+m.hechos+' de '+m.meta+'</b> entregables</div>'; }catch(e){}
+    document.getElementById('modal-avance-tit').textContent = yo ? '¡Bien hecho'+(pila?', '+pila:'')+'! 🙌' : '¡'+(pila||'Se')+' completó un entregable! 🙌';
+    document.getElementById('modal-avance-txt').innerHTML =
+      (yo?'Completaste':'Completó')+' <b>'+esc(_avNombre(map.unitKey, map.assetKey))+'</b> de <b>'+esc(a.nombre)+'</b>.'+
+      '<div style="margin:14px 0 4px;font-size:12px;font-weight:600">'+(esVideo?'🎬 Videos':'🎨 Diseño')+' de la materia: '+hechos+' de '+total+' ('+pct+' %)</div>'+
+      '<div style="height:8px;background:var(--border);border-radius:5px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:#16a34a;border-radius:5px"></div></div>'+
+      (faltan.length
+        ? '<div style="font-size:12px;color:var(--muted);margin-top:8px">'+(faltan.length===1?'Solo falta 1':'Faltan '+faltan.length)+': '+faltan.map(esc).join(', ')+'</div>'
+        : '<div style="font-size:12px;color:#15803d;margin-top:8px;font-weight:600">¡Están todos! Ahora sigue su Cierre '+(esVideo?'Video':'Diseño')+'.</div>')+
+      meta+
+      '<div style="margin-top:12px;padding:8px 10px;border-radius:10px;background:rgba(99,102,241,.08);font-size:12px">📁 Recuerda subirlo a su carpeta y revisar que no tenga errores.</div>';
+    document.getElementById('modal-avance').style.display='flex';
+    return true;
+  }catch(e){ console.log('[AVANCE] error:', e); return false; }
 }
 function felicitarSiTermino(a, antes, preferVideo){
   try{
@@ -2707,7 +2859,7 @@ function progAsig(a){
 }
 // Porcentaje que se MUESTRA en pantalla: una asignatura no marca 100 % hasta que está cerrada
 // (banner + revisión de calidad). Mientras falte el cierre se queda en 99 %. La lógica interna
-// (pre-asignación al 60 %, orden de reservas, cierre) sigue usando progAsig, que mide solo la producción.
+// (pre-asignación a los 7/12 de diseño, orden de reservas, cierre) sigue usando progAsig, que mide solo la producción.
 // El Sheet manda sobre qué asignaturas existen. Una asignatura que solo está en la memoria de este navegador
 // se conserva únicamente si es RECIÉN CREADA (su ID lleva la hora de creación) y aún no subió al Sheet.
 // Si es más vieja y ya no está en el Sheet, se eliminó en otro lado: se descarta. Antes se conservaba siempre,
@@ -3711,7 +3863,11 @@ function estadoCelula(celulaId){
   // La célula está "ocupada" si tiene algo activo O ya tiene su próxima apartada
   const ocupada = !!(activa || reserva);
   const pct = activa ? progAsig(activa) : 0;
-  return { estado: ocupada ? 'ocupada' : 'libre', activa, reserva, tieneReserva: !!reserva, pct, asig: activa };
+  // Entregables de DISEÑO hechos en la activa (de 12). Es lo que decide la pre-asignación (10-nov-2026, Juan Diego):
+  // antes se usaba pct, que mezcla diseño y video, y alguien con 7/12 de diseño podía no recibir la siguiente
+  // mientras otra persona con 6/12 sí (porque su video iba más adelantado).
+  const hechosD = activa ? disenoHechosAsig(activa) : 0;
+  return { estado: ocupada ? 'ocupada' : 'libre', activa, reserva, tieneReserva: !!reserva, pct, hechosD, asig: activa };
 }
 
 function evaluarCargaCelulas(){
@@ -3722,7 +3878,10 @@ function evaluarCargaCelulas(){
   return resultado;
 }
 
-const PRE_ASIGN_PCT = 60; // Pre-asignar cuando la célula alcance este % de progreso
+const PRE_ASIGN_PCT = 60; // (ya no se usa para pre-asignar; se deja por compatibilidad)
+// Pre-asignar la siguiente cuando la persona de diseño lleve 7 de los 12 entregables de diseño de su materia activa
+// (10-nov-2026, Juan Diego). Antes era el 60 % del total de la materia (diseño + video).
+const PRE_ASIGN_ENTREGABLES = 7;
 
 // Estado real de disponibilidad de una persona: primero mira el Sheet (pestaña "Equipo",
 // editable por Derly sin tocar código). Si esa persona tiene una fecha en "Disponible Desde",
@@ -3778,8 +3937,8 @@ function encontrarCelulaDisponible(excluir=[]){
   // 2. Todas ocupadas → pre-asignar a la MÁS ADELANTADA que NO tenga ya reserva
   //    (y que haya pasado el umbral). Así nunca se le encima una segunda reserva.
   const candidatas = entries
-    .filter(([id,c])=> c.estado==='ocupada' && c.activa && !c.tieneReserva && c.pct>=PRE_ASIGN_PCT)
-    .sort((a,b)=> b[1].pct - a[1].pct); // la más adelantada primero
+    .filter(([id,c])=> c.estado==='ocupada' && c.activa && !c.tieneReserva && c.hechosD>=PRE_ASIGN_ENTREGABLES)
+    .sort((a,b)=> (b[1].hechosD - a[1].hechosD) || (b[1].pct - a[1].pct)); // la más adelantada en diseño primero
   if(candidatas.length > 0) return { celulaId: candidatas[0][0], tipo: 'preasignacion' };
 
   // 3. Todas con reserva o bajo el umbral → la asignatura se queda en la cola
@@ -3981,7 +4140,7 @@ function reordenarReservasPorPrioridad(){
   // Se calcula antes de soltar las reservas, porque estadoCelula las mira.
   const _ultimaCompletada = id => STATE.asignaturas.filter(x=>x.celula===id && x.status==='Completada')
     .reduce((m,x)=>Math.max(m, new Date(x.fechaCompletado||0).getTime()||0), 0);
-  const _claveCupo = id => { const e=estadoCelula(id); return e.activa ? [1, -e.pct] : [0, _ultimaCompletada(id)]; };
+  const _claveCupo = id => { const e=estadoCelula(id); return e.activa ? [1, -(e.hechosD*1000 + e.pct)] : [0, _ultimaCompletada(id)]; };
   const slotsOrdenados = slots.map((id,i)=>({ id, i, k:_claveCupo(id) }))
     .sort((a,b)=> a.k[0]-b.k[0] || a.k[1]-b.k[1] || a.i-b.i).map(x=>x.id);
 
@@ -4918,6 +5077,8 @@ function completarTimer(id,nota='',minsManual=null){
   const dias=parseFloat((mins/480).toFixed(4)); // 480 min = 8h laborales
   const sesion={id:uid(),asigId:t.asigId,asigNombre:t.asigNombre,rol:t.rol,persona:t.persona,tarea:t.tarea,unidad:t.unidad,inicio:t.inicio,fin:Date.now(),mins,dias,notas:nota};
   const antesFelic=_frentesTerminados(STATE.asignaturas.find(x=>x.id===sesion.asigId));
+  const _mapAv=_mapaEntregable(sesion.tarea, sesion.unidad), _asigAv=STATE.asignaturas.find(x=>x.id===sesion.asigId);
+  const _yaEstaba = !!(_mapAv && _asigAv && _asigAv.assets && _asigAv.assets[_mapAv.unitKey] && _asigAv.assets[_mapAv.unitKey][_mapAv.assetKey]);
   STATE.sesiones.unshift(sesion);
   delete STATE.timers[id]; delete STATE.intervals[id];
   if(STATE.timersSheets) STATE.timersSheets=STATE.timersSheets.filter(x=>x.id!==id); // desaparece de la vista al instante
@@ -4931,8 +5092,10 @@ function completarTimer(id,nota='',minsManual=null){
   sheetTimerActivo('completar', t);
   renderTimers(); renderDashboardTimers(); toast('Sesión guardada · '+minsToStr(mins));
   recordarCierreSiToca(sesion.asigId, sesion.persona, sesion.rol);
-  celebrarMetaSiToca(sesion.persona, sesion.rol);
+  const _metaSale = celebrarMetaSiToca(sesion.persona, sesion.rol);
   felicitarSiTermino(STATE.asignaturas.find(x=>x.id===sesion.asigId), antesFelic, _esDelFrenteT(sesion.persona, sesion.rol, true));
+  const _marcoNuevo = !!(_mapAv && _asigAv && !_yaEstaba && _asigAv.assets?.[_mapAv.unitKey]?.[_mapAv.assetKey]);
+  mostrarAvanceTimer(sesion, _asigAv, _marcoNuevo, _metaSale || _modalVisible('modal-cierre') || _modalVisible('modal-felicidades'));
 }
 
 // "🙋 Es mío" (6-nov-2026): un timer propio que quedó como "del equipo" (se recargó la pestaña, otra pestaña borró
