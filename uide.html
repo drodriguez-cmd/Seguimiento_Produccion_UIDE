@@ -156,14 +156,15 @@ function vistaC(C){
   const aviso=nAl&&!KPI?'<div class="card" style="cursor:pointer" onclick="setVista(\'a\')"><div class="ch" style="border:0;background:#fff8f8"><b style="color:var(--bad)">'+nAl+' asignatura'+(nAl>1?'s necesitan':' necesita')+' seguimiento</b><span>Ver alertas →</span></div></div>':'';
   return h+fil+aviso+ley+(l.length?porMes(l,filaC,(a,b)=>ORD[a.sem]-ORD[b.sem]||a.l.localeCompare(b.l)||a.m.localeCompare(b.m,'es')):'<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>')+
     '<footer>Etapas: <b>Contenidos</b> (elaboración) · <b>Revisión</b> (revisión de contenidos y ajustes del docente) · <b>Coordinación</b> (revisión académica de la coordinación UIDE). Cuando la coordinación aprueba, la asignatura pasa a la pestaña <b>Producción</b>.<br>'+
-    'El estado compara cada asignatura con la fecha del cronograma acordado para su etapa actual: <b>A tiempo</b>, <b>En riesgo</b> (vence en 3 días o menos) o <b>Atrasada</b>. Haz clic en una asignatura para ver sus fechas y sus últimos movimientos.</footer>'}
+    'El estado compara cada asignatura con la fecha del cronograma acordado para su etapa actual: <b>A tiempo</b>, <b>En riesgo</b> (vence en 3 días o menos) o <b>Atrasada</b>. Si la asignatura llegó a su etapa después de lo pactado, se indica con cuántos días de diferencia. Haz clic en una asignatura para ver sus fechas y sus últimos movimientos.</footer>'}
 function vistaA(C){
   const base=C.filter(pasa),al=base.filter(x=>x.al).sort((a,b)=>a.al.n===b.al.n?a.l.localeCompare(b.l):b.al.n-a.al.n);
   const fil='<div class="filters p3">'+opciones(C)+'</div>';
   const grupo=(n,tit,col)=>{const L=al.filter(x=>x.al.n===n);return '<div class="card"><div class="ch"><b style="color:'+col+'">'+tit+'</b><span>'+L.length+'</span></div>'+
-    (L.length?L.map(x=>'<div class="al" onclick="ir(\''+clave(x)+'\')"><span class="dot" style="background:'+col+'"></span><div><div class="nm" style="font-size:13px">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div>'+enlace(x)+'</div><div><div class="t" style="color:'+col+'">'+esc(x.al.t)+'</div>'+(x.al.q?'<div class="q">'+esc(x.al.q)+'</div>':'')+'</div></div>').join(''):'<div class="empty">Nada por ahora</div>')+'</div>'};
+    (L.length?L.map(x=>'<div class="al" onclick="ir(\''+clave(x)+'\')"><span class="dot" style="background:'+col+'"></span><div><div class="nm" style="font-size:13px">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div>'+enlace(x)+'</div><div><div class="t" style="color:'+col+'">'+esc(x.al.t)+'</div>'+(x.al.q?'<div class="q">'+esc(x.al.q)+'</div>':'')+tarde(x)+'</div></div>').join(''):'<div class="empty">Nada por ahora</div>')+'</div>'};
   return fil+grupo(2,'Vencidas','var(--bad)')+grupo(1,'Por vencer','#d97706')+
     '<footer>Se alerta cuando el docente no ha entregado o le vence la entrega en 5 días o menos, cuando los ajustes del docente están vencidos o vencen en 3 días o menos, cuando el docente no cumplió una fecha que acordó, cuando la coordinación lleva más de 5 días hábiles sin responder y cuando falta el video de presentación del docente. Haz clic en una alerta para ver la asignatura y sus últimos movimientos.</footer>'}
+function tarde(x){return x.lt>0?'<div style="color:var(--warn);font-size:12px;margin-top:3px">Llegó a esta etapa '+x.lt+' día'+(x.lt===1?'':'s')+' después de lo pactado ('+dm(x.lp)+')</div>':''}
 function enlace(x){return x.u&&/^https?:\/\//i.test(x.u)?'<a class="curso" href="'+esc(x.u)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">'+(x.ut==='carpeta'?'Abrir carpeta ↗':'Abrir curso ↗')+'</a>':''}
 function clave(x){return encodeURIComponent(x.m+'|'+x.l+'|'+x.p).replace(/'/g,'%27')}
 function filaC(x){
@@ -173,7 +174,7 @@ function filaC(x){
   if(x.d&&HOY&&x.pd){const d=dias(x.d,HOY);if(d>=0)t.push(d===0?'desde hoy':'hace '+d+' día'+(d===1?'':'s'))}
   if(x.meta&&HOY){const d=dias(HOY,x.meta);t.push(d<0?'venció el '+dm(x.meta):d===0?'vence hoy':'plazo '+dm(x.meta))}
   return '<div class="row'+(open?' open':'')+'" id="r-'+k+'" onclick="abrir(\''+k+'\')"><div><div class="nm">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div>'+enlace(x)+'</div>'+
-    '<div><div class="steps">'+st+'</div><div class="where"><b>'+esc(x.et)+'</b>'+(t.length?' <span class="m">· '+t.join(' · ')+'</span>':'')+'</div></div><span class="pill '+SEM[x.sem][1]+'">'+SEM[x.sem][0]+'</span></div>'+(open?detalleC(x):'')}
+    '<div><div class="steps">'+st+'</div><div class="where"><b>'+esc(x.et)+'</b>'+(t.length?' <span class="m">· '+t.join(' · ')+'</span>':'')+'</div>'+tarde(x)+'</div><span class="pill '+SEM[x.sem][1]+'">'+SEM[x.sem][0]+'</span></div>'+(open?detalleC(x):'')}
 function detalleC(x){
   const Fe=[['Contenidos',x.plan.c,1],['Revisión',x.plan.r,2],['Coordinación',x.plan.co,3],['Lanzamiento',x.l,4]];
   const fe=Fe.map(f=>'<div class="'+(x.sd?'':f[2]<x.paso?'ok':f[2]===x.paso?'now':'')+'"><b>'+f[0]+'</b><span class="f">'+dma(f[1])+'</span></div>').join('');
