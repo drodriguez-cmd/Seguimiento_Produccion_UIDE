@@ -948,7 +948,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111010;
+const DASHBOARD_VERSION = 2026111011;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1199,7 +1199,37 @@ function _lanzPersonas(){
 // David" sin cambiar el nombre con el que firma sus comentarios. Si nunca se eligió aquí, se usa el de "Soy:".
 function _lanzYo(){ try{ const v=localStorage.getItem('lanzSoyNombre'); return v!==null ? v : (localStorage.getItem('revisorNombre')||''); }catch(e){ return ''; } }
 function _lanzSoy(v){ try{ localStorage.setItem('lanzSoyNombre', v||''); }catch(e){} _lanzSoloMias = !!v; renderCelulasDir(); }
-function _lanzElegirMes(m){ _lanzMes = m; renderCelulasDir(); }
+function _lanzElegirMes(m){ _lanzMes = m; _lanzCentrar = true; renderCelulasDir(); }
+// ── Carrusel de meses (10-nov-2026, Juan Diego): una sola fila con flechas ‹ ›; al elegir un mes, la fila se mueve
+// para que quede a la vista. La posición se conserva cuando el dashboard se vuelve a dibujar (sincronización).
+let _lanzScroll = null, _lanzCentrar = true;
+function _lanzFlechas(){
+  const c=document.getElementById('lanz-carrusel'); if(!c) return;
+  _lanzScroll = c.scrollLeft;
+  const iz=document.getElementById('lanz-izq'), de=document.getElementById('lanz-der');
+  const hay = c.scrollWidth > c.clientWidth + 2;
+  if(iz) iz.style.display = hay && c.scrollLeft > 2 ? 'flex' : 'none';
+  if(de) de.style.display = hay && c.scrollLeft + c.clientWidth < c.scrollWidth - 2 ? 'flex' : 'none';
+}
+function _lanzMover(dir){
+  const c=document.getElementById('lanz-carrusel'); if(!c) return;
+  const card=c.querySelector('.lanz-mes'); const paso = card ? card.getBoundingClientRect().width + 8 : c.clientWidth/2;
+  c.scrollBy({ left: dir*paso, behavior:'smooth' });
+  setTimeout(_lanzFlechas, 350);
+}
+function _lanzTrasDibujar(){
+  const c=document.getElementById('lanz-carrusel'); if(!c) return;
+  const prev=c.style.scrollBehavior; c.style.scrollBehavior='auto';
+  if(_lanzScroll!==null) c.scrollLeft=_lanzScroll;
+  c.style.scrollBehavior=prev;
+  if(_lanzCentrar){
+    _lanzCentrar=false;
+    const on=c.querySelector('.lanz-mes[data-on="1"]');
+    if(on){ const cr=c.getBoundingClientRect(), r=on.getBoundingClientRect();
+      if(r.left < cr.left || r.right > cr.right) c.scrollTo({ left: c.scrollLeft + (r.left-cr.left) - (cr.width-r.width)/2, behavior: _lanzScroll===null?'auto':'smooth' }); }
+  }
+  _lanzFlechas(); setTimeout(_lanzFlechas, 400);
+}
 function lanzamientosHTML(todas){
   const hoy=_ymdLocal(new Date());   // fecha local (today() es UTC y después de las 7 p. m. daría mañana)
   const conFecha=todas.filter(a=>a.tipo==='celula' || a.status===ST_REVISION);
@@ -1249,9 +1279,9 @@ function lanzamientosHTML(todas){
   const metas=mesesAbiertos.filter(m=>m!=='sin').map(m=>{ const x=meses[m], hechas=x.total-x.faltan, pct=Math.round(hechas/x.total*100);
     const urg = m!=='sin' && m<=hoy.slice(0,7) && x.faltan>0;
     const on = m===sel;
-    const base = `flex:1;min-width:130px;border-radius:10px;padding:10px 12px;cursor:pointer;transition:box-shadow .15s,transform .15s;`;
+    const base = `flex:0 0 calc((100% - 32px)/5);min-width:150px;box-sizing:border-box;scroll-snap-align:start;border-radius:10px;padding:10px 12px;cursor:pointer;transition:box-shadow .15s,transform .15s;`;
     const marca = on ? 'box-shadow:0 0 0 2px #6366f1;' : '';
-    const attrs = `class="lanz-mes" role="button" tabindex="0" title="Ver las materias que lanzan en ${nombreMes(m)}" onclick="_lanzElegirMes('${m}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_lanzElegirMes('${m}')}"`;
+    const attrs = `class="lanz-mes" data-on="${on?1:0}" role="button" tabindex="0" title="Ver las materias que lanzan en ${nombreMes(m)}" onclick="_lanzElegirMes('${m}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_lanzElegirMes('${m}')}"`;
     const pie = on ? `<div style="font-size:10px;color:#6366f1;margin-top:3px;font-weight:600">▼ Viendo este mes</div>` : '';
     if(!x.faltan) return `<div ${attrs} style="${base}border:1px solid #bbf7d0;background:#f0fdf4;${marca}">
       <div style="font-size:11px;color:#15803d;text-transform:capitalize;font-weight:600">${nombreMes(m)}</div>
@@ -1307,8 +1337,21 @@ function lanzamientosHTML(todas){
     const ftxt = f && !isNaN(f) ? ' '+String(f.getDate()).padStart(2,'0')+'/'+String(f.getMonth()+1).padStart(2,'0') : '';
     return fila(a, { txt:'✅ Entregada'+ftxt, c:'#15803d', bg:'rgba(22,163,74,.1)' }); }).join('');
   if(!filas) filas = `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">${soloMias?'No tienes materias de este mes 🙌':'Nada en este mes'}</div>`;
-  return `<style>.lanz-mes:hover{box-shadow:0 2px 10px rgba(0,0,0,.08);transform:translateY(-1px)}.lanz-mes:focus-visible{outline:2px solid #6366f1;outline-offset:2px}</style>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border)">${metas}${sinLink}</div>
+  return `<style>.lanz-mes:hover{box-shadow:0 2px 10px rgba(0,0,0,.08);transform:translateY(-1px)}.lanz-mes:focus-visible{outline:2px solid #6366f1;outline-offset:2px}
+    .lanz-car{position:relative}
+    #lanz-carrusel{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;scrollbar-width:none;padding:3px 2px 4px}
+    #lanz-carrusel::-webkit-scrollbar{display:none}
+    .lanz-flecha{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:30px;height:30px;border-radius:50%;border:1px solid var(--border2);background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);font-size:20px;line-height:1;cursor:pointer;color:var(--text);display:none;align-items:center;justify-content:center;padding:0 0 2px}
+    .lanz-flecha:hover{background:#f5f3ff;color:#6366f1}
+    .lanz-flecha.izq{left:-14px}.lanz-flecha.der{right:-14px}</style>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border)">
+      <div class="lanz-car">
+        <button class="lanz-flecha izq" id="lanz-izq" onclick="_lanzMover(-1)" aria-label="Meses anteriores" title="Meses anteriores">‹</button>
+        <div id="lanz-carrusel" onscroll="_lanzFlechas()">${metas}</div>
+        <button class="lanz-flecha der" id="lanz-der" onclick="_lanzMover(1)" aria-label="Meses siguientes" title="Meses siguientes">›</button>
+      </div>
+      ${sinLink?`<div style="margin-top:6px">${sinLink}</div>`:''}
+    </div>
     ${filtroHTML}<div style="max-height:620px;overflow-y:auto">${filas}</div>`;
 }
 function renderCelulasDir(){
@@ -1576,6 +1619,7 @@ function renderCelulasDir(){
     </div>`;
   // "Asignaturas recientes" se quitó (6-nov-2026, Juan Diego): repetía lo de Personas y Próximos lanzamientos y confundía.
   renderCeldirTimers();
+  try{ _lanzTrasDibujar(); }catch(e){}
 }
 
 function renderCeldirTimers(){
