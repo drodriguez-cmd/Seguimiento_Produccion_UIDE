@@ -948,7 +948,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111009;
+const DASHBOARD_VERSION = 2026111010;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1133,7 +1133,7 @@ function estadoLanzamiento(a){
 // Mes elegido en Próximos lanzamientos (10-nov-2026, Juan Diego): los cuadros de cada mes se pueden clickear y la
 // lista de abajo muestra solo ese mes (primero lo que falta, luego lo ya entregado). Por defecto, el mes del
 // próximo lanzamiento con algo por entregar (en noviembre ya todo salió → diciembre).
-let _lanzMes = null;
+let _lanzMes = null, _lanzCronoPedido = false;
 // ── Pronóstico por mes (10-nov-2026, Juan Diego): "a este ritmo, este mes termina el X", comparado con el tope de
 // fábrica. Ritmo = entregables terminados por el equipo (diseño y video por separado) en los últimos 10 días
 // hábiles (sin contar hoy), por día hábil. Lo que falta de un mes incluye lo de los meses anteriores, porque la cola
@@ -1154,20 +1154,33 @@ function _fechaAlRitmo(hoy, falta, porDia){
   while(guard++<800){ if(_topeEsHabil(d)){ k++; if(k>=n) return d; } d=_topeSumarDias(d,1); }
   return null;
 }
-function pronosticoMeses(conFecha, meses, hoy){
-  const rit = _ritmoEquipo(hoy), out = {};
+// recibir (opcional, 10-nov-2026): { 'YYYY-MM': { n, e0max, lanzMin } } materias del Cronograma que aún no llegan de
+// instruccional. Cada una suma 12 de diseño + 6 videos, y el mes no puede terminar antes de que llegue la última
+// (fecha "debía ingresar", o hoy si ya va tarde) más los días de diseño de una materia (OP_DISENO_DIAS).
+function pronosticoMeses(conFecha, meses, hoy, recibir){
+  const rit = _ritmoEquipo(hoy), out = {}, R = recibir||{};
   const vivas = conFecha.filter(a=>a.status!=='Completada' && a.status!=='Pausada' && /^\d{4}-\d{2}/.test(a.fechaLimite||''));
   meses.filter(m=>m!=='sin').forEach(m=>{
     const hasta = vivas.filter(a=>a.fechaLimite.slice(0,7)<=m);
     const delMes = vivas.filter(a=>a.fechaLimite.slice(0,7)===m);
-    if(!delMes.length) return;
-    const fd = hasta.reduce((s,a)=>s+(ENTREGABLES_POR_MATERIA.diseno-disenoHechosAsig(a)),0);
-    const fv = hasta.reduce((s,a)=>s+(ENTREGABLES_POR_MATERIA.video-videoHechosAsig(a)),0);
+    const mesesR = Object.keys(R).filter(k=>k<=m && R[k].n>0);
+    const nR = mesesR.reduce((s,k)=>s+R[k].n,0), nRmes = (R[m]&&R[m].n)||0;
+    if(!delMes.length && !nRmes) return;
+    const fd = hasta.reduce((s,a)=>s+(ENTREGABLES_POR_MATERIA.diseno-disenoHechosAsig(a)),0) + nR*ENTREGABLES_POR_MATERIA.diseno;
+    const fv = hasta.reduce((s,a)=>s+(ENTREGABLES_POR_MATERIA.video-videoHechosAsig(a)),0) + nR*ENTREGABLES_POR_MATERIA.video;
     const d = _fechaAlRitmo(hoy, fd, rit.diseno), v = _fechaAlRitmo(hoy, fv, rit.video);
-    const fin = (d===null||v===null) ? null : (d>v?d:v);
-    const cuello = (d===null) ? 'diseño' : (v===null) ? 'video' : (d>=v ? 'diseño' : 'video');
-    const tope = delMes.map(a=>fechaTopeFabrica(a.fechaLimite)).sort()[0];
-    out[m] = { fin, d, v, fd, fv, tope, cuello, ritmoD:rit.diseno, ritmoV:rit.video, llega: fin!==null && fin<=tope };
+    let fin = (d===null||v===null) ? null : (d>v?d:v);
+    let cuello = (d===null) ? 'diseño' : (v===null) ? 'video' : (d>=v ? 'diseño' : 'video');
+    // Lo que no ha llegado no se puede producir antes de llegar
+    let llegaUltima = '';
+    mesesR.forEach(k=>{ const e=R[k].e0max||''; if(e>llegaUltima) llegaUltima=e; });
+    let finLlegada = null;
+    if(nR){ const desde = llegaUltima && llegaUltima>hoy ? llegaUltima : hoy; finLlegada = _fechaAlRitmo(desde, OP_DISENO_DIAS, 1); }
+    if(fin!==null && finLlegada && finLlegada>fin){ fin=finLlegada; cuello='llegada'; }
+    const topes = delMes.map(a=>fechaTopeFabrica(a.fechaLimite));
+    if(nRmes && R[m].lanzMin) topes.push(fechaTopeFabrica(R[m].lanzMin));
+    const tope = topes.sort()[0];
+    out[m] = { fin, d, v, fd, fv, tope, cuello, ritmoD:rit.diseno, ritmoV:rit.video, llega: fin!==null && fin<=tope, nR, llegaUltima, finLlegada };
   });
   return out;
 }
@@ -1193,6 +1206,25 @@ function lanzamientosHTML(todas){
   const mesDe=a=>/^\d{4}-\d{2}/.test(a.fechaLimite||'') ? a.fechaLimite.slice(0,7) : 'sin';
   const meses={};
   conFecha.forEach(a=>{ const m=mesDe(a); (meses[m]=meses[m]||{total:0,faltan:0}).total++; if(a.status!=='Completada') meses[m].faltan++; });
+  // Lo que aún no llega de instruccional (10-nov-2026, Juan Diego): por mes de lanzamiento, materias del Cronograma
+  // menos las que ya están en la Fábrica con ese mes. Se cuenta así (y no por emparejar nombres) porque una materia que
+  // se dicta otra vez se parece a la de la cohorte anterior. Solo desde el mes actual hasta el último mes que ya tiene
+  // alguna materia recibida.
+  if(_cronoFilas===null && !_cronoCargando && !_lanzCronoPedido){ _lanzCronoPedido=true; try{ cargarCronograma().then(()=>{ try{ renderCelulasDir(); }catch(e){} }); }catch(e){} }
+  const recibir = {};
+  if(Array.isArray(_cronoFilas)){
+    const hoyM=hoy.slice(0,7), ultimo=Object.keys(meses).filter(m=>m!=='sin').sort().pop()||hoyM;
+    const porMes={}; _cronoFilas.forEach(f=>{ const m=(f.lanz||'').slice(0,7); if(!m) return; (porMes[m]=porMes[m]||[]).push(f); });
+    let items=[]; try{ items=_cronoItems(hoy)||[]; }catch(e){}
+    Object.keys(porMes).filter(m=>m>=hoyM && m<=ultimo).forEach(m=>{
+      const n=Math.max(0, porMes[m].length-((meses[m]&&meses[m].total)||0)); if(!n) return;
+      const noIng=items.filter(r=>r.mes===m && r.estado==='no_ingresada');
+      const e0s=(noIng.length?noIng.map(r=>r.f.e0):porMes[m].map(f=>f.e0)).filter(Boolean).sort();
+      recibir[m]={ n, e0max:e0s[e0s.length-1]||'', lanzMin:porMes[m].map(f=>f.lanz).sort()[0], nombres:noIng.map(r=>r.f.materia) };
+      meses[m]=meses[m]||{total:0,faltan:0};
+      meses[m].recibidas=meses[m].total; meses[m].total+=n; meses[m].faltan+=n; meses[m].recibir=n;
+    });
+  }
   // El mes en curso sale siempre (aunque ya esté todo entregado: también es bueno verlo)
   const mesesAbiertos=Object.keys(meses).filter(m=>m!=='sin' && (meses[m].faltan>0 || m===hoy.slice(0,7))).sort();
   if(meses.sin && meses.sin.faltan>0) mesesAbiertos.push('sin');
@@ -1203,16 +1235,17 @@ function lanzamientosHTML(todas){
   const sel = mesesAbiertos.includes(_lanzMes) ? _lanzMes : porDefecto;
   // Las que no tienen fecha de lanzamiento no van en un cuadro (casi todas son viejas y ya entregadas): solo un
   // enlace pequeño con las que faltan.
-  let prono = {}; try{ prono = pronosticoMeses(conFecha, mesesAbiertos, hoy); }catch(e){ console.warn('[Pronóstico]', e); }
+  let prono = {}; try{ prono = pronosticoMeses(conFecha, mesesAbiertos, hoy, recibir); }catch(e){ console.warn('[Pronóstico]', e); }
   const pronoHTML = m => { const p=prono[m]; if(!p) return '';
     const tip = `A este ritmo (últimos ${PRONOSTICO_DIAS} días hábiles): diseño ${p.ritmoD.toFixed(1)} entregables/día, video ${p.ritmoV.toFixed(1)}/día. `
       + `Faltan ${p.fd} de diseño y ${p.fv} videos hasta este mes (incluye los meses anteriores). `
       + `Diseño termina ≈ ${_ddmm(p.d)}, video ≈ ${_ddmm(p.v)}. Tope de fábrica más cercano del mes: ${_ddmm(p.tope)}. `
-      + `Solo cuenta lo que ya llegó a la Fábrica; no incluye el cierre.`;
+      + (p.nR ? `Incluye ${p.nR} materia${p.nR===1?'':'s'} que aún no llega${p.nR===1?'':'n'} de instruccional (según el Cronograma), como si llegaran a tiempo; la última debía llegar el ${_ddmm(p.llegaUltima)}. ` : '')
+      + `No incluye el cierre.`;
     if(p.fin===null) return `<div title="${tip}" style="font-size:10px;color:var(--muted);margin-top:4px">📈 Sin ritmo reciente de ${p.cuello} para estimar</div>`;
     const col = p.llega ? '#15803d' : '#dc2626';
     return `<div title="${tip}" style="font-size:10px;margin-top:4px;color:${col};font-weight:600">${p.llega?'📈':'⚠️'} A este ritmo: ${_ddmm(p.fin)}</div>
-      <div title="${tip}" style="font-size:10px;color:var(--muted)">tope ${_ddmm(p.tope)} · ${p.llega?'llega a tiempo':'se pasa por '+p.cuello}</div>`; };
+      <div title="${tip}" style="font-size:10px;color:var(--muted)">tope ${_ddmm(p.tope)} · ${p.llega?'llega a tiempo':p.cuello==='llegada'?'depende de cuándo llegue de instruccional':'se pasa por '+p.cuello}</div>`; };
   const metas=mesesAbiertos.filter(m=>m!=='sin').map(m=>{ const x=meses[m], hechas=x.total-x.faltan, pct=Math.round(hechas/x.total*100);
     const urg = m!=='sin' && m<=hoy.slice(0,7) && x.faltan>0;
     const on = m===sel;
@@ -1228,7 +1261,8 @@ function lanzamientosHTML(todas){
       <div style="font-size:11px;color:var(--muted);text-transform:capitalize;font-weight:600">${nombreMes(m)}</div>
       <div style="font-size:13px;margin-top:2px;white-space:nowrap"><b style="font-size:18px;color:${urg?'#dc2626':'var(--text)'}">${x.faltan}</b> de ${x.total} por entregar</div>
       <div style="height:4px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:#16a34a"></div></div>
-      <div style="font-size:10px;color:var(--muted);margin-top:3px">${hechas} entregada${hechas===1?'':'s'}</div>${pronoHTML(m)}${pie}</div>`; }).join('');
+      <div style="font-size:10px;color:var(--muted);margin-top:3px">${hechas} entregada${hechas===1?'':'s'}${x.recibir?` · ${x.recibidas||0} recibida${(x.recibidas||0)===1?'':'s'}`:''}</div>
+      ${x.recibir?`<div style="font-size:10px;color:#b45309;margin-top:2px;font-weight:600" title="Según la pestaña Cronograma: lanzan en este mes y aún no llegan de instruccional${recibir[m]&&recibir[m].nombres.length?': '+_cEsc(recibir[m].nombres.slice(0,15).join(', ')):''}">📥 ${x.recibir} aún no llega${x.recibir===1?'':'n'} de instruccional</div>`:''}${pronoHTML(m)}${pie}</div>`; }).join('');
   const sinF = mesesAbiertos.includes('sin') ? meses.sin.faltan : 0;
   const sinLink = sinF ? `<div class="lanz-mes" role="button" tabindex="0" onclick="_lanzElegirMes('sin')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_lanzElegirMes('sin')}" style="flex-basis:100%;font-size:11px;cursor:pointer;color:${sel==='sin'?'#6366f1':'var(--muted)'};font-weight:${sel==='sin'?'600':'400'};padding:2px 2px 0">${sel==='sin'?'▼ ':''}${sinF} sin fecha de lanzamiento · ver</div>` : '';
   const yo = _lanzYo();
@@ -1238,7 +1272,7 @@ function lanzamientosHTML(todas){
   const delMes = soloMias ? delMesTodo.filter(a=>_lanzEsMia(a, yo)) : delMesTodo;
   const chipF = (on, txt, js) => `<button class="chip ${on?'active':''}" style="font-size:11px;padding:3px 10px" onclick="${js}">${txt}</button>`;
   const filtroHTML = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 20px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted)">Ver:
-      ${chipF(!soloMias, 'Todas · '+delMesTodo.length, "_lanzSoloMias=false;renderCelulasDir()")}
+      ${chipF(!soloMias, ((recibir[sel]&&recibir[sel].n)?'Todas las recibidas · ':'Todas · ')+delMesTodo.length, "_lanzSoloMias=false;renderCelulasDir()")}
       ${yoEsEquipo
         ? chipF(soloMias, '👤 Solo mías · '+delMesTodo.filter(a=>_lanzEsMia(a,yo)).length, "_lanzSoloMias=true;renderCelulasDir()")+`<span style="margin-left:auto">Soy <b>${_cEsc(yo)}</b> · <a href="#" onclick="event.preventDefault();_lanzSoy('')" style="color:var(--muted)">cambiar</a></span>`
         : `<select onchange="_lanzSoy(this.value)" style="font-size:11px;padding:3px 6px;width:auto;max-width:220px"><option value="">👤 Solo mías: elige tu nombre…</option>${_lanzPersonas().map(n=>`<option value="${_cEsc(n)}">${_cEsc(n)}</option>`).join('')}</select>`}
@@ -1266,6 +1300,8 @@ function lanzamientosHTML(todas){
   const x = meses[sel];
   let filas = '';
   if(pend.length) filas += cabecera(soloMias ? 'Tus materias de '+nombreMes(sel)+' · faltan '+pend.length : sel==='sin' ? 'Sin fecha de lanzamiento · faltan '+x.faltan : 'Lanzan en '+nombreMes(sel)+' · faltan '+x.faltan+' de '+x.total) + pend.map(a=>fila(a, estadoLanzamiento(a))).join('');
+  if(!soloMias && recibir[sel] && recibir[sel].n){ const R=recibir[sel];
+    filas += cabecera('📥 Aún no llegan de instruccional · '+R.n) + `<div style="padding:10px 20px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">Según la pestaña Cronograma${R.nombres.length?':':'.'} ${R.nombres.slice(0,40).map(n=>'<span class="pq-chip">'+_cEsc(n)+'</span>').join(' ')}${R.nombres.length>40?' …':''}${R.nombres.length && R.nombres.length!==R.n?`<div style="margin-top:4px;font-size:11px">El Cronograma tiene ${R.n} más de las que ya están en la Fábrica para este mes; la lista puede no coincidir exacto porque se compara por nombre.</div>`:''}</div>`; }
   if(hechasL.length) filas += cabecera('✅ Ya entregadas · '+hechasL.length) + hechasL.map(a=>{
     const f = a.fechaCompletado ? new Date(a.fechaCompletado) : null;
     const ftxt = f && !isNaN(f) ? ' '+String(f.getDate()).padStart(2,'0')+'/'+String(f.getMonth()+1).padStart(2,'0') : '';
@@ -8482,8 +8518,12 @@ const _PQ_RESPUESTAS = [
      const L=M ? STATE.asignaturas.filter(a=>_pqLanzaEn(a,M.ym)) : STATE.asignaturas.filter(a=>a.tipo==='celula'||a.status===ST_REVISION);
      const P=L.filter(a=>a.status!=='Completada').sort((x,y)=>String(x.fechaLimite||'9').localeCompare(String(y.fechaLimite||'9')));
      const cuenta={}; P.forEach(a=>{ const t=_pqEstadoTxt(a).replace(/ \(.*\)$/,''); cuenta[t]=(cuenta[t]||0)+1; });
+     // Lo que aún no llega de instruccional para ese mes (Cronograma menos lo que ya está en la Fábrica)
+     const nCr = (M && Array.isArray(_cronoFilas)) ? _cronoFilas.filter(f=>(f.lanz||'').slice(0,7)===M.ym).length : 0;
+     const porRec = Math.max(0, nCr - L.length);
      return { titulo:'Por entregar'+(M?' · lanzamiento en '+M.nombre:' · todas'),
-       html:'<div class="pq-num">'+P.length+'<span> de '+L.length+'</span></div>'+
+       html:'<div class="pq-num">'+(P.length+porRec)+'<span> de '+(L.length+porRec)+'</span></div>'+
+         (porRec ? '<div style="margin:2px 0 6px;color:#b45309;font-weight:600">📥 '+porRec+' aún no llega'+(porRec===1?'':'n')+' de instruccional (según el Cronograma). Ya están en la Fábrica '+L.length+'.</div>' : '')+
          (P.length ? Object.entries(cuenta).map(([k,v])=>'<span class="pq-chip">'+_pqEsc(k)+' · '+v+'</span>').join(' ')+_pqLista(P,a=>'lanza '+_pqF(a.fechaLimite)+' · '+_pqEstadoTxt(a)) : '¡Todas entregadas! 🎉')+
          (M?'':'<div class="pq-mut">Tip: agrega el mes, por ejemplo "¿cuántas de diciembre faltan?"</div>') };
    }],
