@@ -959,7 +959,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111016;
+const DASHBOARD_VERSION = 2026111017;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -5233,8 +5233,12 @@ function iniciarTimer(forzar){
     asig.fechaInicioProduccion = new Date().toISOString().split('T')[0];
     huboCambio = true;
   }
-  // Al iniciar CUALQUIER timer, si está En espera pasa a En producción (aunque no sea el primero)
-  if(asig && asig.status === 'En espera'){
+  // Al iniciar un timer, si está En espera pasa a En producción. Excepción (11-nov-2026, caso Epidemiología de
+  // Alejandra Gonzales): si la materia ya tiene persona de diseño (está pre-asignada) y el timer es de VIDEO, NO se
+  // activa. El estado es uno solo para los dos frentes, y antes un video arrancado ponía "En producción" la materia
+  // pre-asignada, así que para el dashboard la diseñadora ya la había empezado (y su cierre pendiente quedaba abajo).
+  const _soloVideoEnPreasignada = rol==='video' && asig && asig.tipo==='celula' && !!asig.celula;
+  if(asig && asig.status === 'En espera' && !_soloVideoEnPreasignada){
     asig.status = 'En producción';
     huboCambio = true;
   }
