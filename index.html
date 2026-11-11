@@ -959,7 +959,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111017;
+const DASHBOARD_VERSION = 2026111018;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1500,10 +1500,10 @@ function renderCelulasDir(){
   const timerVideoPausado = (persona, a) => { const l=timersVideoDe(persona,a); return l.length>0 && !l.some(timerCorre); };
   const videoPersonas = VIDEO_PERSONAS;
   const videoHTML = videoPersonas.map(persona=>{
-    const asigs = ordenarPorPrioridad(todas.filter(a=>a.videoPersona===persona && a.status==='En producción' && !videoCompletoAsig(a)));
+    const asigs = todas.filter(a=>a.videoPersona===persona && a.status==='En producción' && !videoCompletoAsig(a)).sort(compararVideo);
     // "En cola" = videos que aún le faltan. Una materia En espera (su diseño aún no arranca) cuyos 6 videos ya están
     // hechos no es cola de video: va en "Video listo, esperando diseño" (10-nov-2026, caso Turismo de Alejandra Barco).
-    const enCola = ordenarPorPrioridad(todas.filter(a=>a.videoPersona===persona && a.status==='En espera' && !videoCompletoAsig(a)));
+    const enCola = todas.filter(a=>a.videoPersona===persona && a.status==='En espera' && !videoCompletoAsig(a)).sort(compararVideo);
     const enCierreV = todas.filter(a=>a.videoPersona===persona && frenteFaltaCierre(a,true)).sort((p,q)=>compararPorUrgencia(p,q));
     const esperandoDiseno = todas.filter(a=>a.videoPersona===persona && (a.status==='En producción' || a.status==='En espera') && videoCompletoAsig(a) && !disenoCompletoAsig(a) && !enCierreV.includes(a));
     const completadasV = todas.filter(a=>a.videoPersona===persona && a.status==='Completada' && a.tipo==='celula');
@@ -1531,13 +1531,13 @@ function renderCelulasDir(){
       : cierreV ? ['En cierre','#b45309','rgba(234,179,8,.16)'] : ['Libre','#16a34a','rgba(22,163,74,.1)'];
     const barColor = cierreV ? '#ca8a04' : pct>=60 ? '#16a34a' : pct>=30 ? '#d97706' : '#2563eb';
     const principalTxt = P
-      ? `<div style="font-size:11px;color:var(--text);margin-top:1px">${prioMarca(P.a)} ${P.a.nombre}${P.vivo?' <span style="color:#16a34a;font-weight:600">● timer corriendo</span>':P.pausa?' <span style="color:#6b7280">⏸ timer en pausa</span>':(!arrancada?' <span style="color:#6366f1">· sin timer aún</span>':'')}</div>`
+      ? `<div style="font-size:11px;color:var(--text);margin-top:1px">${prioMarca(P.a)} ${P.a.nombre}${_tagDisenoV(P.a)}${P.vivo?' <span style="color:#16a34a;font-weight:600">● timer corriendo</span>':P.pausa?' <span style="color:#6b7280">⏸ timer en pausa</span>':(!arrancada?' <span style="color:#6366f1">· sin timer aún</span>':'')}</div>`
       : cierreV ? `<div style="font-size:11px;color:#b45309;margin-top:1px;font-weight:600" title="Videos listos; faltan puntos de la pestaña Cierre Video">📋 En cierre: ${cierreV.nombre}</div>`
       : `<div style="font-size:11px;color:var(--muted);margin-top:1px">Sin asignatura activa</div>`;
-    const otrasTxt = otras.length ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">También activa${otras.length===1?'':'s'}: ${otras.map(a=>prioMarca(a)+' '+a.nombre).join(' · ')}</div>` : '';
+    const otrasTxt = otras.length ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">También activa${otras.length===1?'':'s'}: ${otras.map(a=>prioMarca(a)+' '+a.nombre+_tagDisenoV(a)).join(' · ')}</div>` : '';
     const otrosCierreTxt = otrosCierreV.length ? `<div style="font-size:11px;color:#b45309;margin-top:2px;font-weight:500">📋 Cierre pendiente: ${otrosCierreV.map(a=>a.nombre).join(' · ')}</div>` : '';
     const colaTxt = enCola.length>0
-      ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>prioMarca(a)+' '+a.nombre).join(' · ')}</div>`
+      ? `<div style="font-size:11px;color:#d97706;margin-top:3px">⏳ En cola: ${enCola.map(a=>prioMarca(a)+' '+a.nombre+_tagDisenoV(a)).join(' · ')}</div>`
       : '';
     const esperandoDisenoTxt = esperandoDiseno.length>0
       ? `<div style="font-size:11px;color:#a855f7;margin-top:2px;font-weight:500">✅🎨 Video listo, esperando diseño: ${esperandoDiseno.map(a=>a.nombre).join(' · ')}</div>`
@@ -1993,9 +1993,10 @@ function _frentesTerminados(a){ return a ? { d: finFrenteTiempos(a,false)!==null
 function siguienteDePersona(P, esVideo, salvoId){
   const mias = STATE.asignaturas.filter(x=>x.tipo==='celula' && x.id!==salvoId && (esVideo ? x.videoPersona===P : x.celula===P) &&
     x.status!=='Completada' && x.status!=='Pausada' && x.status!==ST_REVISION && finFrenteTiempos(x, esVideo)===null);
-  const empezada = mias.filter(x=>infoFrente(x, esVideo).iniciado).sort((p,q)=>compararPorUrgencia(p,q))[0];
+  const cmp = esVideo ? compararVideo : compararPorUrgencia;
+  const empezada = mias.filter(x=>infoFrente(x, esVideo).iniciado).sort((p,q)=>cmp(p,q))[0];
   if(empezada) return empezada;
-  if(esVideo) return mias.filter(x=>!_frenteEntregablesListos(x,true)).sort((p,q)=>compararPorUrgencia(p,q))[0] || null;
+  if(esVideo) return mias.filter(x=>!_frenteEntregablesListos(x,true)).sort((p,q)=>compararVideo(p,q))[0] || null;
   const pend = mias.filter(x=>!_frenteEntregablesListos(x,false));
   return pend.find(x=>x.status==='En producción') || pend.find(x=>x.status==='En espera') || null;
 }
@@ -2987,7 +2988,7 @@ function calcularFilasTiempos(){
     const pend = g.items.filter(it=>!it.info.iniciado && !it.completo && it.a.status!==ST_REVISION && it.a.status!=='Completada');
     if(!pend.length) return;
     let sig;
-    if(g.esVideo) sig = pend.slice().sort((p,q)=>compararPorUrgencia(p.a,q.a))[0];
+    if(g.esVideo) sig = pend.slice().sort((p,q)=>compararVideo(p.a,q.a))[0];
     else sig = pend.find(it=>it.a.status==='En producción') || pend.find(it=>it.a.status==='En espera');
     if(!sig) return;
     const ancla = anclaPlazo(g, sig.a, finAntes(ahora, sig.a.id));
@@ -4260,6 +4261,32 @@ function compararPorUrgencia(a,b){
   if(!a.fechaLimite && b.fechaLimite) return 1;
   return new Date(a.inicio)-new Date(b.inicio);
 }
+// ═══ VIDEO VA ADELANTE DE DISEÑO (11-nov-2026, Juan Diego) ═══
+// Video es más rápido (≈1 día por materia) que diseño (≈3 días), así que el video de una materia debe estar listo
+// cuando su diseño termine, o a más tardar al día hábil siguiente. Por eso, en la fila de cada editora va primero:
+//   1) lo que ya tiene el DISEÑO LISTO (está esperando solo el video),
+//   2) lo que tiene el diseño EN MARCHA, la que menos le falta primero,
+//   3) el resto, por la urgencia de siempre (vencidas, prioridad, lanzamiento, llegada).
+// Un video ya empezado se sigue terminando primero (eso lo deciden las funciones que lo usan).
+function _etapaDisenoV(a){
+  if(disenoCompletoAsig(a)) return 0;
+  if(disenoHechosAsig(a)>0 || infoFrente(a,false).iniciado) return 1;
+  return 2;
+}
+function _faltaDisenoDias(a){ return OP_DISENO_DIAS*(1-_opFrac(a,false)); }
+function compararVideo(a,b){
+  const ea=_etapaDisenoV(a), eb=_etapaDisenoV(b);
+  if(ea!==eb) return ea-eb;
+  if(ea===1){ const fa=_faltaDisenoDias(a), fb=_faltaDisenoDias(b); if(Math.abs(fa-fb)>1e-9) return fa-fb; }
+  return compararPorUrgencia(a,b);
+}
+// Texto corto del diseño para la cola de video: "diseño listo" / "diseño 9/12"
+function _tagDisenoV(a){
+  const e=_etapaDisenoV(a);
+  if(e===0) return ' <span style="color:#16a34a;font-weight:600">(🎨 diseño listo)</span>';
+  if(e===1) return ' <span style="color:#a855f7">(🎨 diseño '+disenoHechosAsig(a)+'/12)</span>';
+  return '';
+}
 function prioMarca(a){ return esVencida(a) ? '🚨' : PRIORIDAD_EMOJI[a.prioridad||'media']; }
 // ═══ FIN TOPE ═══
 
@@ -4621,10 +4648,10 @@ function rebalancearVideoEquipo(){
 
   // Se reparte el video que aún no ha arrancado y, además, TODO lo pendiente de quien ya no está en el equipo
   // de video (aunque ya tenga video empezado: esa persona dejó de hacer video; sus sesiones se conservan).
-  const movibles = ordenarPorPrioridad(STATE.asignaturas.filter(a=>{
+  const movibles = STATE.asignaturas.filter(a=>{
     if(!(a.tipo==='celula' && a.videoPersona && a.status!=='Completada' && a.status!=='Pausada' && a.status!==ST_REVISION && !videoCompletoAsig(a))) return false;
     return !VIDEO_PERSONAS.includes(a.videoPersona) || !infoFrente(a, true).iniciado;
-  }));
+  }).sort(compararVideo);
   if(!movibles.length) return;
 
   let huboCambios = false;
@@ -4656,6 +4683,84 @@ function rebalancearVideoEquipo(){
     toast(`🎬 Video rebalanceado entre ${pool.join(', ')} — ${cambios.length} movida${cambios.length!==1?'s':''}`);
     console.log('[REBALANCEO VIDEO]', cambios);
   }
+}
+
+// ═══ ADELANTAR VIDEO SEGÚN DISEÑO (11-nov-2026, Juan Diego) ═══
+// Si una materia ya tiene el diseño listo o en marcha y su editora de video NO alcanza a tener los videos para cuando
+// termine el diseño (+1 día hábil), se le pasa a la editora que sí alcanza. Cuentas (mismas de Operación):
+//   video ≈ OP_VIDEO_DIAS (1 día) por materia, diseño ≈ OP_DISENO_DIAS (3 días) por materia, según lo que falte.
+//   Cada editora termina primero lo que ya empezó y luego sigue el orden de compararVideo.
+// Para que no "salte" de persona en persona entre navegadores: solo mueve videos que nadie ha empezado, solo si la
+// nueva editora llega a tiempo y la actual no (o, si nadie llega, cuando la adelanta al menos medio día), y nunca una
+// materia cuyo video se reasignó en las últimas 24 h.
+const VIDEO_ADELANTO_MARGEN = 1;      // días hábiles de holgura después de terminar diseño
+const VIDEO_ADELANTO_QUIETO_MS = 24*3600*1000;
+function _pendientesVideoDe(pe, lista){
+  return lista.filter(a=>a.videoPersona===pe)
+    .sort((p,q)=> (infoFrente(q,true).iniciado?1:0)-(infoFrente(p,true).iniciado?1:0) || compararVideo(p,q));
+}
+function _finVideoEn(pe, lista, id){   // días hábiles hasta que esa editora termine el video de `id`
+  let acum=0;
+  for(const a of _pendientesVideoDe(pe, lista)){ acum += OP_VIDEO_DIAS*(1-_opFrac(a,true)); if(a.id===id) return acum; }
+  return Infinity;
+}
+function planAdelantoVideo(){
+  const pool = VIDEO_PERSONAS.filter(p=>celulaActiva(p));
+  if(pool.length<2) return [];
+  const vivas = STATE.asignaturas.filter(a=>a.tipo==='celula' && a.videoPersona && pool.includes(a.videoPersona) &&
+    a.status!=='Completada' && a.status!=='Pausada' && a.status!==ST_REVISION && !videoCompletoAsig(a));
+  // copia para simular los cambios sin tocar STATE hasta decidir
+  const sim = vivas.map(a=>Object.assign(Object.create(Object.getPrototypeOf(a)), a));
+  const candidatas = sim.filter(a=>_etapaDisenoV(a)<=1 && !infoFrente(a,true).iniciado && !_reasignadaVideoHace(a, VIDEO_ADELANTO_QUIETO_MS))
+    .sort(compararVideo);
+  const movs = [];
+  candidatas.forEach(a=>{
+    const limite = _faltaDisenoDias(a) + VIDEO_ADELANTO_MARGEN;
+    const actual = a.videoPersona, finActual = _finVideoEn(actual, sim, a.id);
+    if(finActual <= limite + 1e-9) return;               // su editora llega a tiempo: no se toca
+    let mejor=null, finMejor=Infinity;
+    pool.filter(p=>p!==actual && puedeRecibirVideo(p, a)).forEach(p=>{
+      a.videoPersona = p; const f=_finVideoEn(p, sim, a.id); a.videoPersona = actual;
+      if(f < finMejor - 1e-9){ mejor=p; finMejor=f; }
+    });
+    if(!mejor) return;
+    // Si nadie llega a tiempo, se mueve solo si adelanta el video al menos medio día hábil (si no, no vale el cambio)
+    if(finMejor > limite + 1e-9 && finMejor > finActual - 0.5 + 1e-9) return;
+    // que el cambio no deje tarde a otra materia (con diseño en marcha) que la nueva editora sí alcanzaba
+    const antes = sim.filter(x=>x.videoPersona===mejor && x.id!==a.id && _etapaDisenoV(x)<=1)
+      .map(x=>({ x, ok:_finVideoEn(mejor, sim, x.id) <= _faltaDisenoDias(x)+VIDEO_ADELANTO_MARGEN+1e-9 }));
+    a.videoPersona = mejor;
+    const rompe = antes.some(o=>o.ok && _finVideoEn(mejor, sim, o.x.id) > _faltaDisenoDias(o.x)+VIDEO_ADELANTO_MARGEN+1e-9);
+    if(rompe){ a.videoPersona = actual; return; }
+    movs.push({ id:a.id, nombre:a.nombre, de:actual, a:mejor, finAntes:finActual, finDespues:finMejor, limite, etapa:_etapaDisenoV(a) });
+  });
+  return movs;
+}
+function _reasignadaVideoHace(a, ms){
+  const arr=_asignacionesVideoLog[a.id]||[];
+  if(arr.length<2) return false;                       // solo la asignación original: no cuenta como reasignación
+  return (Date.now() - arr[arr.length-1].ms) < ms;
+}
+function adelantarVideoSegunDiseno(){
+  if(_versionVieja || !_asignacionesVideoLogOk) return [];
+  const movs = planAdelantoVideo();
+  if(!movs.length) return movs;
+  const ENC=['ID','Nombre','Programa','Fecha Inicio','DF Estimado','Status','Observaciones','Fecha Creacion','Tipo','Celula','Fecha Completado','Fecha Inicio Produccion','Link Curso','Video Persona','Prioridad','Fecha Limite','Prioridad Manual','Fecha Debe Entrar'];
+  const filas=[];
+  movs.forEach(m=>{
+    const asig=STATE.asignaturas.find(x=>x.id===m.id); if(!asig) return;
+    asig.videoPersona = m.a;
+    filas.push([asig.id, asig.nombre, asig.prog, asig.inicio, asig.df, asig.status, asig.obs||'', today(), asig.tipo||'estandar', asig.celula||'', asig.fechaCompletado||'', asig.fechaInicioProduccion||'', asig.link||'', asig.videoPersona, asig.prioridad, asig.fechaLimite||'', asig.prioridadManual?'Si':'No', asig.fechaDeberiaEntrar||'']);
+    const pila=s=>String(s||'').split(' ')[0];
+    toast(`🎬 "${m.nombre}" pasa a ${pila(m.a)} en video: su diseño ${m.etapa===0?'ya está listo':'va avanzado'} y así el video ${m.finDespues<=m.limite+1e-9?'sale a tiempo':'sale antes'}`);
+  });
+  guardarEstadoLocal();
+  renderAsignaturas();
+  if(typeof renderCelulasDir==='function') renderCelulasDir();
+  (async()=>{ for(const f of filas){ await sheetActualizar('Asignaturas', ENC, f, ['Video Persona']); } })();
+  if(typeof renderDashboard==="function") renderDashboard();
+  console.log('[ADELANTO VIDEO]', movs);
+  return movs;
 }
 
 function recalcularPrioridadesAutomaticas(){
@@ -7684,7 +7789,7 @@ function _opProyeccion(filas, hoy, W){
   });
   VIDEO_PERSONAS.filter(celulaActiva).forEach(pe=>{
     const mias=vivas.filter(a=>a.videoPersona===pe && !videoCompletoAsig(a))
-      .sort((p,q)=> (infoFrente(q,true).iniciado?1:0)-(infoFrente(p,true).iniciado?1:0) || compararPorUrgencia(p,q));
+      .sort((p,q)=> (infoFrente(q,true).iniciado?1:0)-(infoFrente(p,true).iniciado?1:0) || compararVideo(p,q));
     let acum=0; mias.forEach(a=>{ const x=get(a); acum+=x.faltaV; x.vOk = acum<=disp+1e-9; });
   });
   const sale=[]; let noAlcanzan=0, sinPersona=0, enRiesgo=0;
@@ -8458,7 +8563,7 @@ async function cargarDesdeSheets(){
     limpiarReservasDuplicadas();
     // Sin movimiento: anotar cuándo se asignó cada una y soltar las que llevan un día hábil sin diseño
     try{ await cargarAsignacionesLog(); registrarAsignaciones().catch(e=>console.log('[ASIGNACIONES] error:', e)); /* Regla "sin movimiento" APAGADA el 5-nov-2026 (Juan Diego): quitaba asignaturas que sí se estaban trabajando sin timer. liberarSinMovimiento() queda en el código pero ya no se llama. */ }catch(e){ console.log('[ASIGNACIONES] error:', e); }
-    try{ await cargarAsignacionesVideoLog(); registrarAsignacionesVideo().catch(e=>console.log('[ASIGNACIONES VIDEO] error:', e)); }catch(e){ console.log('[ASIGNACIONES VIDEO] error:', e); }
+    try{ await cargarAsignacionesVideoLog(); try{ adelantarVideoSegunDiseno(); }catch(e){ console.log('[ADELANTO VIDEO] error:', e); } registrarAsignacionesVideo().catch(e=>console.log('[ASIGNACIONES VIDEO] error:', e)); }catch(e){ console.log('[ASIGNACIONES VIDEO] error:', e); }
     // Reordenar reservas ya asignadas si algo más urgente quedó esperando en la cola —
     // MÁXIMO una vez al día (por navegador). Como todo el equipo tiene el dashboard
     // abierto a la vez, correr esto en cada sincronización (cada 15 min, en cada refresco)
