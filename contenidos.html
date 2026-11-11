@@ -171,6 +171,7 @@ textarea{resize:vertical;min-height:54px}
 @keyframes ayDuda{0%,100%{transform:rotate(0)}30%{transform:rotate(-8deg)}70%{transform:rotate(6deg)}}
 @keyframes ayLado{0%,88%,100%{transform:rotate(0)}91%{transform:rotate(-10deg)}94%{transform:rotate(8deg)}}
 @media (prefers-reduced-motion:reduce){.ay-btn,.masc svg,.masc *{animation:none!important}}
+.sel-ses{width:auto;border:1px dashed var(--border2);background:transparent;padding:1px 4px;font-size:12px;border-radius:6px;max-width:260px}
 </style>
 </head>
 <body>
@@ -546,7 +547,9 @@ function msHabil(t0,t1){
   return ms}
 function tiemposEtapas(a){
   const s=ST[a.id],r={equipo:0,docente:0,coordinador:0,desde:null};
-  let cambios=s.eventos.filter(e=>e.ts&&e.a&&e.de&&e.a!==e.de&&e.t!=='fechaAct').slice().sort((x,y)=>x.ts-y.ts);
+  const regE=e=>{const m=/^ev(\d{13})/.exec(e.id||'');return m?+m[1]:(e.ts||0)},fx=s.eventos.filter(e=>e.ts&&/^fase_/.test(e.t||''));
+  let cambios=s.eventos.filter(e=>e.ts&&e.a&&e.de&&e.a!==e.de&&e.t!=='fechaAct').filter(e=>!fx.some(c=>c!==e&&e.ts>=c.ts&&regE(e)<regE(c))).slice().sort((x,y)=>x.ts-y.ts);
+  {const ult=fx.slice().sort((x,y)=>regE(x)-regE(y)).pop();if(ult&&ult.a&&!cambios.includes(ult)){cambios.push(ult);cambios.sort((x,y)=>x.ts-y.ts)}}
   const rs=REAL.filter(x=>realDe(s,x[0])).map(x=>{const f=realDe(s,x[0]);return {ts:new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10),12).getTime(),a:x[3]==='coordA'?'coord':x[3]}});
   if(rs.length){const fin=Math.max(...rs.map(x=>x.ts));cambios=rs.concat(cambios.filter(e=>e.ts>fin)).sort((x,y)=>x.ts-y.ts)}
   if(!cambios.length)return r;
@@ -568,12 +571,12 @@ function labEv(k,s,e){if(k==='cambiosCoord')return 'El coordinador pidió cambio
   return e.l}
 const CAT_VIEJA={'Revisión inicial del docente':'Revisión del material · 1.ª ronda','2.ª revisión docente':'Revisión del material · 2.ª ronda','3.ª revisión docente':'Revisión del material · 3.ª ronda'};
 function catsDe(a){return a.flujo==='IA'?CATS_EIG:CATS_UIDE}
-function catSugerida(a,s){
-  const r=s.rondas||0;
-  if(ajCoord(s))return 'Ajustes de coordinación';
-  if(a.flujo==='IA'){if(s.etapa==='sin'||s.etapa==='escr'||(s.etapa==='rev'&&r===0))return 'Escritura con IA';if(s.etapa==='rev')return CATS_EIG[Math.min(r,3)];return 'Comunicación'}
-  if(s.etapa==='rev')return CATS_UIDE[Math.min(r,2)];
-  return 'Comunicación'}
+/* Cada paso del proceso tiene su categoría de reloj (la misma lógica que "Corregir etapa y fecha") */
+function catFase(a,k){const IA=a.flujo==='IA';
+  if(k==='cd')return 'Ajustes de coordinación';
+  if(IA){if(k==='sin'||k==='enc'||k==='ent')return 'Escritura con IA';const n={a1:1,a2:2,a3:3}[k];if(n)return CATS_EIG[n];return 'Comunicación'}
+  const n={ent:0,a1:1,a2:2,a3:2}[k];if(n!=null)return CATS_UIDE[n];return 'Comunicación'}
+function catSugerida(a,s){return catFase(a,faseActual(a,s))}
 function dhTxt(ms){const x=fmtDias(ms);return /d$/.test(x)?x+' hábiles':x}
 function rondaAct(s){return String((s.rondas||0)+1)}
 function terminadas(s){const r=rondaAct(s),o={};s.eventos.forEach(e=>{if(e.t==='terminar'&&String(e.nota||'').indexOf('Ronda '+r+' ')===0)o[String(e.l).replace(/^Terminado: /,'').replace(/ \(automático.*$/,'')]=1});return o}
@@ -586,7 +589,7 @@ function terminar(id){const a=DATOS.find(x=>x.id===id),s=ST[id],w=trab(s);const 
   guardar();render();toast('Terminado: '+c)}
 function autoTerminar(a,s,k){let c=null;if(k==='alDocente'||k==='aCoord')c=catSugerida(a,s);else if(k==='iaLista')c='Escritura con IA';
   if(c&&!terminadas(s)[c])_marcarTerminado(a,s,c,true)}
-function elegirCat(id,v){const s=ST[id],w=trab(s);if(!v)return;if(w.ini){pausar(id,true);w.cat=v;empezar(id,true,true);render();toast('Ahora: '+v)}else{w.cat=v}}
+function elegirCat(id,v){const s=ST[id],w=trab(s),a=DATOS.find(x=>x.id===id);if(!v)return;w.catM=faseActual(a,s);if(w.ini){pausar(id,true);w.cat=v;empezar(id,true,true);render();toast('Ahora: '+v)}else{w.cat=v;toast('Categoría: '+v)}}
 function trab(s){if(!s.trab)s.trab={ini:null,ms:0,ses:[]};return s.trab}
 function msTrab(s){const w=trab(s);return w.ms+(w.ini?Date.now()-w.ini:0)}
 function fmtH(ms){const m=Math.round(ms/60000);if(m<1)return '0 min';const h=Math.floor(m/60);return h?h+' h '+String(m%60).padStart(2,'0')+' min':m+' min'}
@@ -852,22 +855,31 @@ function tlFases(a,s){const fl=a.flujo==='IA'?'IA':'Autor',P=planFases(a),R=fech
   return '<div class="tl">'+html+'<div class="p'+(HOY>=a.inicio?' ok':'')+'"><i></i>Inicio<b>'+fmt(a.inicio)+'</b></div></div>'+
     '<div class="tl-ley"><span style="--c:var(--ok)">Hecho</span><span style="--c:#3b8be0">Lo que sigue</span><span style="--c:var(--danger)">Atrasado</span><span style="--c:#fff;--b:var(--border2)">Todavía no</span><span style="--c:#5b4fc7">◀ aquí va hoy</span></div>'}
 function cajaFase(a){const s=ST[a.id],fl=a.flujo==='IA'?'IA':'Autor',act=faseActual(a,s),id=a.id;
-  return '<div class="box"><h4>Corregir etapa y fecha</h4><div class="mini" style="margin-bottom:8px">Si la asignatura quedó en un paso equivocado, elige el paso en el que va de verdad y el día en que pasó. Se ajustan solas la etapa, las rondas y la línea de tiempo. Hoy va en: <b>'+esc(FASE_TXT[fl][act])+'</b>.</div>'+
-    '<div class="row2" style="margin:0;flex-wrap:wrap"><select id="fase-'+id+'" style="width:auto;max-width:100%">'+['sin'].concat(FORD).map(k=>'<option value="'+k+'"'+(k===act?' selected':'')+'>'+esc(FASE_TXT[fl][k])+'</option>').join('')+'</select>'+
-    '<input type="date" id="fase-f-'+id+'" value="'+HOY+'" max="'+HOY+'" style="width:auto"><button class="btn pri" onclick="corregirFase(\''+id+'\')">Aplicar</button></div></div>'}
+  return '<div class="box"><h4>Corregir etapa y fecha</h4><div class="mini" style="margin-bottom:8px">Si la asignatura quedó en un paso equivocado, elige el paso en el que va de verdad y el día en que pasó. Se ajustan solas la etapa, las rondas, la línea de tiempo, los días por etapa (En sus manos / Con el docente) y la categoría del reloj. Hoy va en: <b>'+esc(FASE_TXT[fl][act])+'</b>.</div>'+
+    '<div class="row2" style="margin:0;flex-wrap:wrap"><select id="fase-'+id+'" style="width:auto;max-width:100%" onchange="document.getElementById(\'fase-cat-'+id+'\').innerHTML=txtCatFase(DATOS.find(x=>x.id===\''+id+'\'),this.value)">'+['sin'].concat(FORD).map(k=>'<option value="'+k+'"'+(k===act?' selected':'')+'>'+esc(FASE_TXT[fl][k])+'</option>').join('')+'</select>'+
+    '<input type="date" id="fase-f-'+id+'" value="'+HOY+'" max="'+HOY+'" style="width:auto"><button class="btn pri" onclick="corregirFase(\''+id+'\')">Aplicar</button></div>'+
+    '<div class="mini" id="fase-cat-'+id+'" style="margin-top:6px">'+txtCatFase(a,act)+'</div></div>'}
+function txtCatFase(a,k){return quienEtapa(a,faseEstado(k,{rondas:1,rc:1})[0])==='equipo'||k==='sin'?'Reloj en este paso: <b>'+esc(catFase(a,k))+'</b>':'En este paso le toca al '+(faseEstado(k,{})[0]==='coord'?'coordinador':'profesor')+'; si el equipo trabaja algo, el reloj va en <b>'+esc(catFase(a,k))+'</b>.'}
 function corregirFase(id){const a=DATOS.find(x=>x.id===id),s=ST[id],fl=a.flujo==='IA'?'IA':'Autor';
   const k=(document.getElementById('fase-'+id)||{}).value,f=(document.getElementById('fase-f-'+id)||{}).value||HOY;
   if(!k)return;if(f>HOY){toast('No se puede poner una fecha futura');return}
   const antes=faseActual(a,s),R=fechasFases(a,s),ix=FORD.indexOf(k),atras=ix<FORD.indexOf(antes);
   const prev=FORD.slice(0,Math.max(ix,0)).map(q=>R[q]&&!R[q].aprox?R[q].f:'').filter(Boolean).pop();
   if(!confirm('"'+a.materia+'" queda en:\n'+FASE_TXT[fl][k]+(k==='sin'?'':' · desde el '+fmt(f))+'\n\n'+(atras?'Las fechas de los pasos posteriores se borran.\n':'')+(prev&&f<prev?'Ojo: esa fecha es anterior a la del paso previo ('+fmt(prev)+').\n':'')+'¿Confirmas?'))return;
-  const st=faseEstado(k,s),de=s.etapa;
+  const st=faseEstado(k,s),de=s.etapa,catAntes=catSugerida(a,s),w=trab(s);
   s.real=s.real||{};FORD.forEach(q=>{if(FORD.indexOf(q)>ix)s.real[q]=''});if(k!=='sin')s.real[k]=f;else FORD.forEach(q=>s.real[q]='');
   if(trab(s).ini&&quienEtapa(a,st[0])!=='equipo')pausar(id,true);
   if(st[0]!==s.etapa)s.comp=null;
   s.etapa=st[0];if(st[1]!=null)s.rondas=st[1];if(st[2]!=null)s.rc=st[2];s.aprobDoc=!!st[3];s.aprobCoord=!!st[4];s.incompleto=false;s.desde=k==='sin'?null:f;
   const hoy=ymd(new Date());
   s.eventos.push({f,ts:f===hoy?Date.now():new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10),12).getTime(),t:'fase_'+k,l:'Etapa corregida: '+FASE_TXT[fl][k]+(k==='sin'?'':' el '+fmt(f))+(f!==hoy?' (corregida el '+fmt(hoy)+')':''),nota:'Antes: '+FASE_TXT[fl][antes],por:s.responsable||'',de,a:s.etapa});
+  /* El reloj sigue la corrección: categoría nueva y, si quiere, las horas ya registradas en la categoría equivocada pasan a la correcta */
+  const catN=catSugerida(a,s),rN=rondaAct(s);w.catM=null;
+  if(w.ini&&w.cat===catAntes)w.cat=catN;
+  if(catN!==catAntes){const d0=new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)).getTime();
+    const L=w.ses.filter(z=>z.c===catAntes&&z.i>=d0);
+    if(L.length&&confirm('Desde el '+fmt(f)+' hay '+L.length+' sesi'+(L.length>1?'ones':'ón')+' ('+fmtH(L.reduce((t,z)=>t+z.f-z.i,0))+') guardada'+(L.length>1?'s':'')+' como:\n"'+catAntes+'"\n\nCon la etapa corregida, ese trabajo es:\n"'+catN+'"\n\n¿Las paso a esa categoría?'))
+      {moverSesiones(id,L,catN,rN);s.eventos.push({f:hoy,ts:Date.now()+1,t:'catSes',l:L.length+' sesión(es) pasadas de '+catAntes+' a '+catN+' al corregir la etapa',nota:fmtH(L.reduce((t,z)=>t+z.f-z.i,0)),por:s.responsable||''})}}
   guardar();render();toast('Listo: '+FASE_TXT[fl][k]+(k==='sin'?'':' · '+fmtc(f)))}
 function tabDefecto(a,s){return s.etapa==='rev'?'calidad':(s.etapa==='doc'||(s.etapa==='escr'&&a.flujo==='Autor'))?'correos':'fechas'}
 function setTab(k){FICHA_TAB=k;document.querySelectorAll('#ficha .fi-tab').forEach(b=>b.classList.toggle('on',b.dataset.t===k));document.querySelectorAll('#ficha .fi-panel').forEach(p=>p.classList.toggle('on',p.dataset.t===k))}
@@ -882,7 +894,7 @@ function renderFicha(){let el=document.getElementById('ficha');if(!el){el=docume
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ABIERTA&&!document.querySelector('#ayuda.show')){cerrarFicha()}});
 function cajaTiempo(a){
   const s=ST[a.id],w=trab(s),te=tiemposEtapas(a);
-  const catAct=w.ini?(w.cat||catSugerida(a,s)):(w.cat&&catsDe(a).includes(w.cat)&&w.cat===catSugerida(a,s)?w.cat:catSugerida(a,s));
+  const catAct=w.ini?(w.cat||catSugerida(a,s)):(w.cat&&w.catM===faseActual(a,s)?w.cat:catSugerida(a,s));
   const selC='<select id="cat-'+a.id+'" style="width:auto" onchange="elegirCat(\''+a.id+'\',this.value)" title="¿En qué vas a trabajar?">'+catsDe(a).concat(catsDe(a).includes(catAct)?[]:[catAct]).map(c=>'<option'+(c===catAct?' selected':'')+'>'+c+'</option>').join('')+'</select>';
   const termAct=terminadas(s);const hayCat=w.ini||msCat(s,catAct).ms>0;
   const btn=s.etapa==='fab'&&!w.ini?'<span class="mini">Entregada a Fábrica: el reloj quedó cerrado.</span>':selC+(w.ini?'<button class="btn" style="border-color:#f0b4b4;color:var(--danger)" onclick="pausar(\''+a.id+'\')">Pausar</button>':'<button class="btn pri" style="background:var(--ok);border-color:var(--ok)" onclick="empezar(\''+a.id+'\')">'+(msCat(s,catAct).ms>0?'Seguir':'Empezar a trabajar')+'</button>')+
@@ -894,14 +906,23 @@ function cajaTiempo(a){
   const primero=w.ses.reduce((m,x)=>Math.min(m,x.i),w.ini||Infinity);const salida=s.etapa==='fab'?(s.eventos.filter(e=>e.a==='fab'&&e.ts).map(e=>e.ts).pop()||Date.now()):Date.now();
   const lineaOp=isFinite(primero)?'<div class="mini" style="margin-top:4px"><b>Tiempo real operativo:</b> '+dhTxt(msHabil(primero,salida))+' desde el primer Empezar ('+fmt(ymd(new Date(primero)))+')'+(s.etapa==='fab'?' hasta la salida a Fábrica':' hasta hoy')+' · '+fmtH(msTrab(s))+' trabajadas</div>':'';
   const RP={},parA={ms:0};new Set(w.ses.map(x=>x.p).concat(w.ini?[w.persona||s.responsable]:[])).forEach(p=>{if(!p)return;repartir(sesionesPersona(p)).forEach(x=>{if(x.a!==a.id)return;if(x.ref)RP[x.ref.i]=x.par;parA.ms+=x.par})});
-  const ses=w.ses.slice(-4).reverse().map(x=>'<div class="ev"><span class="f">'+fmtc(ymd(new Date(x.i)))+'</span><div>'+fmtH(x.f-x.i)+(x.c?' · '+esc(x.c):'')+(RP[x.i]>=6e4?' · <b>en paralelo '+fmtH(RP[x.i])+'</b>':'')+' <span class="w">· '+esc(x.p)+' · '+new Date(x.i).toTimeString().slice(0,5)+'–'+new Date(x.f).toTimeString().slice(0,5)+'</span></div></div>').join('');
+  const verT=VER_SES[a.id],opC=c=>catsDe(a).concat(c&&!catsDe(a).includes(c)?[c]:[]).map(o=>'<option'+(o===c?' selected':'')+'>'+esc(o)+'</option>').join('');
+  const ses=(verT?w.ses.slice():w.ses.slice(-4)).reverse().map(x=>'<div class="ev"><span class="f">'+fmtc(ymd(new Date(x.i)))+'</span><div>'+fmtH(x.f-x.i)+' · <select class="sel-ses" title="✎ Cambiar la categoría de esta sesión" onchange="cambiarCatSes(\''+a.id+'\','+x.i+',this.value)">'+(x.c?'':'<option value="" selected>Sin categoría</option>')+opC(x.c)+'</select> ✎'+(RP[x.i]>=6e4?' · <b>en paralelo '+fmtH(RP[x.i])+'</b>':'')+' <span class="w">· '+esc(x.p)+' · '+new Date(x.i).toTimeString().slice(0,5)+'–'+new Date(x.f).toTimeString().slice(0,5)+'</span></div></div>').join('');
   const cel=(l,v,c)=>'<div style="background:var(--bg);border-radius:8px;padding:8px 10px"><div class="mini">'+l+'</div><div style="font-size:16px;font-weight:700;'+(c?'color:'+c:'')+'">'+v+'</div></div>';
   return '<div class="box"><h4>Tiempo · '+esc(s.responsable||'sin responsable')+'</h4>'+
     '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+btn+'<span style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:'+(w.ini?'var(--ok)':'var(--text)')+'" data-clk="'+a.id+'">'+fmtClk(msTrab(s))+'</span><span class="mini">'+(w.ini?'corriendo · '+esc(w.cat||''):w.ses.length?w.ses.length+' sesión'+(w.ses.length>1?'es':''):'sin iniciar')+'</span></div>'+
     '<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">'+cel('Trabajado',fmtH(msTrab(s)),'var(--ok)')+cel('En sus manos',fmtDias(te.equipo))+cel('Con el docente',fmtDias(te.docente))+cel('Con coordinador',fmtDias(te.coordinador))+'</div>'+
-    '<div class="mini" style="margin-top:6px">Días hábiles desde el primer registro en el dashboard'+(te.desde?' ('+fmt(ymd(new Date(te.desde)))+')':'')+'. Si empiezas otra asignatura, el dashboard te pregunta si pausar esta o trabajar las dos <b>en paralelo</b> (esas horas no se suman dos veces en tus totales). Se pausa sola al enviarla al docente o al coordinador. Si cambias la categoría con el reloj corriendo, se cierra un tramo y empieza otro. <b>Pausar</b> = la retomo después; <b>✓ Terminar</b> = ya acabé esa tarea.</div>'+
+    '<div class="mini" style="margin-top:6px">Días hábiles desde el primer registro en el dashboard'+(te.desde?' ('+fmt(ymd(new Date(te.desde)))+')':'')+'. Si empiezas otra asignatura, el dashboard te pregunta si pausar esta o trabajar las dos <b>en paralelo</b> (esas horas no se suman dos veces en tus totales). Se pausa sola al enviarla al docente o al coordinador. La categoría viene del paso en que va (pestaña Fechas); puedes elegir otra y se respeta. Si cambias la categoría con el reloj corriendo, se cierra un tramo y empieza otro. <b>Pausar</b> = la retomo después; <b>✓ Terminar</b> = ya acabé esa tarea.</div>'+
     lineaCat+(parA.ms>=6e4?'<div class="mini" style="margin-top:4px"><b>En paralelo:</b> '+fmtH(parA.ms)+' de este tiempo fueron con otro reloj corriendo a la vez.</div>':'')+lineaOp+(terms?'<div class="mini" style="margin-top:4px">'+terms+'</div>':'')+'<div class="mini" style="margin-top:4px"><b>Envíos al profesor:</b> <span style="'+(dev>3?'color:var(--danger);font-weight:700':'')+'">'+dev+(dev>3?' (máximo 3: 2 rondas + la final)':'')+'</span>'+(s.rc?' · <b>Cambios pedidos por el coordinador:</b> '+s.rc:'')+'</div>'+
-    (ses?'<div style="margin-top:8px">'+ses+'</div>':'')+'</div>'}
+    (ses?'<div style="margin-top:8px">'+ses+(w.ses.length>4?'<a href="#" class="mini" onclick="VER_SES[\''+a.id+'\']=!VER_SES[\''+a.id+'\'];render();return false">'+(verT?'Ver solo las últimas 4':'Ver todas las sesiones ('+w.ses.length+')')+'</a>':'')+'<div class="mini" style="margin-top:4px">¿Una sesión quedó en la categoría equivocada? Cámbiala en su lista ✎.</div></div>':'')+'</div>'}
+const VER_SES={};
+/* Cambiar la categoría de una sesión ya registrada (también en el Sheet) */
+function cambiarCatSes(id,ini,c){const s=ST[id],w=trab(s),z=w.ses.find(x=>x.i===ini);if(!z||!c||z.c===c)return;const antes=z.c||'Sin categoría';
+  z.c=c;s.eventos.push({f:ymd(new Date()),ts:Date.now(),t:'catSes',l:'Categoría de una sesión cambiada: '+antes+' → '+c,nota:fmt(ymd(new Date(z.i)))+' · '+fmtH(z.f-z.i)+' · '+(z.p||''),por:z.p||s.responsable||''});
+  if(z.id&&(z._ok||z._q))COLA.push({accion:'actualizarCampos',hoja:'Sesiones',id:z.id,campos:JSON.stringify({'Categoría':c,'Ronda':z.r||''})});
+  guardar();render();toast('Sesión pasada a '+c)}
+/* Pasar varias sesiones a otra categoría y ronda (al corregir la etapa) */
+function moverSesiones(id,L,c,r){const s=ST[id];L.forEach(z=>{z.c=c;z.r=r;if(z.id&&(z._ok||z._q))COLA.push({accion:'actualizarCampos',hoja:'Sesiones',id:z.id,campos:JSON.stringify({'Categoría':c,'Ronda':r})})})}
 /* ── Revisión de calidad ──
    Pauta vigente: Base de revisión de 13 controles (0 a 12), hecha en ChatGPT. Al final de su resumen, ChatGPT agrega el bloque
    FABRICA_REVISION_V2 (JSON) con el estado de cada control, los pendientes con su código y la aprobación por documento.
@@ -1328,7 +1349,9 @@ const FAQ=[
 ['Le di a un botón por error','error equivoque equivoqué boton botón mal clic devolver etapa deshacer corregir etapa','En la asignatura, pestaña <b>Fechas</b> → <b>Corregir etapa y fecha</b>: elige el paso en el que va de verdad y el día en que pasó, y dale <b>Aplicar</b>. Se acomodan solas la etapa, las rondas y la línea de tiempo, y queda anotado en el Historial.'],
 ['No encuentro una asignatura','no encuentro buscar desaparecio desapareció perdi perdí no aparece filtro','Revisa los filtros de arriba: pon <b>Todas</b> y borra la búsqueda. Las que ya pasaron a Fábrica salen en el filtro <b>En Fábrica</b>.'],
 ['¿Cómo uso el reloj?','reloj timer cronometro cronómetro empezar pausar terminar tiempo trabajar','<b>Empezar</b> al sentarte (elige antes la categoría), <b>Pausar</b> si te paras y la retomas después, <b>✓ Terminar</b> cuando acabaste esa tarea. Se pausa solo si empiezas otra asignatura o la envías al docente o al coordinador.'],
-['¿Qué categoría pongo en el reloj?','categoria categoría reloj cual cuál revision revisión material escritura guiones comunicacion comunicación ajustes','Viene sugerida según el momento. <b>Escribe el profesor</b>: Revisión del material · 1.ª/2.ª/3.ª ronda (incluye pasarlo por Claude o ChatGPT y tu lectura), Guiones, Comunicación. <b>Escribe el equipo con IA</b>: Escritura con IA, Ajustes tras revisión del profesor · 1.ª/2.ª/3.ª ronda, Guiones, Comunicación.'],
+['Registré horas en la categoría equivocada','categoria categoría equivocada mal cambiar sesion sesión horas tiempo reloj ronda corregir mover','En la pestaña <b>Tiempo</b>, cada sesión tiene su categoría en una lista con ✎: elige la correcta y se cambia también en el Sheet (si son más de 4, pulsa <b>Ver todas las sesiones</b>). Si el error vino de que la asignatura estaba en un paso equivocado, al usar <b>Corregir etapa y fecha</b> el dashboard te ofrece pasar de una vez las horas desde esa fecha a la categoría correcta.'],
+['El dashboard dice que el docente entregó ajustes y en realidad estoy revisando yo','docente entrego entregó ajustes revisando yo etapa equivocada tiempos mal con el docente','Pestaña <b>Fechas → Corregir etapa y fecha</b>: elige el paso en que va de verdad (debajo te dice qué categoría de reloj le toca) y la fecha real. Se corrigen la etapa, las rondas, la línea de tiempo, los días <b>En sus manos / Con el docente</b> y la categoría del reloj; y te ofrece pasar las horas mal clasificadas.'],
+['¿Qué categoría pongo en el reloj?','categoria categoría reloj cual cuál revision revisión material escritura guiones comunicacion comunicación ajustes','Viene sugerida según el paso en que va la asignatura (el mismo de la pestaña <b>Fechas → Corregir etapa y fecha</b>, que te muestra qué categoría le corresponde a cada paso). Si eliges otra, se respeta. <b>Escribe el profesor</b>: Revisión del material · 1.ª/2.ª/3.ª ronda (incluye pasarlo por Claude o ChatGPT y tu lectura), Guiones, Comunicación. <b>Escribe el equipo con IA</b>: Escritura con IA, Ajustes tras revisión del profesor · 1.ª/2.ª/3.ª ronda, Guiones, Comunicación.'],
 ['Se me olvidó pausar el reloj','olvide olvidé pausar reloj corriendo toda la noche dejé deje prendido','Páusalo y escríbele a Derly cuánto tiempo real fue, para corregirlo.'],
 ['¿Docente UIDE o docente EIG?','uide eig docente tipo diferencia quien quién escribe','<b>Docente UIDE</b>: escribe el profesor, lleva encargo y recordatorios. <b>Docente EIG</b>: escribimos nosotras con IA y el profesor solo revisa, sin encargo. Si una no tiene el dato, elígelo en la caja <b>Datos</b>.'],
 ['UIDE autorizó hacerla con IA','autorizo autorizó ia inteligencia artificial escribir nosotras equipo juanito cambiar a ia','En <b>Datos</b>, cambia <b>Escribe el profesor</b> a <b>Escribe el equipo con IA</b> y anota quién lo autorizó y cuándo. Desde ahí no hay encargo ni recordatorios de entrega.'],
@@ -1376,7 +1399,7 @@ function preguntar(qq){const inp=document.getElementById('ay-q');const q=(qq||in
   try{COLA.push({accion:'guardar',hoja:'Preguntas',enc:JSON.stringify(['ID','Fecha','Pregunta','Respuesta mostrada','Encontrada']),fila:JSON.stringify(['pq'+Date.now(),new Date().toISOString(),q.slice(0,300),r.length?FAQ[r[0].i][0]:'',r.length?'Sí':'No'])});procesarCola()}catch(e){}}
 
 /* ── Versión del dashboard: súbela (AAAAMMDDnn) cada vez que se publica un contenidos.html nuevo ── */
-const DASHBOARD_VERSION = 2026111101;
+const DASHBOARD_VERSION = 2026111201;
 async function revisarVersionPublicada(){if(document.hidden||location.protocol==='file:')return;
   try{const r=await fetch(location.pathname+'?nv='+Date.now(),{cache:'no-store'});if(!r.ok)return;const m=/DASHBOARD_VERSION\s*=\s*(\d+)/.exec(await r.text());
     if(m&&+m[1]>DASHBOARD_VERSION)document.getElementById('ver-nueva').style.display='block'}catch(e){}}
