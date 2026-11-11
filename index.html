@@ -228,6 +228,15 @@ textarea{resize:vertical;min-height:70px}
 .asig-info{flex:1;min-width:0}
 .asig-name{font-weight:600;font-size:14px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .asig-meta{font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
+/* Encabezado de asignatura más claro (11-nov-2026, Juan Diego): un bloque por frente con persona y avance */
+.af-wrap{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
+.af{flex:1 1 230px;max-width:360px;border:1px solid var(--border);border-radius:10px;padding:7px 10px;background:#fbfbfd}
+.af-top{display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap;overflow:hidden}
+.af-top b{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.af-n{margin-left:auto;font-weight:700;font-size:12px}
+.af-bar{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin:5px 0 3px}
+.af-bar i{display:block;height:100%;border-radius:3px}
+.af-sub{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .asig-expand{color:var(--muted);transition:transform .2s;font-size:16px}
 .asig-body{display:none;border-top:1px solid var(--border)}
 .asig-body.open{display:block}
@@ -363,12 +372,13 @@ textarea{resize:vertical;min-height:70px}
     <button class="chip" onclick="filterAsig('Completada',this)">✅ Completadas</button>
     <button class="chip active" onclick="filterAsig('all',this)">Todas</button>
   </div>
-  <div class="asig-tools" style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px">
+  <div id="asig-persona-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0"></div>
+  <div class="asig-tools" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 6px">
     <input id="asig-search" type="text" placeholder="🔍 Buscar por nombre o maestría..." oninput="buscarAsig(this.value)"
-      style="flex:1;min-width:240px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text)">
-    <select id="asig-celula-filter" onchange="filtrarCelulaAsig(this.value)"
-      style="padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text)">
-      <option value="all">Todas las personas</option>
+      style="flex:1 1 260px;min-width:220px;width:auto;padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text)">
+    <select id="asig-celula-filter" onchange="filtrarCelulaAsig(this.value)" title="Todas las personas, también quienes ya no están"
+      style="width:auto;flex:0 0 auto;padding:8px 10px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--bg2);color:var(--text)">
+      <option value="all">Otras personas…</option>
       <option value="Sofia">Sofía Lugo</option>
       <option value="David">David Bolaños</option>
       <option value="Juliana">Juliana Zarate</option>
@@ -381,26 +391,26 @@ textarea{resize:vertical;min-height:70px}
       <option value="Fabian">Célula Fabián (en cierre)</option>
       <option value="Melisa">Célula Melisa (en cierre)</option>
     </select>
-  </div>
-  <div class="asig-tools" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 8px">
-    <span style="font-size:13px;color:var(--muted)">📅 Fecha de:</span>
+
+    <span style="font-size:12px;color:var(--muted);margin-left:6px">📅 Fecha de</span>
     <select id="asig-fecha-tipo" onchange="filtrarFechaAsig()"
-      style="padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text)">
+      style="width:auto;flex:0 0 auto;padding:8px 10px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--bg2);color:var(--text)">
       <option value="inicio">Inicio</option>
       <option value="fin">Finalización</option>
     </select>
-    <label style="font-size:13px;color:var(--muted)">Desde
+    <label style="font-size:12px;color:var(--muted);display:inline-flex;align-items:center;white-space:nowrap">Desde
       <input id="asig-fecha-desde" type="date" onchange="filtrarFechaAsig()"
-        style="padding:8px 10px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text);margin-left:4px">
+        style="width:auto;padding:7px 8px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--bg2);color:var(--text);margin-left:4px">
     </label>
-    <label style="font-size:13px;color:var(--muted)">Hasta
+    <label style="font-size:12px;color:var(--muted);display:inline-flex;align-items:center;white-space:nowrap">Hasta
       <input id="asig-fecha-hasta" type="date" onchange="filtrarFechaAsig()"
-        style="padding:8px 10px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg2);color:var(--text);margin-left:4px">
+        style="width:auto;padding:7px 8px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--bg2);color:var(--text);margin-left:4px">
     </label>
     <button onclick="limpiarFechaAsig()" title="Limpiar fechas"
       style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--bg2);color:var(--muted);cursor:pointer">✕ Limpiar</button>
   </div>
-  <div id="asig-list"></div>
+  <div id="asig-resumen" style="font-size:12px;color:var(--muted);margin:0 0 6px"></div>
+  <div id="asig-list" style="max-height:calc(100vh - 300px);min-height:420px;overflow-y:auto;padding-right:4px;border-radius:12px"></div>
 </div>
 
 <!-- ─── NUEVA ASIGNATURA ─── -->
@@ -854,11 +864,12 @@ textarea{resize:vertical;min-height:70px}
 </div>
 <div id="modal-cierre" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998;align-items:center;justify-content:center">
   <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:24px;max-width:460px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <div id="modal-cierre-tit" style="font-family:var(--fhead);font-size:16px;font-weight:700;margin-bottom:8px"></div>
+    <div style="font-size:38px;line-height:1;margin-bottom:8px;text-align:center">🙌</div>
+    <div id="modal-cierre-tit" style="font-family:var(--fhead);font-size:17px;font-weight:700;margin-bottom:8px;text-align:center"></div>
     <div id="modal-cierre-txt" style="font-size:13px;line-height:1.55;margin-bottom:16px"></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button class="btn" onclick="cerrarRecordatorioCierre()">Entendido</button>
-      <button class="btn btn-primary" onclick="irAlCierre()">Ir al Cierre</button>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn" onclick="cerrarRecordatorioCierre()">Más tarde</button>
+      <button class="btn btn-primary" onclick="irAlCierre()">✅ Ir al Cierre</button>
     </div>
   </div>
 </div>
@@ -869,7 +880,7 @@ textarea{resize:vertical;min-height:70px}
     <div id="modal-felicidades-txt" style="font-size:13px;line-height:1.6;margin-bottom:18px"></div>
     <div style="display:flex;gap:10px;justify-content:center">
       <button class="btn" onclick="cerrarFelicitacion()">¡Gracias!</button>
-      <button class="btn btn-primary" id="modal-felicidades-sig" onclick="irALaSiguiente()">Ver la siguiente</button>
+      <button class="btn btn-primary" id="modal-felicidades-sig" onclick="irALaSiguiente()">👉 Ir a la siguiente</button>
     </div>
   </div>
 </div>
@@ -948,7 +959,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111011;
+const DASHBOARD_VERSION = 2026111016;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1960,14 +1971,17 @@ function recordarCierreSiToca(asigId, persona, rol){
     const quien = esVideo ? (a.videoPersona||persona) : (CELULA_CFG[a.celula]?.label || persona);
     _recordatorioCierre = { asigId:a.id, revisor:quien, esVideo };
     const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    document.getElementById('modal-cierre-tit').textContent = '🙌 ¡Muy bien! '+(esVideo?'Videos completos':'Diseño completo');
+    const pila=String(quien||'').trim().split(/\s+/)[0], yo=_soyYo(quien);
+    document.getElementById('modal-cierre-tit').textContent = (esVideo?'¡Videos completos':'¡Diseño completo')+(pila?', '+pila:'')+'!';
     document.getElementById('modal-cierre-txt').innerHTML =
-      '¡Ya casi! Terminaste '+(esVideo?'los videos':'los entregables de diseño')+' de <b>'+esc(a.nombre)+'</b>. '+
-      'Para cerrar tu parte solo falta la pestaña <b>'+(esVideo?'Cierre Video':'Cierre Diseño')+'</b>:<ul style="margin:8px 0 8px 18px;padding:0">'+
-      falta.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>'+
-      '<span style="font-size:12px;color:var(--muted)">Mientras falte, el dashboard no te da por terminada esta asignatura y el tiempo sigue contando.</span>';
+      (yo?'Terminaste':'Terminó')+' '+(esVideo?'los <b>6 videos</b>':'los <b>12 entregables de diseño</b>')+' de <b>'+esc(a.nombre)+'</b>. ¡Excelente trabajo! ✨'+
+      '<div style="margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(234,179,8,.12)">👉 <b>Último paso:</b> en '+(yo?'tu':'su')+' <b>'+(esVideo?'Cierre Video':'Cierre Diseño')+'</b>, revisa que cada entregable cumpla los estándares de calidad, no tenga errores y esté en su carpeta.'+
+        (()=>{ const c=avanceCierreFrente(a, esVideo); return '<div style="display:flex;align-items:center;gap:8px;margin-top:9px"><span style="font-size:11.5px;font-weight:600;color:#a16207;white-space:nowrap">📋 '+(esVideo?'Cierre Video':'Cierre Diseño')+'</span><div style="flex:1;height:6px;background:rgba(0,0,0,.08);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+c.pct+'%;background:#ca8a04"></div></div><b style="font-size:12px;color:#a16207">'+c.hechos+'/'+c.total+'</b></div>'; })()+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-top:8px">Con el botón te llevo directo a esa pestaña. Hasta que esté marcado, '+(yo?'tu':'su')+' parte no cuenta como terminada.</div>';
+    cerrarAvance();
     document.getElementById('modal-cierre').style.display='flex';
-    sonidoRecordatorio();
+    sonidoCierre();
   }catch(e){ console.log('[RECORDATORIO CIERRE] error:', e); }
 }
 // ══ FELICITACIÓN AL TERMINAR SU PARTE (4-nov-2026, pedido del coordinador) ══
@@ -2054,20 +2068,31 @@ function metaSemanalHTML(persona, frente){
   </div>`;
 }
 // Al cerrar un timer: si con eso la persona llega a su meta de la semana, se celebra (una vez por semana en ese navegador)
+let _metaPendiente = false;
+function _mostrarMetaPendiente(){
+  if(!_metaPendiente) return;
+  if(['modal-avance','modal-cierre','modal-felicidades'].some(id=>_modalVisible(id))) return; // se mostrará al cerrar esa
+  _metaPendiente = false;
+  document.getElementById('modal-meta').style.display='flex'; try{ sonidoFelicitacion(); }catch(e){}
+}
+function _trasCerrarVentana(){ if(_metaPendiente) setTimeout(_mostrarMetaPendiente, 500); }
 function celebrarMetaSiToca(persona, rol){
   try{
     const frente=_esDelFrenteT(persona, rol, true)?'video':'diseno', m=metaSemanal(persona, frente);
     if(!m.cumplida) return;
     const clave='metaCelebrada_'+_primerNombre(persona)+'_'+frente+'_'+m.lunes;
     try{ if(localStorage.getItem(clave)) return; localStorage.setItem(clave,'1'); }catch(e){}
-    const nombre=String(persona||'').trim().split(/\s+/)[0];
-    document.getElementById('modal-meta-tit').textContent='🎉 ¡Objetivo semanal cumplido, '+nombre+'!';
+    const nombre=String(persona||'').trim().split(/\s+/)[0], yo=_soyYo(persona);
+    document.getElementById('modal-meta-tit').textContent='¡Meta semanal cumplida, '+nombre+'!';
     document.getElementById('modal-meta-txt').innerHTML=
-      'Llevas <b>'+m.hechos+' de '+m.meta+' entregables</b> esta semana: '+_textoMaterias(m.hechos/m.porMat)+'. 🙌<br><br>'+
-      'Antes de cerrar la semana, recuerda revisar que cada entregable:'+
-      '<div style="text-align:left;display:inline-block;margin:8px 0">✅ cumpla con los estándares de calidad<br>✅ no tenga errores<br>✅ esté subido en su carpeta correspondiente</div><br>'+
-      '<span style="font-size:12px;color:var(--muted)">Así evitamos incidencias y reprocesos. ¡Gran trabajo! 💪</span>';
-    setTimeout(()=>{ cerrarAvance(); document.getElementById('modal-meta').style.display='flex'; try{ sonidoFelicitacion(); }catch(e){} }, 1200);
+      (yo?'Llevas':'Lleva')+' <b>'+m.hechos+' de '+m.meta+' entregables</b> esta semana: el equivalente a '+_textoMaterias(m.hechos/m.porMat)+'. ¡Gracias por tu trabajo! 🙌'+
+      '<div style="margin:12px 0 4px;padding:10px 12px;border-radius:10px;background:rgba(124,58,237,.08);text-align:left">👉 <b>Antes de cerrar la semana</b>, revisa que cada entregable:'+
+      '<div style="margin-top:6px">✅ Cumpla los estándares de calidad<br>✅ No tenga errores<br>✅ Esté en su carpeta</div></div>'+
+      '<span style="font-size:12px;color:var(--muted)">Así evitamos incidencias y reprocesos.</span>';
+    // Sale DESPUÉS de las otras ventanas (avance, cierre o "terminaste tu parte"): si hay una abierta, espera a que
+    // se cierre (13-nov-2026, Juan Diego).
+    _metaPendiente = true;
+    setTimeout(_mostrarMetaPendiente, 1200);
     return true;
   }catch(e){ console.log('[META SEMANAL] error:', e); }
   return false;
@@ -2085,8 +2110,38 @@ function _avFaltan(a, esVideo){
   if(esVideo) return ['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'].filter(k=>!a?.assets?.global?.[k]).map(k=>_avNombre('global',k));
   const out=[]; ['u1','u2','u3'].forEach(u=>['html','genially','infografia','imagenes'].forEach(k=>{ if(!a?.assets?.[u]?.[k]) out.push((_AV_NOMBRE[k]||k)+' C'+u.slice(1)); })); return out;
 }
+// ¿Quien usa este navegador es esa persona? (nombre de Timers en vivo o de "Soy:"; sin nombre elegido, se asume que sí)
+function _soyYo(persona){
+  let a='', b=''; try{ a=localStorage.getItem('timerPersona')||''; b=localStorage.getItem('revisorNombre')||''; }catch(e){}
+  if(!a && !b) return true;
+  return (!!a && _mismaPersonaAus(a, persona)) || (!!b && _mismaPersonaAus(b, persona));
+}
+// Sonido al terminar todos los entregables (tres notas subiendo, suave): "ya casi"
+function sonidoCierre(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+    _audioCtx = _audioCtx || new AC(); if(_audioCtx.state==='suspended' && _audioCtx.resume) _audioCtx.resume();
+    const t0=_audioCtx.currentTime;
+    [[587.33,0],[739.99,0.1],[880,0.2]].forEach(([f,d],i)=>{ const o=_audioCtx.createOscillator(), g=_audioCtx.createGain();
+      o.type='triangle'; o.frequency.value=f; const dur=i===2?0.45:0.2;
+      g.gain.setValueAtTime(0.0001,t0+d); g.gain.exponentialRampToValueAtTime(0.06,t0+d+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+d+dur);
+      o.connect(g); g.connect(_audioCtx.destination); o.start(t0+d); o.stop(t0+d+dur+0.05); });
+  }catch(e){}
+}
+// Sonido corto y suave para el avance de cada entregable (dos notas subiendo, más bajito que las felicitaciones)
+function sonidoAvance(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+    _audioCtx = _audioCtx || new AC(); if(_audioCtx.state==='suspended' && _audioCtx.resume) _audioCtx.resume();
+    const t0=_audioCtx.currentTime;
+    [[659.25,0],[987.77,0.09]].forEach(([f,d],i)=>{ const o=_audioCtx.createOscillator(), g=_audioCtx.createGain();
+      o.type='sine'; o.frequency.value=f; const dur=i?0.35:0.18;
+      g.gain.setValueAtTime(0.0001,t0+d); g.gain.exponentialRampToValueAtTime(0.05,t0+d+0.015); g.gain.exponentialRampToValueAtTime(0.0001,t0+d+dur);
+      o.connect(g); g.connect(_audioCtx.destination); o.start(t0+d); o.stop(t0+d+dur+0.05); });
+  }catch(e){}
+}
 function _modalVisible(id){ const el=document.getElementById(id); return !!el && el.style.display==='flex'; }
-function cerrarAvance(){ const el=document.getElementById('modal-avance'); if(el) el.style.display='none'; }
+function cerrarAvance(){ const el=document.getElementById('modal-avance'); if(el && el.style.display==='flex'){ el.style.display='none'; _trasCerrarVentana(); } }
 function mostrarAvanceTimer(sesion, a, marcoNuevo, hayOtraVentana){
   try{
     if(!a || !marcoNuevo || hayOtraVentana) return false;
@@ -2096,8 +2151,7 @@ function mostrarAvanceTimer(sesion, a, marcoNuevo, hayOtraVentana){
     const hechos = esVideo ? videoHechosAsig(a) : disenoHechosAsig(a);
     const faltan = _avFaltan(a, esVideo);
     const persona = sesion.persona||'', pila = persona.trim().split(/\s+/)[0] || '';
-    const revisor = (()=>{ try{ return localStorage.getItem('revisorNombre')||''; }catch(e){ return ''; } })();
-    const yo = !revisor || _mismaPersonaAus(revisor, persona);
+    const yo = _soyYo(persona);
     const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const pct = Math.round(hechos/total*100);
     let meta=''; try{ const m=metaSemanal(persona, esVideo?'video':'diseno'); if(m && m.meta>0) meta='<div style="font-size:12px;color:var(--muted);margin-top:8px">🎯 Meta semanal: <b>'+m.hechos+' de '+m.meta+'</b> entregables</div>'; }catch(e){}
@@ -2107,11 +2161,14 @@ function mostrarAvanceTimer(sesion, a, marcoNuevo, hayOtraVentana){
       '<div style="margin:14px 0 4px;font-size:12px;font-weight:600">'+(esVideo?'🎬 Videos':'🎨 Diseño')+' de la materia: '+hechos+' de '+total+' ('+pct+' %)</div>'+
       '<div style="height:8px;background:var(--border);border-radius:5px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:#16a34a;border-radius:5px"></div></div>'+
       (faltan.length
-        ? '<div style="font-size:12px;color:var(--muted);margin-top:8px">'+(faltan.length===1?'Solo falta 1':'Faltan '+faltan.length)+': '+faltan.map(esc).join(', ')+'</div>'
+        ? '<div style="margin-top:10px;font-size:12.5px">👉 '+(faltan.length===1?(yo?'Solo te falta 1:':'Solo le falta 1:'):(yo?'Te faltan ':'Le faltan ')+faltan.length+':')+'</div>'+
+          '<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px;justify-content:center">'+faltan.map(f=>'<span style="font-size:11.5px;padding:2px 9px;border-radius:99px;background:var(--bg3);border:1px solid var(--border)">'+esc(f)+'</span>').join('')+'</div>'
         : '<div style="font-size:12px;color:#15803d;margin-top:8px;font-weight:600">¡Están todos! Ahora sigue su Cierre '+(esVideo?'Video':'Diseño')+'.</div>')+
       meta+
-      '<div style="margin-top:12px;padding:8px 10px;border-radius:10px;background:rgba(99,102,241,.08);font-size:12px">📁 Recuerda subirlo a su carpeta y revisar que no tenga errores.</div>';
+      '<div style="margin-top:12px;padding:8px 10px;border-radius:10px;background:rgba(99,102,241,.08);font-size:12px">📁 Recuerda revisar que cumpla los estándares de calidad, que no tenga errores y subirlo a su carpeta.'+
+        (_linkCarpeta(a.id, a.nombre) ? '<div style="margin-top:7px"><a href="'+esc(_linkCarpeta(a.id, a.nombre))+'" target="_blank" rel="noopener" style="display:inline-block;padding:5px 14px;border-radius:99px;background:#2563eb;color:#fff;font-weight:600;text-decoration:none">📁 Abrir la carpeta del curso</a></div>' : '')+'</div>';
     document.getElementById('modal-avance').style.display='flex';
+    sonidoAvance();
     return true;
   }catch(e){ console.log('[AVANCE] error:', e); return false; }
 }
@@ -2125,25 +2182,27 @@ function felicitarSiTermino(a, antes, preferVideo){
     const clave=a.id+'|'+(frente?'v':'d'); if(_felicitado[clave]) return; _felicitado[clave]=true; // una vez por pestaña
     const esVideo=frente, P = esVideo ? a.videoPersona : a.celula; if(!P) return;
     const nombre = esVideo ? P : (CELULA_CFG[P]?.label || P);
-    const yo = (localStorage.getItem('revisorNombre')||'') === nombre || !localStorage.getItem('revisorNombre');
+    const yo = _soyYo(nombre);
     const pila = nombre.split(' ')[0];
     const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const sig = siguienteDePersona(P, esVideo, a.id);
     _felicitacion = { sigId: sig ? sig.id : null };
     document.getElementById('modal-felicidades-tit').textContent = yo ? '¡Felicidades, '+pila+'! 🥳' : '¡'+pila+' terminó su parte! 🥳';
     document.getElementById('modal-felicidades-txt').innerHTML =
-      (yo ? 'Completaste tu parte de '+(esVideo?'video':'diseño')+' de ' : 'Completó su parte de '+(esVideo?'video':'diseño')+' de ')+'<b>'+esc(a.nombre)+'</b> ✨'+
-      (cierreCompletoAsig(a) ? '<br>🎓 Con esto la materia quedó lista para entregar.' : '')+
+      (yo ? 'Terminaste tu parte de '+(esVideo?'video':'diseño')+' de ' : 'Terminó su parte de '+(esVideo?'video':'diseño')+' de ')+'<b>'+esc(a.nombre)+'</b>. ✨'+
+      '<div style="margin-top:10px;padding:9px 12px;border-radius:10px;background:var(--bg3);text-align:left;font-size:12.5px">'+(yo?'Revisaste':'Revisó')+' que cada entregable:<div style="margin-top:4px">✅ Cumpla los estándares de calidad<br>✅ No tenga errores<br>✅ Esté en su carpeta</div></div>'+
+      '<div style="margin-top:8px;font-weight:600">¡Gracias por tu trabajo! 🙌</div>'+
+      (cierreCompletoAsig(a) ? '<br>🎓 Con esto la materia quedó lista y sale a UIDE.' : '')+
       '<div style="margin-top:12px;padding:10px;border-radius:10px;background:rgba(34,197,94,.10)">'+
-      (sig ? '👉 '+(yo?'Ahora puedes continuar con':'Ahora puede continuar con')+' <b>'+esc(sig.nombre)+'</b>'+(sig.fechaLimite?' <span style="color:var(--muted);font-size:12px">(lanzamiento '+fmtFecha(sig.fechaLimite)+')</span>':'')
-           : '☕ '+(yo?'Por ahora no tienes':'Por ahora no tiene')+' otra asignatura en '+(esVideo?'video':'diseño')+'. ¡Buen trabajo!')+'</div>';
+      (sig ? '👉 <b>Siguiente:</b> '+(yo?'continúa con':'continúa con')+' <b>'+esc(sig.nombre)+'</b>'+(sig.fechaLimite?' <span style="color:var(--muted);font-size:12px">(lanza '+fmtFecha(sig.fechaLimite)+')</span>':'')+'<div style="font-size:11.5px;color:var(--muted);margin-top:4px">Con el botón te la abro en Asignaturas.</div>'
+           : '☕ '+(yo?'Por ahora no tienes':'Por ahora no tiene')+' otra asignatura en '+(esVideo?'video':'diseño')+'. En cuanto llegue una, el dashboard te la asigna.')+'</div>';
     document.getElementById('modal-felicidades-sig').style.display = sig ? '' : 'none';
-    cerrarRecordatorioCierre();
+    cerrarRecordatorioCierre(); cerrarAvance();
     document.getElementById('modal-felicidades').style.display='flex';
     sonidoFelicitacion();
   }catch(e){ console.log('[FELICITACION] error:', e); }
 }
-function cerrarFelicitacion(){ document.getElementById('modal-felicidades').style.display='none'; }
+function cerrarFelicitacion(){ const el=document.getElementById('modal-felicidades'); if(el.style.display==='flex'){ el.style.display='none'; _trasCerrarVentana(); } }
 function irALaSiguiente(){
   const id=_felicitacion && _felicitacion.sigId; cerrarFelicitacion(); if(!id) return;
   const a=STATE.asignaturas.find(x=>x.id===id); if(!a) return;
@@ -2174,7 +2233,7 @@ function sonidoFelicitacion(){
     });
   }catch(e){}
 }
-function cerrarRecordatorioCierre(){ document.getElementById('modal-cierre').style.display='none'; }
+function cerrarRecordatorioCierre(){ const el=document.getElementById('modal-cierre'); if(el.style.display==='flex'){ el.style.display='none'; _trasCerrarVentana(); } }
 function irAlCierre(){
   const r=_recordatorioCierre; cerrarRecordatorioCierre(); if(!r) return;
   const a=STATE.asignaturas.find(x=>x.id===r.asigId); if(!a) return;
@@ -5293,10 +5352,10 @@ function completarTimer(id,nota='',minsManual=null){
   sheetTimerActivo('completar', t);
   renderTimers(); renderDashboardTimers(); toast('Sesión guardada · '+minsToStr(mins));
   recordarCierreSiToca(sesion.asigId, sesion.persona, sesion.rol);
-  const _metaSale = celebrarMetaSiToca(sesion.persona, sesion.rol);
   felicitarSiTermino(STATE.asignaturas.find(x=>x.id===sesion.asigId), antesFelic, _esDelFrenteT(sesion.persona, sesion.rol, true));
+  celebrarMetaSiToca(sesion.persona, sesion.rol);   // si cumple la meta, su ventana sale después de esta
   const _marcoNuevo = !!(_mapAv && _asigAv && !_yaEstaba && _asigAv.assets?.[_mapAv.unitKey]?.[_mapAv.assetKey]);
-  mostrarAvanceTimer(sesion, _asigAv, _marcoNuevo, _metaSale || _modalVisible('modal-cierre') || _modalVisible('modal-felicidades'));
+  mostrarAvanceTimer(sesion, _asigAv, _marcoNuevo, _modalVisible('modal-cierre') || _modalVisible('modal-felicidades'));
 }
 
 // "🙋 Es mío" (6-nov-2026): un timer propio que quedó como "del equipo" (se recargó la pestaña, otra pestaña borró
@@ -5421,6 +5480,17 @@ function guardarManual(){
 
 // ══ RENDER FUNCIONES ══
 
+// 📁 Carpeta del curso a mano (11-nov-2026, Juan Diego): en cada timer y en la ventana de avance, porque subir el
+// entregable a su carpeta es lo que sigue al completarlo. Sale solo si la asignatura tiene "Link Curso".
+function _linkCarpeta(asigId, asigNombre){
+  const a=(STATE.asignaturas||[]).find(x=>(asigId && x.id===asigId) || x.nombre===asigNombre);
+  const l=a && String(a.link||'').trim();
+  return /^https?:\/\//i.test(l||'') ? l : '';
+}
+function _btnCarpeta(asigId, asigNombre, chico){
+  const l=_linkCarpeta(asigId, asigNombre); if(!l) return '';
+  return `<a class="btn btn-sm" href="${_cEsc(l)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir la carpeta del curso en Drive" style="text-decoration:none;color:#2563eb;border-color:rgba(37,99,235,.3);background:rgba(37,99,235,.06)">📁${chico?'':' Carpeta'}</a>`;
+}
 // Filtro de la lista "Timers activos": todos / diseño / video
 let _trVista = 'todos';
 function _trFiltro(t){ return _trVista==='todos' || (_trVista==='video') === (t.rol==='video'); }
@@ -5479,6 +5549,7 @@ function renderTimers(){
             <div class="tr-clock" id="remote-timer-${t.id}" style="color:${k}">${isPausado?'⏸ ':''}${fmtMs(elapsed)}</div>
             <div class="tr-acc">
               <button class="btn btn-sm" title="Si este timer es tuyo y no lo puedes controlar (p. ej. después de recargar), tráelo a esta pestaña" onclick="adoptarTimer('${t.id}')">🙋 Es mío</button>
+              ${_btnCarpeta('', t.asigNombre, true)}
               <button class="btn btn-sm btn-ok" title="Cerrar y guardar este timer" onclick="completarTimerRemoto('${t.id}','${pj}')">✓ Completar</button>
             </div>
           </div>
@@ -5519,6 +5590,7 @@ function renderTimers(){
       <div class="timer-actions">
         <button class="btn btn-sm ${t.running?'btn-pause':''}" onclick="pausarTimer('${t.id}')">${t.running?'⏸ Pausar':'▶ Reanudar'}</button>
         <button class="btn btn-sm btn-ok" onclick="mostrarModalNota('${t.id}')">✓ Completar</button>
+        ${_btnCarpeta(t.asigId, t.asigNombre)}
         <button class="btn btn-sm btn-danger" onclick="borrarTimer('${t.id}')">✕</button>
       </div>
     </div>`;
@@ -5708,6 +5780,34 @@ function _sincronizarFiltroVideo(){
   sel.value=actual;
 }
 function filtrarCelulaAsig(v){ _asigCelula=v||'all'; renderAsignaturas(); }
+function _asigElegirPersona(v){ _asigCelula=v||'all'; renderAsignaturas(); const l=document.getElementById('asig-list'); if(l) l.scrollTop=0; }
+// Bloque de un frente en el encabezado de la asignatura: quién, n/12 (o n/6) con barra y desde cuándo.
+function _asigFrenteHTML(a, esVideo, inf){
+  const total = esVideo ? 6 : 12, hechos = esVideo ? videoHechosAsig(a) : disenoHechosAsig(a);
+  const quien = esVideo ? (a.videoPersona||'') : (a.celula ? (CELULA_CFG[a.celula]?.label||a.celula) : '');
+  const pct = Math.round(hechos/total*100);
+  const col = esVideo ? '#2563eb' : (a.celula && CELULA_CFG[a.celula]?.color) || '#ea6c1a';
+  const listo = hechos>=total, falta = a.tipo==='celula' && frenteFaltaCierre(a, esVideo);
+  let sub;
+  if(listo) sub = falta ? '📋 Listo · falta su cierre' : '✅ Listo';
+  else if(inf && inf.iniciado) sub = 'desde '+fmtFecha(new Date(inf.fechaMs))+' · '+inf.diasTranscurridos+' d transc. · '+inf.diasProduccion.toFixed(1)+' d prod.';
+  else sub = quien ? 'sin iniciar' : 'sin persona asignada';
+  return `<div class="af">
+    <div class="af-top">${esVideo?'🎬':'🎨'} <span style="color:var(--muted)">${esVideo?'Video':'Diseño'}</span> <b>${_cEsc(quien||'—')}</b><span class="af-n" style="color:${listo?'#15803d':col}">${hechos}/${total}</span></div>
+    <div class="af-bar"><i style="width:${pct}%;background:${listo?'#16a34a':col}"></i></div>
+    <div class="af-sub" style="${falta?'color:#b45309;font-weight:600':''}">${sub}</div>
+  </div>`;
+}
+// Pestañas por persona (11-nov-2026, Juan Diego): un clic en vez de abrir la lista. Al entrar por primera vez se
+// abre sola la pestaña de quien usa el navegador (nombre elegido en Timers en vivo o en "Soy:").
+let _asigAutoPersona = false;
+function _asigPersonasTabs(){
+  return [...UNIDADES_DISENO.map(id=>({v:id, n:CELULA_CFG[id]?.label||id, f:'🎨'})), ...VIDEO_PERSONAS.map(n=>({v:n, n, f:'🎬'}))];
+}
+function _asigEsDe(a, v){
+  const esVideo = VIDEO_PERSONAS.includes(v) || VIDEO_EXEDITORES.includes(v);
+  return esVideo ? a.videoPersona===v : a.celula===v;
+}
 function filtrarFechaAsig(){
   _asigFechaTipo = document.getElementById('asig-fecha-tipo')?.value || 'inicio';
   _asigFechaDesde = document.getElementById('asig-fecha-desde')?.value || '';
@@ -5731,6 +5831,14 @@ function fechaAsigPara(a, tipo){
 function renderAsignaturas(filtro){
   _sincronizarFiltroVideo();
   if(filtro!==undefined) _asigStatus=filtro;
+  if(!_asigAutoPersona){
+    _asigAutoPersona = true;
+    if(_asigCelula==='all' && !_asigQuery){
+      let yo=''; try{ yo = localStorage.getItem('timerPersona') || localStorage.getItem('revisorNombre') || ''; }catch(e){}
+      const p = yo && _asigPersonasTabs().find(x=>_mismaPersonaAus(x.n, yo));
+      if(p) _asigCelula = p.v;
+    }
+  }
   const el=document.getElementById('asig-list');
   const ordenStatus = {'En producción':0,'Por iniciar':1,'En revisión de calidad':2,'En cola':3,'Pausada':4,'Completada':5};
   let list=[...STATE.asignaturas];
@@ -5741,10 +5849,18 @@ function renderAsignaturas(filtro){
     String(a.nombre||'').toLowerCase().includes(_asigQuery) ||
     String(a.prog||'').toLowerCase().includes(_asigQuery)
   );
+  // Pestañas por persona (con cuántas tiene cada una con los demás filtros puestos)
+  const _antesPersona = list.slice();
+  const chipsEl=document.getElementById('asig-persona-chips');
+  if(chipsEl){
+    const ch=(v,txt,n)=>`<button class="chip ${_asigCelula===v?'active':''}" style="font-size:12px;padding:4px 11px" onclick="_asigElegirPersona('${v.replace(/'/g,"\\'")}')">${txt}${n!==undefined?` <span style="opacity:.65">· ${n}</span>`:''}</button>`;
+    chipsEl.innerHTML = ch('all','👥 Todas', _antesPersona.length) +
+      _asigPersonasTabs().map(p=>ch(p.v, p.f+' '+_cEsc(p.n.split(' ')[0]+(p.n.split(' ')[1]?' '+p.n.split(' ')[1][0]+'.':'')), _antesPersona.filter(a=>_asigEsDe(a,p.v)).length)).join('');
+  }
+  const selP=document.getElementById('asig-celula-filter'); if(selP){ selP.value = _asigPersonasTabs().some(p=>p.v===_asigCelula) ? 'all' : _asigCelula; }
   // Filtro por célula
   if(_asigCelula!=='all'){
-    const esVideo = VIDEO_PERSONAS.includes(_asigCelula) || VIDEO_EXEDITORES.includes(_asigCelula); // quien ya no está en video conserva su historial
-    list=list.filter(a=> esVideo ? a.videoPersona===_asigCelula : a.celula===_asigCelula);
+    list=list.filter(a=>_asigEsDe(a,_asigCelula));
   }
   // Filtro por rango de fecha (inicio o finalización)
   if(_asigFechaDesde || _asigFechaHasta){
@@ -5762,6 +5878,9 @@ function renderAsignaturas(filtro){
   } else {
     list.sort((a,b)=>new Date(b.inicio)-new Date(a.inicio));
   }
+  const resEl=document.getElementById('asig-resumen');
+  if(resEl){ const quien=_asigCelula==='all'?'':(_asigPersonasTabs().find(p=>p.v===_asigCelula)?.n||_asigCelula);
+    resEl.innerHTML = `${list.length} asignatura${list.length===1?'':'s'}${quien?' de <b>'+_cEsc(quien)+'</b>':''}${_asigStatus!=='all'?' · '+_cEsc(_asigStatus):''}`; }
   if(!list.length){ el.innerHTML='<div class="card"><div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-txt">Sin resultados</div></div></div>'; return; }
   el.innerHTML=list.map(a=>{
     // Ensure célula data is initialized
@@ -5830,18 +5949,15 @@ function renderAsignaturas(filtro){
           <div class="ring-val" style="font-size:10px;color:${pct>=100?'var(--ok)':pct>50?'var(--warn)':'var(--disgrafico)'}">${pct}%</div>
         </div>
         <div class="asig-info">
-          <div class="asig-name">${a.nombre}${celulaCfg?` <span style="font-size:10px;background:${celulaCfg.color}20;color:${celulaCfg.color};padding:2px 7px;border-radius:4px;font-weight:600;vertical-align:middle">🏭 ${celulaCfg.label}</span>`:''}</div>
-          <div class="asig-meta">
-            <span>${a.prog}</span>
-            ${frenteHTML('Diseño','🎨',infDis)}
-            ${frenteHTML('Video','🎬',infVid)}
-            <span>DF est: ${a.df}d</span>
-            ${a.fechaDeberiaEntrar?`<span style="color:${a.prioridad==='alta'?'var(--danger)':'var(--muted)'};font-weight:600">📅 Debía entrar: ${fmtFecha(a.fechaDeberiaEntrar)}</span>`:''}
-            ${a.fechaLimite?`<span style="color:var(--muted)">🚀 Lanzamiento: ${fmtFecha(a.fechaLimite)}</span>`:''}
-            ${sesA.length>0?`<span style="color:var(--video);font-weight:500">📌 Esfuerzo: ${Math.round(sesA.reduce((acc,s)=>acc+s.mins,0)/60)}h en ${sesA.length} sesión${sesA.length>1?'es':''}</span>`:''}
-            ${timersA>0?`<span style="color:var(--warn)">▶ ${timersA} timer${timersA>1?'s':''} activo${timersA>1?'s':''}</span>`:''}
+          <div class="asig-name" title="${String(a.nombre).replace(/"/g,'&quot;')}">${a.nombre} <span style="font-size:11px;font-weight:400;color:var(--muted)">· ${a.prog||''}</span></div>
+          <div class="af-wrap">${_asigFrenteHTML(a,false,infDis)}${_asigFrenteHTML(a,true,infVid)}</div>
+          <div class="asig-meta" style="align-items:center">
+            ${a.fechaLimite?`<span style="color:var(--text)">🚀 Lanza <b>${fmtFecha(a.fechaLimite)}</b> <span style="color:var(--muted)">· tope ${fmtFecha(fechaTopeFabrica(a.fechaLimite))}</span></span>`:''}
+            ${a.fechaDeberiaEntrar?`<span title="Fecha en que debía entrar de instruccional">📅 Debía entrar ${fmtFecha(a.fechaDeberiaEntrar)}</span>`:''}
+            ${sesA.length>0?`<span style="color:var(--video);font-weight:500">📌 ${Math.round(sesA.reduce((acc,s)=>acc+s.mins,0)/60)} h en ${sesA.length} sesión${sesA.length>1?'es':''}</span>`:''}
+            ${timersA>0?`<span style="color:var(--warn);font-weight:600">▶ ${timersA} timer${timersA>1?'s':''} activo${timersA>1?'s':''}</span>`:''}
+            ${a.link?`<a href="${a.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:11px;font-weight:600;color:#2563eb;text-decoration:none">📁 Carpeta del curso</a>`:''}
           </div>
-          ${a.link?`<a href="${a.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:600;color:#2563eb;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2);padding:4px 12px;border-radius:99px;text-decoration:none;width:fit-content">📁 Carpeta del curso (insumos)</a>`:''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
           <span class="badge ${stBadgeDisplay}">${statusDisplay}</span>
