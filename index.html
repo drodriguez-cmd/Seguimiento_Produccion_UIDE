@@ -959,7 +959,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111018;
+const DASHBOARD_VERSION = 2026111019;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1574,7 +1574,7 @@ function renderCelulasDir(){
   }).join('');
 
   // Cola
-  const colaAsigs = ordenarPorPrioridad(todas.filter(a=>a.status==='En espera'));
+  const colaAsigs = todas.filter(a=>a.status==='En espera').sort(compararDiseno);
   // Timers corriendo ahora (de este navegador + los del equipo en el Sheet, sin repetir) para el botón "⏱ Timers · N"
   const timersCorriendoN = Object.values(STATE.timers||{}).filter(t=>t&&t.running).length + (STATE.timersSheets||[]).filter(r=>!STATE.timers[r.id] && r.estado==='Activo').length;
   const colaHTML = colaAsigs.length===0
@@ -1584,7 +1584,7 @@ function renderCelulasDir(){
         <div style="width:22px;height:22px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted);flex-shrink:0">${i+1}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${prioMarca(a)} ${a.nombre}</div>
-          <div style="font-size:11px;color:var(--muted)">${a.prog} · DF: ${a.df||3}d</div>
+          <div style="font-size:11px;color:var(--muted)">${a.prog} · DF: ${a.df||3}d${(()=>{ const e=_etapaVideoD(a); return e===0?' · <span style="color:#16a34a;font-weight:600">🎬 video listo</span>':e===1?' · <span style="color:#2563eb">🎬 video '+videoHechosAsig(a)+'/6</span>':''; })()}</div>
         </div>
         <div style="font-size:10px;padding:2px 9px;border-radius:99px;background:#eef2ff;color:#6366f1;font-weight:600">${a.prog.split(' ')[0]}</div>
       </div>`).join('');
@@ -4135,7 +4135,7 @@ function obtenerSiguienteEnCola(){
   //  - 'En producción'  → ya arrancaron por VIDEO (independiente) pero les falta la célula de diseño
   const enEspera = STATE.asignaturas.filter(a=>
     (a.status==='En espera' || a.status==='En producción') && a.tipo==='celula' && !a.celula
-  ).sort(compararPorUrgencia);
+  ).sort(compararDiseno);
   return enEspera[0] || null;
 }
 
@@ -4286,6 +4286,28 @@ function _tagDisenoV(a){
   if(e===0) return ' <span style="color:#16a34a;font-weight:600">(🎨 diseño listo)</span>';
   if(e===1) return ' <span style="color:#a855f7">(🎨 diseño '+disenoHechosAsig(a)+'/12)</span>';
   return '';
+}
+// ═══ DISEÑO PRIORIZA LO QUE YA TIENE VIDEO (11-nov-2026, Juan Diego) ═══
+// Al repartir la cola de diseño (persona libre o pre-asignación), entre materias con el MISMO lanzamiento va primero
+// la que ya tiene el video listo, luego la que tiene el video más avanzado, y después las demás.
+// La fecha de lanzamiento (y vencidas/prioridad) sigue mandando antes que esto.
+function _etapaVideoD(a){
+  if(videoCompletoAsig(a)) return 0;
+  if(videoHechosAsig(a)>0 || infoFrente(a,true).iniciado) return 1;
+  return 2;
+}
+function compararDiseno(a,b){
+  const hoy=_ymdLocal(new Date());
+  const va=esVencida(a,hoy)?0:1, vb=esVencida(b,hoy)?0:1;
+  if(va!==vb) return va-vb;
+  if(va===1){ const pa=PRIORIDAD_RANK[a.prioridad||'media'], pb=PRIORIDAD_RANK[b.prioridad||'media']; if(pa!==pb) return pa-pb; }
+  if(a.fechaLimite && b.fechaLimite && a.fechaLimite!==b.fechaLimite) return a.fechaLimite < b.fechaLimite ? -1 : 1;
+  if(a.fechaLimite && !b.fechaLimite) return -1;
+  if(!a.fechaLimite && b.fechaLimite) return 1;
+  const ea=_etapaVideoD(a), eb=_etapaVideoD(b);
+  if(ea!==eb) return ea-eb;
+  if(ea===1){ const d=videoHechosAsig(b)-videoHechosAsig(a); if(d) return d; }
+  return new Date(a.inicio)-new Date(b.inicio);
 }
 function prioMarca(a){ return esVencida(a) ? '🚨' : PRIORIDAD_EMOJI[a.prioridad||'media']; }
 // ═══ FIN TOPE ═══
@@ -4685,7 +4707,7 @@ function rebalancearVideoEquipo(){
   }
 }
 
-// ═══ ADELANTAR VIDEO SEGÚN DISEÑO (11-nov-2026, Juan Diego) ═══
+// ═══ ADELANTAR VIDEO SEGÚN DISEÑO (11-nov-2026, Juan Diego) — APAGADO el mismo día: ya no se llama (ver la sincronización) ═══
 // Si una materia ya tiene el diseño listo o en marcha y su editora de video NO alcanza a tener los videos para cuando
 // termine el diseño (+1 día hábil), se le pasa a la editora que sí alcanza. Cuentas (mismas de Operación):
 //   video ≈ OP_VIDEO_DIAS (1 día) por materia, diseño ≈ OP_DISENO_DIAS (3 días) por materia, según lo que falte.
@@ -8563,7 +8585,7 @@ async function cargarDesdeSheets(){
     limpiarReservasDuplicadas();
     // Sin movimiento: anotar cuándo se asignó cada una y soltar las que llevan un día hábil sin diseño
     try{ await cargarAsignacionesLog(); registrarAsignaciones().catch(e=>console.log('[ASIGNACIONES] error:', e)); /* Regla "sin movimiento" APAGADA el 5-nov-2026 (Juan Diego): quitaba asignaturas que sí se estaban trabajando sin timer. liberarSinMovimiento() queda en el código pero ya no se llama. */ }catch(e){ console.log('[ASIGNACIONES] error:', e); }
-    try{ await cargarAsignacionesVideoLog(); try{ adelantarVideoSegunDiseno(); }catch(e){ console.log('[ADELANTO VIDEO] error:', e); } registrarAsignacionesVideo().catch(e=>console.log('[ASIGNACIONES VIDEO] error:', e)); }catch(e){ console.log('[ASIGNACIONES VIDEO] error:', e); }
+    try{ await cargarAsignacionesVideoLog(); /* Paso automático de video a otra editora APAGADO el 11-nov-2026 (Juan Diego): con el orden de compararVideo ya no hace falta y no se quiere que el video cambie de persona solo. Hizo un único movimiento (Gestión del Riesgo Financiero → Valentina, 11-nov 1:45 p. m.). adelantarVideoSegunDiseno() queda en el código pero ya no se llama. */ registrarAsignacionesVideo().catch(e=>console.log('[ASIGNACIONES VIDEO] error:', e)); }catch(e){ console.log('[ASIGNACIONES VIDEO] error:', e); }
     // Reordenar reservas ya asignadas si algo más urgente quedó esperando en la cola —
     // MÁXIMO una vez al día (por navegador). Como todo el equipo tiene el dashboard
     // abierto a la vez, correr esto en cada sincronización (cada 15 min, en cada refresco)
