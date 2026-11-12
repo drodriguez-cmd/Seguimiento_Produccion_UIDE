@@ -76,8 +76,15 @@ body::before{
 .nav-item .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .nav-section{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#b0b8cc;padding:16px 12px 6px;font-weight:600}
 .sidebar-footer{padding:16px;border-top:1px solid var(--border);background:#fafbfd}
-.live-badge{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--calidad)}
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(--ok);animation:pulse 1.5s infinite}
+.live-badge{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#15803d}
+/* Estado del sistema más visible (12-nov-2026, Juan Diego): sincronización y versión como etiquetas de color */
+.sb-st{display:block;margin-top:7px;padding:6px 9px;border-radius:8px;font-size:12px;font-weight:600;line-height:1.35}
+.sb-st small{display:block;font-weight:500;font-size:10.5px;opacity:.9;margin-top:1px}
+/* Recordatorio amigable de plazo vencido (solo para quien produce la materia) */
+.nav-rec{margin:8px 10px 0;padding:10px 11px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;font-size:11.5px;line-height:1.45;color:#7c2d12}
+.nav-rec b{color:#9a3412}
+.nav-rec .x{float:right;cursor:pointer;color:#c2410c;font-size:13px;line-height:1;margin-left:6px}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:pulse 1.5s infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
 
 /* ══ MAIN AREA ══ */
@@ -315,13 +322,15 @@ textarea{resize:vertical;min-height:70px}
     <button class="nav-item" onclick="goPage('timers',this)">
       <span class="dot" style="background:var(--warn)"></span> Timers en vivo
     </button>
+    <div id="nav-recordatorio"></div>
 
   </nav>
 
 
   <div class="sidebar-footer">
     <div class="live-badge"><div class="live-dot"></div> Sistema activo</div>
-    <div style="margin-top:8px;font-size:11px" id="sync-status"><span style="color:var(--muted)">⏳ Cargando...</span></div>
+    <div id="sync-status"><span class="sb-st" style="color:var(--muted);background:var(--bg3)">⏳ Cargando...</span></div>
+    <div id="version-status"><span class="sb-st" style="color:var(--muted);background:var(--bg3)">🔎 Revisando versión…</span></div>
   </div>
 </div>
 
@@ -428,48 +437,6 @@ textarea{resize:vertical;min-height:70px}
           <div class="fg"><label>Programa / Maestría</label>
             <select id="n-prog">
               <option value="">Seleccionar...</option>
-              <option>Cadenas de Suministro (SUPPLY)</option>
-              <option>Ciencia de Datos y Máquinas de Aprendizaje con mención en Inteligencia Artificial</option>
-              <option>Ciberseguridad</option>
-              <option>Comunicación Política en Gobernanza y Procesos Electorales</option>
-              <option>Criminalística</option>
-              <option>Derecho Constitucional</option>
-              <option>Derecho Laboral</option>
-              <option>Derecho Procesal Penal y Litigación Oral</option>
-              <option>Desarrollo Sostenible y Responsabilidad Social Organizacional</option>
-              <option>Dirección Financiera mención en Mercados Internacionales</option>
-              <option>Dirección Publicitaria y Creativa</option>
-              <option>Educación</option>
-              <option>Educación Básica</option>
-              <option>Educación, Tecnología e Innovación</option>
-              <option>Energías Renovables</option>
-              <option>Finanzas Corporativas</option>
-              <option>Gerencia en Salud</option>
-              <option>Gerencia de la calidad e Innovación</option>
-              <option>Gestión de la Seguridad Privada</option>
-              <option>Gestión de Proyectos</option>
-              <option>Gestión de Riesgos</option>
-              <option>Gestión del Talento Humano</option>
-              <option>Gestión del Transporte con mención en Tráfico, Movilidad y Seguridad Vial</option>
-              <option>Gestión Deportiva</option>
-              <option>Gestión Educativa</option>
-              <option>Gestión Estratégica de la Cadena de Suministro</option>
-              <option>Gestión Integral de Seguros</option>
-              <option>Gestión Pública</option>
-              <option>Ingeniería Automotriz, Mención en Procesos y Calidad del Servicio Automotriz</option>
-              <option>Inteligencia Artificial Aplicada</option>
-              <option>Inteligencia de negocios y comportamiento del consumidor</option>
-              <option>Marketing y Comunicación</option>
-              <option>Mercadotecnia mención estratégica digital</option>
-              <option>MKT Digital</option>
-              <option>Neuromarketing</option>
-              <option>Nutrición Deportiva</option>
-              <option>Planificación y Diseño Urbano</option>
-              <option>Protección de Datos</option>
-              <option>Psicopedagogía</option>
-              <option>Salud Pública</option>
-              <option>Seguridad y Salud Ocupacional</option>
-              <option>Turismo</option>
             </select>
           </div>
           <div class="fgrow2">
@@ -619,11 +586,28 @@ textarea{resize:vertical;min-height:70px}
   <!-- REGISTRO MANUAL DE SESIÓN PASADA -->
   <div class="card" style="margin-top:0;margin-bottom:20px">
     <div class="card-head" style="cursor:pointer" onclick="toggleManual()">
-      <span class="card-title">➕ Registrar sesión pasada</span>
-      <span style="font-size:11px;color:var(--muted)">Para recuperar tiempo olvidado</span>
+      <span class="card-title">🚨 Registrar sesión pasada · <span style="color:#b45309">solo emergencias</span></span>
+      <span style="font-size:11px;color:#b45309">Solo si el timer en vivo no pudo registrar (se cayó el internet, se fue la luz, falló el dashboard)</span>
       <span id="manual-arrow" style="color:var(--muted)">▾</span>
     </div>
     <div id="manual-form" style="display:none;padding:20px;border-top:1px solid var(--border)">
+      <!-- 12-nov-2026 (Juan Diego / Derly): el registro manual es SOLO para emergencias. El trabajo normal se registra con
+           los Timers en vivo; registrar aquí el trabajo de todos los días desordena los cálculos de la página Tiempos. -->
+      <div style="background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.45);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12.5px;line-height:1.5;color:var(--text)">
+        <b>⚠️ Esto es solo para emergencias.</b> Tu trabajo de todos los días se registra con los <b>Timers en vivo</b> (arriba).<br>
+        Usa este registro únicamente cuando el timer no pudo guardar tu tiempo: <b>se cayó el internet, se fue la luz o el dashboard falló</b>.<br>
+        <span style="color:var(--muted)">Si registras aquí el trabajo normal, la página Tiempos calcula mal los plazos. Cada sesión manual queda marcada como "Manual" con su motivo.</span>
+      </div>
+      <div class="fg" style="margin-bottom:12px"><label>Motivo de la emergencia (obligatorio)</label>
+        <select id="m-motivo" onchange="document.getElementById('m-motivo-otro-wrap').style.display=this.value==='Otro'?'block':'none'">
+          <option value="">Elige el motivo…</option>
+          <option>Se cayó el internet</option>
+          <option>Se fue la luz</option>
+          <option>El dashboard falló o no guardó el timer</option>
+          <option value="Otro">Otro motivo (explícalo)</option>
+        </select>
+        <div id="m-motivo-otro-wrap" style="display:none;margin-top:6px"><input type="text" id="m-motivo-otro" placeholder="¿Qué pasó?"></div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
         <div class="fg"><label>Asignatura</label>
           <select id="m-asig"><option value="">Seleccionar...</option></select>
@@ -662,7 +646,7 @@ textarea{resize:vertical;min-height:70px}
       <div class="fg" style="margin-bottom:12px"><label>Notas (opcional)</label>
         <textarea id="m-notas" placeholder="Qué se completó, qué quedó pendiente..."></textarea>
       </div>
-      <button class="btn btn-primary" onclick="guardarManual()">💾 Guardar sesión</button>
+      <button class="btn btn-primary" onclick="guardarManual()">💾 Guardar sesión de emergencia</button>
     </div>
   </div>
 
@@ -914,7 +898,7 @@ textarea{resize:vertical;min-height:70px}
   .pq-ac-it:hover,.pq-ac-it.on{background:#fff1f5}
   .pq-quiza{font-size:12px;margin-top:8px;padding:8px 10px;border-radius:10px;background:#fffbeb;border:1px solid #fde68a}
   #pq-panel{position:fixed;right:22px;bottom:80px;z-index:9001;width:400px;max-width:calc(100vw - 32px);max-height:min(640px,calc(100vh - 110px));background:#fff;border:1px solid var(--border2);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.25);display:none;flex-direction:column;overflow:hidden}
-  #pq-panel .pq-head{background:linear-gradient(120deg,#e8336d,#f0597f);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+  #pq-panel .pq-head{background:linear-gradient(120deg,#a3124a,#c2185b);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
   #pq-panel .pq-body{padding:12px 14px;overflow-y:auto;flex:1;font-size:13px;line-height:1.5}
   #pq-panel input{flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px}
   .pq-s{display:inline-block;margin:4px 4px 0 0;padding:5px 10px;border-radius:99px;background:var(--bg3);font-size:11.5px;cursor:pointer;border:1px solid var(--border)}
@@ -925,11 +909,13 @@ textarea{resize:vertical;min-height:70px}
   .pq-num span{font-size:14px;color:var(--muted);font-weight:500}
   .pq-ul{margin:6px 0 4px 18px;padding:0} .pq-ul li{margin:2px 0}
   .pq-mut{font-size:11.5px;color:var(--muted)}
+  .pq-cat{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px}
+  .pq-cat:first-child{margin-top:2px}
   .pq-chip{display:inline-block;font-size:11px;padding:2px 9px;border-radius:99px;background:var(--bg3);margin:2px 4px 2px 0}
 </style>
 <button id="pq-btn" onclick="pqAbrir()" title="Pregúntame sobre la Fábrica"><span class="pq-ico">?</span>Pregúntame</button>
 <div id="pq-panel">
-  <div class="pq-head"><div><div style="font-weight:700;font-size:15px">❓ Pregúntame</div><div style="font-size:11.5px;opacity:.9">Sobre las materias, el equipo y este dashboard</div></div><span onclick="pqAbrir()" style="cursor:pointer;font-size:20px;line-height:1">×</span></div>
+  <div class="pq-head"><div><div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#fff;color:#a3124a;font-size:13px;font-weight:800">?</span>Pregúntame</div><div style="font-size:12px;margin-top:2px">Sobre las materias, el equipo y este dashboard</div></div><span onclick="pqAbrir()" style="cursor:pointer;font-size:20px;line-height:1">×</span></div>
   <div class="pq-body">
     <div id="pq-ac"><div style="display:flex;gap:6px"><input id="pq-q" maxlength="200" autocomplete="off" placeholder="Ej.: ¿cuántas de diciembre faltan por entregar?" oninput="pqAutocompletar()" onkeydown="pqTecla(event)" onblur="setTimeout(pqOcultarAc,150)"><button class="btn btn-primary btn-sm" onclick="pqPreguntar()">Preguntar</button></div>
       <div id="pq-ac-list"></div></div>
@@ -959,10 +945,11 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111019;
+const DASHBOARD_VERSION = 2026111204;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
+  try{ setVersionStatus('vieja'); }catch(e){}
   let b = document.getElementById('aviso-version');
   if(!b){
     b = document.createElement('div'); b.id='aviso-version';
@@ -978,15 +965,29 @@ function avisarVersionVieja(motivo){
 }
 // Revisa cada 10 min si se publicó una versión nueva (lee el index.html publicado). No recarga sola: recargar
 // pausaría los timers que estén corriendo; solo avisa.
+// 12-nov-2026: además muestra en la barra lateral si esta pestaña tiene la última versión.
+function _versionTxt(v){ const s=String(v), m=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(s.slice(4,6))-1]||''; return Number(s.slice(6,8))+'-'+m+' · '+Number(s.slice(8)); }
+function setVersionStatus(estado){
+  const el=document.getElementById('version-status'); if(!el) return;
+  const v=_versionTxt(DASHBOARD_VERSION);
+  el.innerHTML = estado==='ok'
+    ? `<span class="sb-st" style="color:#15803d;background:#dcfce7">✅ Última versión<small>Versión ${v}</small></span>`
+    : estado==='vieja'
+    ? `<span class="sb-st" style="color:#b91c1c;background:#fee2e2;cursor:pointer" onclick="location.reload()">🔄 Hay una versión nueva<small>Tienes la ${v}. Pausa tu timer y recarga (Ctrl+Shift+R).</small></span>`
+    : `<span class="sb-st" style="color:var(--muted);background:var(--bg3)">🔎 Versión ${v}<small>Revisando si es la última…</small></span>`;
+}
 async function revisarVersionPublicada(){
   try{
-    if(document.hidden || _versionVieja) return;
+    if(_versionVieja){ setVersionStatus('vieja'); return; }
+    if(document.hidden) return;
     const r = await fetch(location.href.split('#')[0], { cache:'no-store' }); if(!r.ok) return;
     const m = /const DASHBOARD_VERSION = (\d+);/.exec(await r.text());
-    if(m && Number(m[1]) > DASHBOARD_VERSION) avisarVersionVieja('¡Hay una versión nueva del dashboard!');
+    if(m && Number(m[1]) > DASHBOARD_VERSION){ avisarVersionVieja('¡Hay una versión nueva del dashboard!'); setVersionStatus('vieja'); }
+    else if(m) setVersionStatus('ok');
   }catch(e){}
 }
 setInterval(revisarVersionPublicada, 10*60*1000);
+setTimeout(()=>{ setVersionStatus(''); revisarVersionPublicada(); }, 3000);
 
 function jsonp(url){
   return new Promise((resolve)=>{
@@ -1111,14 +1112,15 @@ async function sheetLeerTodo(){
 function setSyncStatus(estado){
   const el=document.getElementById('sync-status');
   if(!el)return;
+  // 12-nov-2026: más visible. "Guardado local" ya no va en verde: significa que NO está llegando al Sheet.
   const cfg={
-    ok:{icon:'☁️',txt:'Sincronizado',col:'var(--ok)'},
-    sync:{icon:'🔄',txt:'Guardando...',col:'var(--warn)'},
-    err:{icon:'⚠️',txt:'Sin conexión',col:'var(--danger)'},
-    local:{icon:'💾',txt:'Guardado local',col:'var(--ok)'}
+    ok:{icon:'☁️',txt:'Sincronizado',col:'#15803d',bg:'#dcfce7',sub:''},
+    sync:{icon:'🔄',txt:'Guardando...',col:'#a16207',bg:'#fef9c3',sub:''},
+    err:{icon:'⚠️',txt:'Sin conexión',col:'#b91c1c',bg:'#fee2e2',sub:'No llega al Sheet. Revisa tu internet y recarga.'},
+    local:{icon:'💾',txt:'Guardado local',col:'#c2410c',bg:'#ffedd5',sub:'Solo en este navegador. Recarga; si sigue, revisa tu sesión de Google.'}
   };
   const c=cfg[estado]||cfg.ok;
-  el.innerHTML=`<span style="color:${c.col}">${c.icon} ${c.txt}</span>`;
+  el.innerHTML=`<span class="sb-st" style="color:${c.col};background:${c.bg}">${c.icon} ${c.txt}${c.sub?'<small>'+c.sub+'</small>':''}</span>`;
 }
 
 // ── Respaldo en localStorage
@@ -1704,12 +1706,50 @@ window.addEventListener('pagehide', ()=>{ try{
   guardarEstadoLocal();
   sessionStorage.setItem('timersCorriendoAlRecargar', JSON.stringify(Object.values(STATE.timers).filter(t=>t&&t.running).map(t=>t.id)));
 }catch(e){} });
+// ═══ NOMBRE OFICIAL DEL PROGRAMA (12-nov-2026, Juan Diego) ═══
+// El nombre correcto de cada maestría es el de la pestaña "Cronograma" del Sheet (viene de UIDE). El dashboard tenía
+// nombres cortos o viejos ("Planificación y Diseño Urbano" en vez de "… con mención en ciudades inteligentes") y eso
+// llegó a un banner con el nombre equivocado. Ahora:
+//   · la lista de "Nueva asignatura" sale de estos nombres (y de los que traiga el Cronograma si UIDE agrega uno);
+//   · cada asignatura muestra su programa con el nombre oficial (programaOficial), aunque en el Sheet esté el corto.
+// Lista copiada del Cronograma el 12-nov-2026 (sin la fila combinada "… + Finanzas Corporativas").
+const PROGRAMAS_OFICIALES = ["Auditoría y Contabilidad", "Ciberseguridad", "Ciencia de Datos y Máquinas de Aprendizaje con mención en Inteligencia Artificial", "Comunicación Política con mención en Gobernanza y Procesos Electorales", "Criminalística", "Derecho Constitucional", "Derecho Empresarial", "Derecho Laboral y Seguridad Social", "Derecho Procesal Penal y Litigación Oral", "Desarrollo Sostenible y Responsabilidad Social Organizacional", "Dirección Financiera mención en Mercados Internacionales", "Dirección publicitaria y Creativa", "Educación Básica", "Educación, tecnología e innovación", "Energías Renovables", "Finanzas Corporativas", "Gerencia de la calidad e Innovación", "Gerencia en Salud", "Gestión de la seguridad privada", "Gestión de Proyectos", "Gestión de Riesgos", "Gestión del Talento Humano", "Gestión del Transporte con mención en Tráfico, Movilidad y Seguridad Vial", "Gestión Deportiva", "Gestión Educativa", "Gestión Estratégica de la Cadena de Suministro", "Gestión Integral de seguros", "Gestión Pública", "Ingeniería Automotriz, Mención en Procesos y Calidad del Servicio Automotriz", "Inteligencia Artificial Aplicada", "Inteligencia de negocios y comportamiento del consumidor", "Marketing y Comunicación", "Mercadotecnia mención estratégica digital", "Neuromarketing", "Nutrición Deportiva", "Planificación y Diseño Urbano con mención en ciudades inteligentes", "Protección de Datos", "Psicopedagogía", "Salud pública", "Seguridad y Salud Ocupacional", "Turismo con mención en planificación turística"];
+// Nombres viejos que no empiezan igual que el oficial (el resto se reconoce solo)
+const PROGRAMA_ALIAS = {
+  'gestion de la calidad e innovacion': 'Gerencia de la calidad e Innovación',
+  'gerencia de la salud': 'Gerencia en Salud',
+  'comunicacion politica en gobernanza y procesos electorales': 'Comunicación Política con mención en Gobernanza y Procesos Electorales'
+};
+function _pNorm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\(pbl\)/g,' ').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim(); }
+function programasOficiales(){
+  const set = new Map(PROGRAMAS_OFICIALES.map(p=>[_pNorm(p), p]));
+  try{ (_cronoFilas||[]).forEach(f=>{ const p=String(f.prog||'').trim(); if(p && !p.includes(' + ') && !set.has(_pNorm(p))) set.set(_pNorm(p), p); }); }catch(e){}
+  return [...set.values()].sort((a,b)=>a.localeCompare(b,'es'));
+}
+// Devuelve el nombre oficial; si no lo reconoce con seguridad, deja el que venía.
+function programaOficial(prog){
+  const p=String(prog==null?'':prog).trim(); if(!p) return p;
+  const n=_pNorm(p), ofi=programasOficiales();
+  const igual=ofi.find(o=>_pNorm(o)===n); if(igual) return igual;
+  if(PROGRAMA_ALIAS[n]) return PROGRAMA_ALIAS[n];
+  const empieza=ofi.filter(o=>_pNorm(o).startsWith(n+' '));
+  return empieza.length===1 ? empieza[0] : p;
+}
+function _llenarProgramas(){
+  const sel=document.getElementById('n-prog'); if(!sel) return;
+  const actual=sel.value;
+  sel.innerHTML='<option value="">Seleccionar...</option>'+programasOficiales().map(p=>'<option>'+p.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</option>').join('');
+  if(actual) sel.value=programaOficial(actual);
+}
+try{ _llenarProgramas(); }catch(e){}
+function _oficializarProgramas(lista){ (lista||[]).forEach(a=>{ if(a && a.prog) a.prog=programaOficial(a.prog); }); }
+
 function cargarEstadoLocal(){
   try{
     const a = localStorage.getItem('fabrica_asignaturas');
     const s = localStorage.getItem('fabrica_sesiones');
     const t = localStorage.getItem('fabrica_timers');
-    if(a) STATE.asignaturas = JSON.parse(a);
+    if(a){ STATE.asignaturas = JSON.parse(a); _oficializarProgramas(STATE.asignaturas); }
     if(s){
       const sesiones = JSON.parse(s);
       // MIGRACIÓN: si dias está inflado 1000x, recalcular desde mins (fuente de verdad)
@@ -2111,6 +2151,48 @@ function _avFaltan(a, esVideo){
   if(esVideo) return ['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'].filter(k=>!a?.assets?.global?.[k]).map(k=>_avNombre('global',k));
   const out=[]; ['u1','u2','u3'].forEach(u=>['html','genially','infografia','imagenes'].forEach(k=>{ if(!a?.assets?.[u]?.[k]) out.push((_AV_NOMBRE[k]||k)+' C'+u.slice(1)); })); return out;
 }
+// ══ RECORDATORIO AMIGABLE DE PLAZO VENCIDO (12-nov-2026, Juan Diego) ══
+// Debajo de "Timers en vivo" sale un recordatorio SOLO para la persona que produce la materia (diseño o video) cuyo
+// plazo de la pestaña Tiempos ya venció. No es para presionar: es para que lo tenga presente.
+// Privacidad: solo se muestra si este navegador sabe quién es la persona (el nombre que eligió en Timers en vivo o en
+// "Soy:"), y solo con SUS filas. Sin nombre elegido, o si el nombre es de coordinación, no sale nada. Nunca se
+// muestra el atraso de otra persona.
+function _yoNombre(){ try{ return localStorage.getItem('timerPersona') || localStorage.getItem('revisorNombre') || ''; }catch(e){ return ''; } }
+let _recPlazoMem = { t:0, html:null, yo:'' };
+function _recordatoriosPlazoDe(yo){
+  // Nombre completo obligatorio: con solo "Juliana" o "Alejandra" no se sabe cuál de las dos es, y no se muestra nada
+  if(!yo || String(yo).trim().split(/\s+/).length<2) return [];
+  const esVideo = VIDEO_PERSONAS.some(p=>_mismaPersonaAus(p, yo));
+  const esDiseno = UNIDADES_DISENO.some(id=>_mismaPersonaAus(CELULA_CFG[id]?.label||id, yo));
+  if(!esVideo && !esDiseno) return [];          // coordinación / apoyo: nada
+  let filas=[]; try{ filas=calcularFilasTiempos(); }catch(e){ return []; }
+  return filas.filter(f=>f.fechaVencida && !f.completo && !!f.esVideo===esVideo && _mismaPersonaAus(f.persona, yo));
+}
+function renderRecordatorioPlazo(forzar){
+  const el=document.getElementById('nav-recordatorio'); if(!el) return;
+  const yo=_yoNombre(), ahora=Date.now();
+  if(!forzar && _recPlazoMem.yo===yo && _recPlazoMem.html!==null && ahora-_recPlazoMem.t<60000){ el.innerHTML=_recPlazoMem.html; return; }
+  const filas=_recordatoriosPlazoDe(yo);
+  let oculto=''; try{ oculto=sessionStorage.getItem('recPlazoOculto')||''; }catch(e){}
+  const firma=filas.map(f=>f.asigId).join(',');
+  let html='';
+  if(filas.length && oculto!==firma){
+    const pila=String(yo).trim().split(/\s+/)[0];
+    const dia=d=>{ const x=new Date(d); return ['dom','lun','mar','mié','jue','vie','sáb'][x.getDay()]+' '+x.getDate()+'/'+(x.getMonth()+1); };
+    const items=filas.slice(0,3).map(f=>{
+      const a=STATE.asignaturas.find(z=>z.id===f.asigId);
+      const av = a ? (f.esVideo ? videoHechosAsig(a)+'/6 videos' : disenoHechosAsig(a)+'/12 entregables') : '';
+      return '<div style="margin-top:6px">• <b>'+_cEsc(f.asigNombre)+'</b><br><span style="opacity:.85">Plazo: '+dia(f.fechaEsperada)+(av?' · llevas '+av:'')+(f.faltaCierre?' · solo falta tu cierre':'')+'</span></div>';
+    }).join('');
+    html='<div class="nav-rec"><span class="x" title="Ocultar por ahora" onclick="try{sessionStorage.setItem(\'recPlazoOculto\',\''+firma+'\')}catch(e){};renderRecordatorioPlazo(true)">×</span>'+
+      '🌱 <b>Un recordatorio para ti'+(pila?', '+_cEsc(pila):'')+'</b><br>'+(filas.length===1?'Ya pasó el plazo de esta materia:':'Ya pasó el plazo de estas materias:')+items+
+      '<div style="margin-top:7px;opacity:.85">Sin presión: es solo para que lo tengas presente. Si algo te frena, cuéntale a coordinación 💛</div></div>';
+  }
+  _recPlazoMem={ t:ahora, html, yo };
+  el.innerHTML=html;
+}
+setInterval(()=>{ try{ renderRecordatorioPlazo(true); }catch(e){} }, 5*60*1000);
+
 // ¿Quien usa este navegador es esa persona? (nombre de Timers en vivo o de "Soy:"; sin nombre elegido, se asume que sí)
 function _soyYo(persona){
   let a='', b=''; try{ a=localStorage.getItem('timerPersona')||''; b=localStorage.getItem('revisorNombre')||''; }catch(e){}
@@ -3093,6 +3175,7 @@ function goPage(id, el){
 }
 
 function renderPage(id){
+  try{ renderRecordatorioPlazo(false); }catch(e){}
   if(id==='dashboard') renderDashboard();
   else if(id==='asignaturas') renderAsignaturas();
   else if(id==='timers') renderTimers();
@@ -3102,6 +3185,7 @@ function renderPage(id){
   else if(id==='horarios-view') renderHorariosView();
   else if(id==='tiempos') renderTiempos();
   else if(id==='cronograma'){ renderCronograma(); cargarCronograma(false); }
+  else if(id==='nueva'){ _llenarProgramas(); Promise.resolve(cargarCronograma(false)).then(_llenarProgramas).catch(()=>{}); }
   else if(id==='operacion'){ renderOperacion(); cargarCronograma(false); }
   else if(id==='celula') renderCelula();
   else if(id==='celulas-dir') renderCelulasDir();
@@ -5269,6 +5353,7 @@ function _aplicarRolDePersona(){
 function onPersonaTimerChange(){
   const n=document.getElementById('t-nombre')?.value||'';
   try{ localStorage.setItem('timerPersona', n); }catch(e){}
+  try{ setTimeout(()=>renderRecordatorioPlazo(true), 0); }catch(e){}
   if(n){ const u=document.getElementById('t-ubicacion'); if(u){ u.value = calendarioDe(n)==='ES' ? 'Canarias' : 'Colombia'; guardarUbicacion(); } }
   _aplicarRolDePersona();
 }
@@ -5575,6 +5660,12 @@ function guardarManual(){
   const asig=STATE.asignaturas.find(a=>a.id===asigId);
   
   if(!asigId||!rol||!tarea||!fecha||!hi||!hf){ toast('Completa asignatura, rol, tarea, fecha y horas'); return; }
+  // Motivo obligatorio (12-nov-2026): el registro manual es solo para emergencias
+  const motivoSel=(document.getElementById('m-motivo')||{}).value||'';
+  const motivoOtro=((document.getElementById('m-motivo-otro')||{}).value||'').trim();
+  if(!motivoSel){ toast('⚠️ Elige el motivo de la emergencia. Si no hubo emergencia, usa los Timers en vivo.'); return; }
+  if(motivoSel==='Otro' && !motivoOtro){ toast('⚠️ Cuenta brevemente qué pasó'); return; }
+  const motivo = motivoSel==='Otro' ? motivoOtro : motivoSel;
   
   // Validación: tareas de apoyo REQUIEREN clase
   const tareasRequiereClase = ['Generación de imágenes', 'HTML'];
@@ -5589,7 +5680,8 @@ function guardarManual(){
   const mins=Math.round((fin-inicio)/60000);
   const dias=parseFloat((mins/480).toFixed(4));
   const persona=nombre||ROL_CFG[rol]?.label||rol;
-  const sesion={id:uid(),asigId,asigNombre:asig?.nombre||'',rol,persona,tarea,unidad,inicio,fin,mins,dias,notas,manual:true};
+  const notasM='[Emergencia: '+motivo+']'+(notas?' '+notas:'');
+  const sesion={id:uid(),asigId,asigNombre:asig?.nombre||'',rol,persona,tarea,unidad,inicio,fin,mins,dias,notas:notasM,manual:true};
   const antesFelicM=_frentesTerminados(asig);
   STATE.sesiones.unshift(sesion);
   autoMarcarEntregable(asigId,tarea);
@@ -5598,15 +5690,16 @@ function guardarManual(){
   setSyncStatus('sync');
   sheetGuardar('Sesiones',
     ['ID','Asignatura','Programa','Rol','Tarea','Clase','Minutos','Dias','Fecha Inicio','Fecha Fin','Notas','Manual','Persona','ID Asignatura'],
-    [sesion.id,sesion.asigNombre,asig?.prog||'',ROL_CFG[rol]?.label||rol,tarea,unidad,mins,dias.toFixed(3),new Date(inicio).toLocaleString('es-CO'),new Date(fin).toLocaleString('es-CO'),notas,'Sí',persona,asigId||'']
+    [sesion.id,sesion.asigNombre,asig?.prog||'',ROL_CFG[rol]?.label||rol,tarea,unidad,mins,dias.toFixed(3),new Date(inicio).toLocaleString('es-CO'),new Date(fin).toLocaleString('es-CO'),notasM,'Sí',persona,asigId||'']
   );
   // Reset form
-  ['m-asig','m-rol','m-tarea','m-unidad','m-fecha','m-hinicio','m-hfin','m-notas','m-nombre'].forEach(id=>{
+  ['m-asig','m-rol','m-tarea','m-unidad','m-fecha','m-hinicio','m-hfin','m-notas','m-nombre','m-motivo','m-motivo-otro'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
   document.getElementById('m-fecha').value=today();
   renderTimers();
-  toast('Sesión manual guardada · '+minsToHoras(mins));
+  const ow=document.getElementById('m-motivo-otro-wrap'); if(ow) ow.style.display='none';
+  toast('Sesión de emergencia guardada · '+minsToHoras(mins));
 }
 
 // ══ RENDER FUNCIONES ══
@@ -8229,7 +8322,7 @@ async function cargarDesdeSheets(){
 
     if(filaAsig.length > 1){
       const deSheets = filaAsig.slice(1).map(r=>({
-        id:String(r[0]||''), nombre:String(r[1]||''), prog:String(r[2]||''), inicio:String(r[3]||today()).split('T')[0],
+        id:String(r[0]||''), nombre:String(r[1]||''), prog:programaOficial(String(r[2]||'')), inicio:String(r[3]||today()).split('T')[0],
         df:parseInt(r[4])||4, status:String(r[5]||'En producción'), obs:String(r[6]||''),
         prioridad:(String(r[14]||'').toLowerCase()==='alta'||String(r[14]||'').toLowerCase()==='baja')?String(r[14]).toLowerCase():'media',
         fechaLimite: String(r[15]||'').split('T')[0],
@@ -8564,7 +8657,7 @@ async function cargarDesdeSheets(){
       // (Bloque de reenvío masivo eliminado: causaba correos duplicados.
       //  El envío ya ocurre, una sola vez, en el momento en que cada asignatura
       //  se completa, por sus dos puertas — con control de duplicados propio.)
-      guardarEstadoLocal(); renderDashboard();
+      guardarEstadoLocal(); renderDashboard(); try{ renderRecordatorioPlazo(true); }catch(e){}
       const ap=document.querySelector('.page.active')?.id?.replace('page-','');
       if(ap==='roles') renderRoles();
       else if(ap==='personas') renderPersonas();
@@ -8707,18 +8800,19 @@ const _PQ_MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','ago
 const _pqNorm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[¿?¡!.,;:()"]/g,' ').replace(/\s+/g,' ').trim();
 const _pqEsc = s => String(s==null?'':s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
 const _pqF = ymd => { if(!ymd) return '—'; const p=String(ymd).slice(0,10).split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
-const _PQ_SUGERENCIAS = [
-  '¿Cuántas materias de diciembre faltan por entregar?',
-  '¿Cuáles materias de diciembre se han entregado?',
-  '¿Cuántas materias se entregaron en noviembre?',
-  '¿Cuántas materias de enero hemos recibido de instruccional?',
-  '¿Cuántas de diciembre faltan por recibir de instruccional?',
-  '¿En qué está Fabián?',
-  '¿Cuáles son los entregables de diseño?',
-  '¿Qué revisa el cierre de video?',
-  '¿Cuál es el proceso de una materia?',
-  '¿Qué encuentro en la pestaña Tiempos?'
-];
+// Preguntas sugeridas por sección (12-nov-2026, Juan Diego). Sin nombres de personas (nadie debe sentirse vigilado):
+// "¿En qué está diseño?" / "¿En qué está video?" muestran al equipo completo. Los meses se ponen solos (este mes y los
+// dos siguientes), para que las sugerencias no queden viejas.
+function _pqSecciones(){
+  const h=new Date(), m=i=>_PQ_MESES[(h.getMonth()+i)%12];
+  return [
+    ['📦 Entregas', ['¿Cómo van las de '+m(1)+'?', '¿Cuáles materias de '+m(1)+' se han entregado?', '¿Cuántas materias se entregaron en '+m(0)+'?']],
+    ['📥 Lo que llega de instruccional', ['¿Cuántas de '+m(1)+' faltan por recibir de instruccional?', '¿Cuántas materias de '+m(2)+' hemos recibido de instruccional?']],
+    ['🏭 Producción', ['¿En qué está diseño?', '¿En qué está video?']],
+    ['📘 Cómo trabajamos', ['¿Cuál es el proceso de una materia?', '¿Cuáles son los entregables de diseño?', '¿Qué revisa el cierre de video?', '¿Qué encuentro en la pestaña Tiempos?']]
+  ];
+}
+const _PQ_SUGERENCIAS = _pqSecciones().flatMap(x=>x[1]);
 
 // Mes y año que menciona la pregunta. "enero" en noviembre = enero del año que viene.
 function _pqMes(q){
@@ -8803,7 +8897,7 @@ const _PQ_RESPUESTAS = [
        html:'<div class="pq-num">'+E.length+'<span> de '+L.length+'</span></div>'+(E.length?_pqLista(E,a=>'entregada el '+_pqF(_ymdL(new Date(a.fechaCompletado||a.fechaLimite)))):'Aún no se ha entregado ninguna de '+M.nombre+'.') };
    }],
   // Faltan por entregar (por mes de lanzamiento)
-  [q=>/(falta|faltan|pendiente|por entregar|quedan|sin entregar)/.test(q) && !/entregable/.test(q) && !_pqPersonaDe(q),
+  [q=>((/(falta|faltan|pendiente|por entregar|quedan|sin entregar)/.test(q)) || (/\bcomo (van|va|vamos)\b/.test(q) && !!_pqMes(q) && !_pqAsignaturaDe(q))) && !/entregable/.test(q) && !_pqPersonaDe(q),
    q=>{
      const M=_pqMes(q);
      const L=M ? STATE.asignaturas.filter(a=>_pqLanzaEn(a,M.ym)) : STATE.asignaturas.filter(a=>a.tipo==='celula'||a.status===ST_REVISION);
@@ -8827,6 +8921,25 @@ const _PQ_RESPUESTAS = [
      return { titulo:'Entregadas en '+M.nombre,
        html:'<div class="pq-num">'+E.length+'<span> materia'+(E.length===1?'':'s')+'</span></div>Se completaron (y salió su correo a UIDE) durante '+M.nombre+'.'+
          '<div class="pq-mut" style="margin-top:6px">Por fecha de lanzamiento: de las '+L.length+' que lanzan en '+M.nombre+', '+LE+' ya están entregadas.</div>'+_pqLista(E,a=>'el '+_pqF(_ymdL(new Date(a.fechaCompletado))))};
+   }],
+  // En qué está todo el equipo de diseño o de video (12-nov-2026)
+  [q=>/\b(en que (esta|estan|va|van)|como (va|van|vamos))\b/.test(q) && /\b(diseno|disenadores|disenadoras|video|videos|editoras|editores|edicion)\b/.test(q) && !_pqPersonaDe(q) && !/(entregable|calidad|cierre|checklist|estandar)/.test(q),
+   q=>{
+     const esV=/\b(video|videos|editoras|editores|edicion)\b/.test(q);
+     const filas=(esV ? VIDEO_PERSONAS.map(p=>({id:p, nombre:p})) : UNIDADES_DISENO.map(id=>({id, nombre:CELULA_CFG[id]?.label||id})))
+       .filter(x=>{ try{ return celulaActiva(x.id) || STATE.asignaturas.some(a=>a.status!=='Completada' && (esV?a.videoPersona===x.id:a.celula===x.id)); }catch(e){ return true; } })
+       .map(x=>{
+         const activa=celulaActiva(x.id);
+         let a=null; try{ a=siguienteDePersona(x.id, esV); }catch(e){}
+         const av = a ? (esV ? videoHechosAsig(a)+'/6 videos' : disenoHechosAsig(a)+'/12 entregables') : '';
+         const emp = a ? infoFrente(a, esV).iniciado : false;
+         const otra = !esV ? STATE.asignaturas.find(z=>z.celula===x.id && z!==a && z.status==='En espera' && !disenoCompletoAsig(z)) : null;
+         return '<li><b>'+_pqEsc(x.nombre)+'</b>'+(!activa?' <span class="pq-mut">· ⏸ en pausa</span>':'')+': '+
+           (a ? _pqEsc(a.nombre)+' <span class="pq-mut">· '+av+(emp?'':' · por arrancar')+' · lanza '+_pqF(a.fechaLimite)+'</span>' : '<span class="pq-mut">libre</span>')+
+           (otra ? '<div class="pq-mut">Siguiente: '+_pqEsc(otra.nombre)+'</div>' : '')+'</li>';
+       });
+     return { titulo: esV ? '🎬 En qué está video' : '🎨 En qué está diseño',
+       html: '<ul class="pq-ul">'+filas.join('')+'</ul><div class="pq-mut">Para ver a una sola persona: "¿En qué está [nombre]?"</div>' };
    }],
   // Estado de una asignatura
   [q=>!!_pqAsignaturaDe(q),
@@ -8921,7 +9034,7 @@ function pqAbrir(){
 }
 function pqSugerencias(){
   const el=document.getElementById('pq-sug'); if(!el) return;
-  el.innerHTML=_PQ_SUGERENCIAS.map(s=>`<span class="pq-s" onclick="pqPreguntar(this.textContent)">${_pqEsc(s)}</span>`).join('');
+  el.innerHTML=_pqSecciones().map(([tit,ps])=>`<div class="pq-cat">${_pqEsc(tit)}</div>`+ps.map(s=>`<span class="pq-s" onclick="pqPreguntar(this.textContent)">${_pqEsc(s)}</span>`).join('')).join('');
 }
 // ── Errores de digitación y autocompletado (10-nov-2026, Juan Diego) ──
 // Vocabulario de la Fábrica: las palabras que entienden las respuestas + meses + nombres del equipo + palabras de las
@@ -8966,7 +9079,7 @@ function _pqCorregir(texto){
 }
 // Preguntas que el autocompletado puede ofrecer: las sugeridas + una por persona, por materia abierta y por mes.
 function _pqCatalogo(){
-  const out=[..._PQ_SUGERENCIAS];
+  const out=_pqSecciones().flatMap(x=>x[1]);
   [...UNIDADES_DISENO.filter(id=>{ try{ return celulaActiva(id); }catch(e){ return true; } }).map(id=>CELULA_CFG[id]?.label||id), ...VIDEO_PERSONAS]
     .forEach(n=>out.push('¿En qué está '+n+'?'));
   const hoy=new Date();
