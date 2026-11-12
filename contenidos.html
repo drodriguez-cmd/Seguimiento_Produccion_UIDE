@@ -678,11 +678,13 @@ function autoPausas(){let n=0;DATOS.forEach(a=>{const s=ST[a.id],w=trab(s);if(!w
     w.ses.push({id:'se'+ini+'a',i:ini,f:fin,p,c:w.cat||'',r:String((s.rondas||0)+1),auto:1});w.ms+=fin-ini;w.ini=null;
     s.eventos.push({id:'evap'+ini,f:ymd(new Date(ini)),ts:fin,t:'autoPausa',l:'Reloj pausado automáticamente: quedó corriendo ('+(w.cat||'sin categoría')+')',nota:'Se contaron '+fmtH(fin-ini)+' ('+new Date(ini).toTimeString().slice(0,5)+'–'+new Date(fin).toTimeString().slice(0,5)+'). Si trabajaste distinto, ajústalo en la pestaña Tiempo (⏱).',por:p});n++});
   if(n){guardar();render();toast(n===1?'Se pausó un reloj que quedó corriendo':'Se pausaron '+n+' relojes que quedaron corriendo')}}
+function sigoHasta(id,ini){let v=RELOJ_SIGO[id+'_'+ini]||0;try{v=Math.max(v,+localStorage.getItem('gc_sigo_'+id+'_'+ini)||0)}catch(e){}return v}
+function decirSigo(id){const w=trab(ST[id]);if(!w.ini)return;const v=Date.now()+RELOJ_AVISO;RELOJ_SIGO[id+'_'+w.ini]=v;try{localStorage.setItem('gc_sigo_'+id+'_'+w.ini,String(v))}catch(e){}avisoRelojLargo();toast('Listo: te vuelvo a preguntar en 3 horas')}
 function avisoRelojLargo(){const el=document.getElementById('reloj-largo');if(!el)return;
-  const L=DATOS.filter(a=>{const w=trab(ST[a.id]);return w.ini&&Date.now()-w.ini>=RELOJ_AVISO&&!(RELOJ_SIGO[a.id]&&Date.now()-RELOJ_SIGO[a.id]<36e5)});
+  const L=SEM_YO?DATOS.filter(a=>{const w=trab(ST[a.id]);return w.ini&&(w.persona||ST[a.id].responsable)===SEM_YO&&Date.now()-w.ini>=RELOJ_AVISO&&Date.now()>=sigoHasta(a.id,w.ini)}):[];
   if(!L.length){el.style.display='none';return}const a=L[0],s=ST[a.id],w=trab(s);
   el.innerHTML='⏰ <b>'+esc(w.persona||s.responsable||'')+'</b>: el reloj de <b>'+esc(a.materia.slice(0,48))+'</b> lleva <b>'+fmtH(Date.now()-w.ini)+'</b> seguido. ¿Sigues trabajando en esto? '+
-    '<button class="btn" style="margin-left:6px;padding:3px 10px" onclick="RELOJ_SIGO[\''+a.id+'\']=Date.now();avisoRelojLargo()">Sí, sigo</button> <button class="btn" style="padding:3px 10px;border-color:#f0b4b4;color:var(--danger)" onclick="pausar(\''+a.id+'\');avisoRelojLargo()">Pausar</button>'+(L.length>1?' <span class="mini">+'+(L.length-1)+' más</span>':'');
+    '<button class="btn" style="margin-left:6px;padding:3px 10px" onclick="decirSigo(\''+a.id+'\')">Sí, sigo</button> <button class="btn" style="padding:3px 10px;border-color:#f0b4b4;color:var(--danger)" onclick="pausar(\''+a.id+'\');avisoRelojLargo()">Pausar</button>'+(L.length>1?' <span class="mini">+'+(L.length-1)+' más</span>':'');
   el.style.display='block'}
 setInterval(()=>{if(!DATOS.length)return;autoPausas();devolverCoberturas();avisoRelojLargo()},60000);
 /* Ajustar la duración de una sesión (por ejemplo, un reloj que quedó corriendo) */
@@ -1432,7 +1434,7 @@ function cajaVacaciones(p){
   if(conOtra.length)h+='<div class="mini" style="margin-top:8px">Siguen con tu compañera hasta que las envíe: '+conOtra.map(a=>esc(a.materia)+' ('+esc(ST[a.id].cubre.p)+')').join(' · ')+'</div>';
   if(vuelven.length)h+='<div class="mini" style="margin-top:6px"><b>Volvieron a ti esta semana ('+vuelven.length+'):</b> '+vuelven.slice(0,6).map(a=>esc(a.materia)).join(' · ')+(vuelven.length>6?' · y '+(vuelven.length-6)+' más':'')+'</div>';
   return h+'</div>'}
-function setSemYo(v){SEM_YO=v;try{localStorage.setItem('gc_yo',v)}catch(e){}renderSem()}
+function setSemYo(v){SEM_YO=v;setTimeout(()=>{try{avisoRelojLargo()}catch(e){}},0);try{localStorage.setItem('gc_yo',v)}catch(e){}renderSem()}
 function renderSem(){
   const nomS=o=>o===0?'Esta semana':o===-1?'Semana pasada':'Hace '+(-o)+' semanas';
   const l0=lunesDe(new Date());l0.setDate(l0.getDate()+7*SEM_OFF);const vie=new Date(l0);vie.setDate(vie.getDate()+4);
@@ -1548,7 +1550,7 @@ function preguntar(qq){const inp=document.getElementById('ay-q');const q=(qq||in
   try{COLA.push({accion:'guardar',hoja:'Preguntas',enc:JSON.stringify(['ID','Fecha','Pregunta','Respuesta mostrada','Encontrada']),fila:JSON.stringify(['pq'+Date.now(),new Date().toISOString(),q.slice(0,300),r.length?FAQ[r[0].i][0]:'',r.length?'Sí':'No'])});procesarCola()}catch(e){}}
 
 /* ── Versión del dashboard: súbela (AAAAMMDDnn) cada vez que se publica un contenidos.html nuevo ── */
-const DASHBOARD_VERSION = 2026111204;
+const DASHBOARD_VERSION = 2026111205;
 async function revisarVersionPublicada(){if(document.hidden||location.protocol==='file:')return;
   try{const r=await fetch(location.pathname+'?nv='+Date.now(),{cache:'no-store'});if(!r.ok)return;const m=/DASHBOARD_VERSION\s*=\s*(\d+)/.exec(await r.text());
     if(m&&+m[1]>DASHBOARD_VERSION)document.getElementById('ver-nueva').style.display='block'}catch(e){}}
