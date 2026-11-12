@@ -961,7 +961,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111207;
+const DASHBOARD_VERSION = 2026111208;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -6199,7 +6199,7 @@ function renderAsignaturas(filtro){
       : `<span style="opacity:.6">${emoji} <b>${label}:</b> sin iniciar</span>`;
 
     const nomD = a.celula ? (CELULA_CFG[a.celula]?.label||a.celula) : '';
-    const quienesHTML = `<div class="asig-quien"><span><span class="q-l">Diseño</span> ${nomD?_cEsc(nomD):'<span style="color:var(--muted)">sin asignar</span>'}</span><span><span class="q-l">Video</span> ${a.videoPersona?_cEsc(a.videoPersona):'<span style="color:var(--muted)">sin asignar</span>'}</span></div>`;
+    const quienesHTML = `<div class="asig-quien"><span>🎨 <span class="q-l">Diseño</span> ${nomD?_cEsc(nomD):'<span style="color:var(--muted)">sin asignar</span>'}</span><span>🎬 <span class="q-l">Video</span> ${a.videoPersona?_cEsc(a.videoPersona):'<span style="color:var(--muted)">sin asignar</span>'}</span></div>`;
     const stDot = statusDisplay==='Completada'?'#16a34a':statusDisplay==='En producción'?'#d97706':statusDisplay==='Pausada'?'#9ca3af':'#6b7280';
     return `<div class="asig-card"> 
       <div class="asig-head" onclick="toggleAsigBody('${a.id}')">
@@ -6217,7 +6217,7 @@ function renderAsignaturas(filtro){
           <div class="asig-meta" style="align-items:center">
             ${a.fechaLimite?`<span>Lanza <b style="color:var(--text)">${fmtFecha(a.fechaLimite)}</b> · tope ${fmtFecha(fechaTopeFabrica(a.fechaLimite))}</span>`:''}
             ${timersA>0?`<span style="color:#15803d;font-weight:600">● ${timersA} timer${timersA>1?'s':''} activo${timersA>1?'s':''}</span>`:''}
-            ${a.link?`<a href="${a.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:11px;color:#2563eb;text-decoration:none">Carpeta del curso</a>`:''}
+            ${a.link?`<a href="${a.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:11px;color:#2563eb;text-decoration:none">📁 Carpeta del curso</a>`:''}
           </div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
