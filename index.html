@@ -247,7 +247,11 @@ textarea{resize:vertical;min-height:70px}
 /* Encabezado de asignatura más claro (11-nov-2026, Juan Diego): un bloque por frente con persona y avance */
 .af-wrap{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
 /* Asignaturas, más limpia (12-nov-2026): afuera solo quién; el detalle por frente y la gestión van en el desplegable */
-.asig-quien{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--text);margin:3px 0 4px}
+.asig-quien{display:flex;gap:28px;flex-wrap:wrap;font-size:12.5px;color:var(--text);margin:8px 0 6px}
+.asig-prog{font-size:11.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#asig-list .asig-head{padding:16px 22px;align-items:flex-start}
+#asig-list .asig-prog-ring{margin-top:4px}
+#asig-list .asig-meta{gap:18px;font-size:11.5px}
 .q-l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-right:4px}
 .asig-resumen-body{padding:12px 20px 4px;border-bottom:1px solid var(--border)}
 .asig-gestion{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
@@ -961,7 +965,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111208;
+const DASHBOARD_VERSION = 2026111209;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1304,10 +1308,11 @@ function lanzamientosHTML(todas){
       + `Diseño termina ≈ ${_ddmm(p.d)}, video ≈ ${_ddmm(p.v)}. Tope de fábrica más cercano del mes: ${_ddmm(p.tope)}. `
       + (p.nR ? `Incluye ${p.nR} materia${p.nR===1?'':'s'} que aún no llega${p.nR===1?'':'n'} de instruccional (según el Cronograma), como si llegaran a tiempo; la última debía llegar el ${_ddmm(p.llegaUltima)}. ` : '')
       + `No incluye el cierre.`;
-    if(p.fin===null) return `<div title="${tip}" style="font-size:10px;color:var(--muted);margin-top:4px">Sin ritmo reciente de ${p.cuello} para estimar</div>`;
+    if(p.fin===null) return `<div title="${tip}" style="font-size:10.5px;color:var(--muted);margin-top:8px;padding-top:7px;border-top:1px solid var(--border);line-height:1.4">Sin ritmo reciente de ${p.cuello} para estimar</div>`;
     const col = p.llega ? 'var(--text2,#4b5563)' : '#dc2626';
-    return `<div title="${tip}" style="font-size:10px;margin-top:4px;color:${col};font-weight:600">A este ritmo: ${_ddmm(p.fin)}</div>
-      <div title="${tip}" style="font-size:10px;color:var(--muted)">tope ${_ddmm(p.tope)} · ${p.llega?'llega a tiempo':p.cuello==='llegada'?'depende de cuándo llegue de instruccional':'se pasa por '+p.cuello}</div>`; };
+    return `<div title="${tip}" style="margin-top:8px;padding-top:7px;border-top:1px solid var(--border);line-height:1.4">
+        <div style="font-size:10.5px;color:${col};font-weight:600">A este ritmo: ${_ddmm(p.fin)}</div>
+        <div style="font-size:10.5px;color:var(--muted)">tope ${_ddmm(p.tope)} · ${p.llega?'llega a tiempo':p.cuello==='llegada'?'depende de cuándo llegue de instruccional':'se pasa por '+p.cuello}</div></div>`; };
   const metas=mesesAbiertos.filter(m=>m!=='sin').map(m=>{ const x=meses[m], hechas=x.total-x.faltan, pct=Math.round(hechas/x.total*100);
     const urg = m!=='sin' && m<=hoy.slice(0,7) && x.faltan>0;
     const on = m===sel;
@@ -1324,8 +1329,8 @@ function lanzamientosHTML(todas){
       <div style="font-size:11px;color:var(--muted);text-transform:capitalize;font-weight:600">${nombreMes(m)}</div>
       <div style="font-size:13px;margin-top:2px;white-space:nowrap"><b style="font-size:18px;color:${urg?'#dc2626':'var(--text)'}">${x.faltan}</b> de ${x.total} por entregar</div>
       <div style="height:4px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:#16a34a"></div></div>
-      <div style="font-size:10px;color:var(--muted);margin-top:3px">${hechas} entregada${hechas===1?'':'s'}${x.recibir?` · ${x.recibidas||0} recibida${(x.recibidas||0)===1?'':'s'}`:''}</div>
-      ${x.recibir?`<div style="font-size:10px;color:var(--muted);margin-top:2px" title="Según la pestaña Cronograma: lanzan en este mes y aún no llegan de instruccional${recibir[m]&&recibir[m].nombres.length?': '+_cEsc(recibir[m].nombres.slice(0,15).join(', ')):''}">${x.recibir} aún no llega${x.recibir===1?'':'n'} de instruccional</div>`:''}${pronoHTML(m)}${pie}</div>`; }).join('');
+      <div style="font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.4">${hechas} entregada${hechas===1?'':'s'}${x.recibir?` · ${x.recibidas||0} recibida${(x.recibidas||0)===1?'':'s'}`:''}</div>
+      ${x.recibir?`<div style="font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.4" title="Según la pestaña Cronograma: lanzan en este mes y aún no llegan de instruccional${recibir[m]&&recibir[m].nombres.length?': '+_cEsc(recibir[m].nombres.slice(0,15).join(', ')):''}">${x.recibir} aún no llega${x.recibir===1?'':'n'} de instruccional</div>`:''}${pronoHTML(m)}${pie}</div>`; }).join('');
   const sinF = mesesAbiertos.includes('sin') ? meses.sin.faltan : 0;
   const sinLink = sinF ? `<div class="lanz-mes" role="button" tabindex="0" onclick="_lanzElegirMes('sin')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_lanzElegirMes('sin')}" style="flex-basis:100%;font-size:11px;cursor:pointer;color:${sel==='sin'?'#6366f1':'var(--muted)'};font-weight:${sel==='sin'?'600':'400'};padding:2px 2px 0">${sel==='sin'?'▼ ':''}${sinF} sin fecha de lanzamiento · ver</div>` : '';
   const yo = _lanzYo();
@@ -1482,7 +1487,6 @@ function renderCelulasDir(){
       <div style="width:12px;height:12px;border-radius:50%;background:${cfg.color};flex-shrink:0"></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">${cfg.label}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${cfg.lider} · ${cfg.disenador}</div>
         ${cierre ? cierreTxt : `<div style="font-size:11px;color:var(--muted);margin-top:1px">${asigActiva?asigActiva.nombre:'Sin asignatura activa'}</div>`}
         ${otrosCierreTxt}
         ${preAsignadaTxt}
@@ -6212,7 +6216,8 @@ function renderAsignaturas(filtro){
           <div class="ring-val" style="font-size:10px;color:${pct>=100?'var(--ok)':pct>50?'var(--warn)':'var(--disgrafico)'}">${pct}%</div>
         </div>
         <div class="asig-info">
-          <div class="asig-name" title="${String(a.nombre).replace(/"/g,'&quot;')}">${a.nombre} <span style="font-size:11px;font-weight:400;color:var(--muted)">· ${a.prog||''}</span></div>
+          <div class="asig-name" title="${String(a.nombre).replace(/"/g,'&quot;')}">${a.nombre}</div>
+          ${a.prog?`<div class="asig-prog">${_cEsc(a.prog)}</div>`:''}
           ${quienesHTML}
           <div class="asig-meta" style="align-items:center">
             ${a.fechaLimite?`<span>Lanza <b style="color:var(--text)">${fmtFecha(a.fechaLimite)}</b> · tope ${fmtFecha(fechaTopeFabrica(a.fechaLimite))}</span>`:''}
