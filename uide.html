@@ -95,6 +95,29 @@ input,select{font-family:inherit;font-size:13px;border:1px solid var(--border);b
 .ley{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin:2px 2px 14px}
 .ley span{display:inline-flex;align-items:center;gap:6px}.ley i{display:inline-block;width:22px;height:7px;border-radius:4px}
 footer{font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px}
+/* Cuadro de mando (Proceso integral) */
+.dash{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:18px;margin-bottom:18px}
+.dash .card{margin:0}
+.cb{padding:16px 18px 18px}
+.cb h3{font-size:14px;font-weight:700}.cb .ds{font-size:12px;color:var(--muted);margin:2px 0 14px}
+.fn{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px;align-items:center;margin-bottom:12px}
+.fn .lb{font-size:12.5px;color:var(--text);line-height:1.3}.fn .lb small{display:block;color:var(--muted);font-size:11px}
+.fn .tr{display:flex;align-items:center;gap:8px;min-width:0}
+.fn .bar{height:22px;border-radius:0 4px 4px 0;min-width:4px;cursor:default}
+.fn .vl{font-size:12.5px;font-weight:600;white-space:nowrap;color:var(--text)}.fn .vl span{color:var(--muted);font-weight:500}
+.ms{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px;align-items:center;padding:5px 0;cursor:pointer;border-radius:8px}
+.ms:hover{background:var(--bg3)}
+.ms .lb{font-size:12.5px;padding-left:4px}
+.ms .tr{display:flex;align-items:center;gap:8px;min-width:0}
+.ms .st{display:flex;gap:2px;height:18px;min-width:0}
+.ms .st i{display:block;height:100%}.ms .st i:last-child{border-radius:0 4px 4px 0}
+.ms .vl{font-size:12px;font-weight:600;white-space:nowrap}
+.lg{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin:0 0 12px}
+.lg span{display:inline-flex;align-items:center;gap:6px}.lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+#tip{position:fixed;z-index:50;pointer-events:none;background:#1a1d2e;color:#fff;font-size:12px;line-height:1.45;padding:7px 10px;border-radius:8px;max-width:240px;display:none;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.modo{display:flex;justify-content:flex-end;margin:-6px 0 14px}
+@media(max-width:900px){.dash{grid-template-columns:1fr}}
+@media(max-width:520px){.fn{grid-template-columns:1fr;gap:4px}.ms{grid-template-columns:70px minmax(0,1fr)}}
 @media(max-width:900px){.side{position:sticky;width:auto;bottom:auto;right:0;flex-direction:row;align-items:center;border-right:0;border-bottom:1px solid var(--border);overflow-x:auto}.shell{flex-direction:column}.side .logo{display:none}.nav{display:flex;gap:4px;padding:8px}.nav button{width:auto;white-space:nowrap;margin:0}.side #sync{display:none}.main{margin-left:0}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.filters,.filters.p3{grid-template-columns:1fr 1fr}.row,.row.pr{grid-template-columns:1fr;gap:8px}.row.ig{grid-template-columns:1fr 1fr 1fr;gap:8px}.row.ig>div:first-child{grid-column:1/-1}.row.ig .pill{grid-column:1/-1}.ig-h{display:none}.row.ig .pz b{display:block}.row .pill{justify-self:start}.det{grid-template-columns:1fr}.fechas{grid-template-columns:1fr 1fr}.al{grid-template-columns:10px minmax(0,1fr)}.al>div:last-child{grid-column:2}}
 .pill.p-cerrado{background:var(--ok-bg);color:var(--ok)}.pill.p-neutro{background:var(--bg3);color:var(--muted)}
 @media(max-width:520px){.row.ig{grid-template-columns:1fr}.wrap{padding:20px 16px 50px}.nav button{padding:8px 10px;font-size:12.5px}.filters,.filters.p3{grid-template-columns:1fr}h1{font-size:22px}.tab{padding:8px 12px;font-size:13px}}
@@ -105,14 +128,15 @@ footer{font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px}
 <aside class="side"><div class="logo"><div class="brand">EIG Campus · UIDE</div><b>Seguimiento de asignaturas</b></div><nav class="nav" id="tabs"></nav><div id="sync">Cargando…</div></aside>
 <div class="main"><div class="wrap">
 <header><div><h1 id="titulo"></h1><div class="sub" id="subtitulo"></div></div></header>
-<div id="vista"></div>
+<div id="vista"></div><div id="tip" role="tooltip"></div>
 </div></div>
 </div>
 <script>
 const API='https://script.google.com/macros/s/AKfycbwrnJ4X4RM5Y7AwDv_uLR7CCgAP6amZHTDjwOPyGx2boX6TDK5OmbvHIGkTl9wInGCp/exec';   /* termina en /exec */
 const SEM={ok:['A tiempo','p-ok'],riesgo:['En riesgo','p-riesgo'],atrasada:['Atrasada','p-atrasada'],entregada:['Entregada','p-entregada']};
 const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-let FILAS=[],HOY='',VISTA='c',KPI='',ABIERTA=null,F={q:'',p:'',m:'',d:''};
+let FILAS=[],HOY='',VISTA='c',KPI='',ABIERTA=null,F={q:'',p:'',m:'',d:''},MODOI='t';
+try{MODOI=localStorage.getItem('uide_modoi')||'t'}catch(e){}
 try{VISTA=localStorage.getItem('uide_vista')||'c'}catch(e){}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function dm(s){return s?s.slice(8,10)+'/'+s.slice(5,7):'—'}
@@ -195,17 +219,43 @@ function ir(k){ABIERTA=k;KPI='';VISTA='c';try{localStorage.setItem('uide_vista',
 /* ── Proceso integral ── */
 function eI(x){const i=x.i||{};if(i.pl&&i.pl.n===4)return 'cerrado';if(i.ds==='ok')return 'plataforma';if(i.ds==='curso')return 'produccion';return 'contenidos'}
 const EI={cerrado:['Ciclo cerrado','p-cerrado'],plataforma:['En montaje','p-entregada'],produccion:['En producción','p-entregada'],contenidos:['En contenidos','p-neutro']};
+/* Tonos de un solo azul, de claro (inicio del ciclo) a oscuro (ciclo cerrado) */
+const RAMPA={contenidos:'#86b6ef',produccion:'#3987e5',plataforma:'#1c5cab',cerrado:'#0d366b'};
+const NOMI={contenidos:'En contenidos',produccion:'En producción',plataforma:'En montaje',cerrado:'Ciclo cerrado'};
+function setModoI(m){MODOI=m;KPI='';try{localStorage.setItem('uide_modoi',m)}catch(e){}pintar()}
+function irListaI(k,mes){MODOI='l';KPI=k||'';if(mes)F.m=mes;try{localStorage.setItem('uide_modoi','l')}catch(e){}pintar();window.scrollTo({top:0,behavior:'smooth'})}
+function pct(a,b){return b?Math.round(a*100/b)+'%':'0%'}
+function tableroI(base){
+  const n=k=>base.filter(x=>eI(x)===k).length,T=base.length;
+  const K=[['','En seguimiento',T,'asignaturas con lanzamiento desde octubre','#64748b'],['contenidos','En contenidos',n('contenidos'),'elaboración, revisión o coordinación',RAMPA.contenidos],['produccion','En producción',n('produccion'),'contenidos ya entregados',RAMPA.produccion],['plataforma','En montaje',n('plataforma'),'producción entregada, por montar',RAMPA.plataforma],['cerrado','Ciclo cerrado',n('cerrado'),pct(n('cerrado'),T)+' del total · lista en plataforma',RAMPA.cerrado]];
+  const kp='<div class="kpis">'+K.map(k=>'<button class="kpi" style="--c:'+k[4]+'" onclick="irListaI(\''+k[0]+'\')"><div class="l">'+k[1]+'</div><div class="v" style="color:var(--text)">'+k[2]+'</div><div class="s">'+k[3]+'</div></button>').join('')+'</div>';
+  // Embudo: cuántas han llegado a cada momento del ciclo
+  const nC=base.filter(x=>x.i&&x.i.cs==='ok').length,nD=base.filter(x=>x.i&&x.i.ds==='ok').length,nP=n('cerrado');
+  const E=[['Asignaturas en seguimiento','todas',T,RAMPA.contenidos],['Contenidos entregados','pasaron a producción',nC,RAMPA.produccion],['Producción entregada','listas para montar',nD,RAMPA.plataforma],['Ciclo cerrado','montadas en plataforma',nP,RAMPA.cerrado]];
+  const emb='<div class="card cb"><h3>Embudo del ciclo</h3><div class="ds">Cuántas asignaturas han llegado a cada momento</div>'+
+    E.map(e=>'<div class="fn"><div class="lb">'+e[0]+'<small>'+e[1]+'</small></div><div class="tr"><div class="bar" style="width:'+(T?Math.max(e[2]/T*100,1):1)*0.82+'%;background:'+e[3]+'" data-tip="<b>'+e[0]+'</b><br>'+e[2]+' de '+T+' asignaturas ('+pct(e[2],T)+')"></div><span class="vl">'+e[2]+' <span>· '+pct(e[2],T)+'</span></span></div></div>').join('')+'</div>';
+  // Avance por mes de lanzamiento (barras apiladas por estado)
+  const g={};base.forEach(x=>{const m=x.l.slice(0,7);(g[m]=g[m]||{contenidos:0,produccion:0,plataforma:0,cerrado:0,t:0});g[m][eI(x)]++;g[m].t++});
+  const ms=Object.keys(g).sort(),mx=Math.max(1,...ms.map(m=>g[m].t)),est=['contenidos','produccion','plataforma','cerrado'];
+  const ley='<div class="lg">'+est.map(k=>'<span><i style="background:'+RAMPA[k]+'"></i>'+NOMI[k]+'</span>').join('')+'</div>';
+  const mes='<div class="card cb"><h3>Avance por mes de lanzamiento</h3><div class="ds">Estado de las asignaturas de cada mes · toca un mes para ver la lista</div>'+ley+
+    ms.map(m=>{const r=g[m],nom=MESES[+m.slice(5)-1];return '<div class="ms" onclick="irListaI(\'\',\''+m+'\')"><div class="lb">'+nom.charAt(0).toUpperCase()+nom.slice(1,3)+' '+m.slice(2,4)+'</div><div class="tr"><div class="st" style="width:'+(r.t/mx*82)+'%">'+
+      est.filter(k=>r[k]).map(k=>'<i style="flex:'+r[k]+' 1 0;background:'+RAMPA[k]+'" data-tip="<b>'+nom+' '+m.slice(0,4)+'</b><br>'+NOMI[k]+': '+r[k]+' de '+r.t+'"></i>').join('')+'</div><span class="vl">'+r.t+(r.cerrado?' <span class=\'m\' style=\'font-weight:500\'>· '+r.cerrado+(r.cerrado===1?' cerrada':' cerradas')+'</span>':'')+'</span></div></div>'}).join('')+'</div>';
+  return kp+'<div class="dash">'+emb+mes+'</div>'}
 function vistaI(L){
   const base=L.filter(pasa),n=k=>base.filter(x=>eI(x)===k).length;
-  const h=kpis([['contenidos','En contenidos',n('contenidos'),'elaboración, revisión o coordinación','#7F77DD'],['produccion','En producción',n('produccion'),'contenidos ya entregados','#3b8be0'],['plataforma','En montaje',n('plataforma'),'producción entregada, por montar en plataforma','#d97706'],['cerrado','Ciclo cerrado',n('cerrado'),'lista en plataforma','#16a34a']]);
+  const modo='<div class="modo"><div class="tabs" style="margin:0"><button class="tab'+(MODOI==='t'?' on':'')+'" onclick="setModoI(\'t\')">Tablero</button><button class="tab'+(MODOI==='l'?' on':'')+'" onclick="setModoI(\'l\')">Lista</button></div></div>';
   const fil='<div class="filters p3">'+opciones(L)+'</div>';
+  if(MODOI==='t')return modo+fil+(base.length?tableroI(base):'<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>')+
+    '<footer>El tablero resume el ciclo completo de las asignaturas: <b>contenidos</b>, <b>producción</b> y <b>montaje en plataforma</b> (curso maestro creado, plantilla montada, coordinación matriculada y material cargado). Solo muestra estados; no mide plazos. Toca una cifra o un mes para ver el detalle en la lista.</footer>';
+  const h=kpis([['contenidos','En contenidos',n('contenidos'),'elaboración, revisión o coordinación',RAMPA.contenidos],['produccion','En producción',n('produccion'),'contenidos ya entregados',RAMPA.produccion],['plataforma','En montaje',n('plataforma'),'producción entregada, por montar en plataforma',RAMPA.plataforma],['cerrado','Ciclo cerrado',n('cerrado'),'lista en plataforma',RAMPA.cerrado]]);
   const l=base.filter(x=>!KPI||eI(x)===KPI);
   const cab='<div class="ig-h"><div>Asignatura</div><div>Contenidos</div><div>Producción</div><div>Plataforma</div><div></div></div>';
   const g={};l.forEach(x=>(g[x.l.slice(0,7)]=g[x.l.slice(0,7)]||[]).push(x));
   const OI={contenidos:0,produccion:1,plataforma:2,cerrado:3};
   const cards=Object.keys(g).sort().map(m=>{const G=g[m].sort((a,b)=>OI[eI(a)]-OI[eI(b)]||a.l.localeCompare(b.l)||a.m.localeCompare(b.m,'es'));const c=G.filter(x=>eI(x)==='cerrado').length;
     return '<div class="card"><div class="ch"><b>Lanzan en '+MESES[+m.slice(5)-1]+' '+m.slice(0,4)+'</b><span>'+G.length+' asignatura'+(G.length>1?'s':'')+(c?' · '+c+' con ciclo cerrado':'')+'</span></div>'+cab+G.map(filaI).join('')+'</div>'}).join('');
-  return h+fil+(l.length?cards:'<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>')+
+  return modo+h+fil+(l.length?cards:'<div class="card"><div class="empty">No hay asignaturas con esos filtros</div></div>')+
     '<footer>Cada asignatura pasa por tres momentos: <b>Contenidos</b> (fecha en que los contenidos aprobados se entregaron a producción), <b>Producción</b> (fecha en que se entregó la asignatura producida) y <b>Plataforma</b> (curso maestro creado, plantilla montada, coordinación matriculada y material cargado). Con los cuatro pasos de plataforma completos, el <b>ciclo queda cerrado</b>. '+
     'Esta vista solo muestra fechas; no mide plazos. Para el detalle de cada etapa, usa las pestañas Contenidos y Producción.</footer>'}
 const PPL=['Curso maestro creado','Plantilla montada','Coordinación matriculada','Material cargado'];
@@ -236,6 +286,11 @@ function filaP(x){
   return '<div class="row pr"><div><div class="nm">'+esc(x.m)+'</div><div class="pg">'+esc(x.p)+' · lanza '+dma(x.l)+'</div>'+enlace(x)+'</div>'+
     '<div class="where" style="margin:0"><b>'+esc(x.et)+'</b>'+(x.det&&!ent?'<div class="m">'+esc(x.det)+'</div>':'')+(x.it>0?'<div style="color:var(--warn);margin-top:2px">Ingresó a producción '+x.it+' día'+(x.it===1?'':'s')+' después de la fecha pactada ('+dm(x.di)+')</div>':'')+'</div>'+
     '<div class="est">'+(ent?'Entregada el<b>'+dma(x.fe)+'</b>':'Entrega estimada<b>'+dma(x.est)+'</b>')+'</div>'+(()=>{const r=sp(x)==='retraso';if(ent)return '<span class="pill p-entregada">Entregada</span>';return '<span class="pill '+(r?'p-retraso':'p-ok')+'" title="Fecha pactada: '+dma(x.meta)+'">'+(r?'Con retraso':'A tiempo')+'</span>'})()+'</div>'}
+(function(){const t=document.getElementById('tip');
+  document.addEventListener('mousemove',e=>{const el=e.target.closest&&e.target.closest('[data-tip]');if(!el){t.style.display='none';return}
+    t.innerHTML=el.getAttribute('data-tip');t.style.display='block';const w=t.offsetWidth,h=t.offsetHeight;
+    t.style.left=Math.min(innerWidth-w-8,e.clientX+12)+'px';t.style.top=Math.max(8,e.clientY-h-12)+'px'});
+  document.addEventListener('scroll',()=>{t.style.display='none'},true)})();
 if(API.indexOf('http')!==0){document.getElementById('sync').className='err';document.getElementById('sync').textContent='Falta configurar la conexión.'}else{cargar();setInterval(()=>{if(!document.hidden&&!ABIERTA)cargar()},10*60*1000)}
 </script>
 </body>
