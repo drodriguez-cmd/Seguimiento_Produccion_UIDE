@@ -169,9 +169,9 @@ tr:hover td{background:rgba(24,28,36,.6)}
 .tr-row.pausa{background:#fffbf2}
 .tr-ava{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
 .tr-main{flex:1;min-width:0}
-.tr-n{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-n{font-size:13px;font-weight:600;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tr-t{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tr-t b{color:var(--text);font-weight:600}
+.tr-t b{color:#4b5563;font-weight:600}
 .tr-clock{font-family:var(--fhead);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0;text-align:right}
 .tr-acc{display:flex;gap:4px;flex-shrink:0}
 .tr-acc .btn{padding:3px 8px;font-size:11px}
@@ -248,10 +248,20 @@ textarea{resize:vertical;min-height:70px}
 .af-wrap{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
 /* Asignaturas, más limpia (12-nov-2026): afuera solo quién; el detalle por frente y la gestión van en el desplegable */
 .asig-quien{display:flex;gap:28px;flex-wrap:wrap;font-size:12.5px;color:var(--text);margin:8px 0 6px}
-.asig-prog{font-size:11.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#asig-list .asig-head{padding:16px 22px;align-items:flex-start}
-#asig-list .asig-prog-ring{margin-top:4px}
-#asig-list .asig-meta{gap:18px;font-size:11.5px}
+.asig-prog{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Tarjeta de asignatura en 3 columnas (13-nov-2026): materia | quién | fechas, con el anillo centrado */
+#asig-list .asig-head{padding:16px 22px;align-items:center;gap:18px}
+.ac-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1.1fr) minmax(0,.8fr);gap:24px;align-items:center}
+.ac-col{min-width:0}
+.ac-grid .asig-name{white-space:normal;line-height:1.3}
+.ac-quien,.ac-fechas{font-size:12.5px;line-height:1.75;color:var(--text2,#4b5563)}
+.ac-quien b{font-weight:600;color:var(--text)} .ac-fechas b{font-weight:600;color:var(--text)}
+.ac-quien > div,.ac-fechas > div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-l{color:var(--muted);font-size:12px}
+.ac-carpeta{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:#2563eb;text-decoration:none;background:rgba(37,99,235,.07);border:1px solid rgba(37,99,235,.18);padding:3px 10px;border-radius:99px}
+.ac-carpeta:hover{background:rgba(37,99,235,.12)}
+.ac-estado{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:11.5px;font-weight:600;color:var(--text);background:var(--bg3);padding:4px 11px;border-radius:99px}
+@media (max-width:1000px){ .ac-grid{grid-template-columns:minmax(0,1fr);gap:6px} .ac-quien,.ac-fechas{line-height:1.5} }
 .q-l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-right:4px}
 .asig-resumen-body{padding:12px 20px 4px;border-bottom:1px solid var(--border)}
 .asig-gestion{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
@@ -607,7 +617,7 @@ textarea{resize:vertical;min-height:70px}
   <div class="card" style="margin-top:0;margin-bottom:20px">
     <div class="card-head" style="cursor:pointer" onclick="toggleManual()">
       <span class="card-title">🚨 Registrar sesión pasada · <span style="color:#b45309">solo emergencias</span></span>
-      <span style="font-size:11px;color:#b45309">Solo si el timer en vivo no pudo registrar (se cayó el internet, se fue la luz, falló el dashboard)</span>
+      <span style="font-size:11px;color:#b45309">Solo si el timer en vivo no pudo registrar (por ejemplo: se cayó el internet, se fue la luz o falló el dashboard). Avisa a tu coordinador.</span>
       <span id="manual-arrow" style="color:var(--muted)">▾</span>
     </div>
     <div id="manual-form" style="display:none;padding:20px;border-top:1px solid var(--border)">
@@ -615,7 +625,8 @@ textarea{resize:vertical;min-height:70px}
            los Timers en vivo; registrar aquí el trabajo de todos los días desordena los cálculos de la página Tiempos. -->
       <div style="background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.45);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12.5px;line-height:1.5;color:var(--text)">
         <b>⚠️ Esto es solo para emergencias.</b> Tu trabajo de todos los días se registra con los <b>Timers en vivo</b> (arriba).<br>
-        Usa este registro únicamente cuando el timer no pudo guardar tu tiempo: <b>se cayó el internet, se fue la luz o el dashboard falló</b>.<br>
+        Usa este registro únicamente cuando el timer no pudo guardar tu tiempo; por ejemplo: <b>se cayó el internet, se fue la luz o el dashboard falló</b>.<br>
+        <b>Cuando lo uses, avísale a tu coordinador</b> qué pasó y qué sesión registraste a mano.<br>
         <span style="color:var(--muted)">Si registras aquí el trabajo normal, la página Tiempos calcula mal los plazos. Cada sesión manual queda marcada como "Manual" con su motivo.</span>
       </div>
       <div class="fg" style="margin-bottom:12px"><label>Motivo de la emergencia (obligatorio)</label>
@@ -965,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111209;
+const DASHBOARD_VERSION = 2026111303;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1235,7 +1246,12 @@ function _lanzPersonas(){
 // David" sin cambiar el nombre con el que firma sus comentarios. Si nunca se eligió aquí, se usa el de "Soy:".
 function _lanzYo(){ try{ const v=localStorage.getItem('lanzSoyNombre'); return v!==null ? v : (localStorage.getItem('revisorNombre')||''); }catch(e){ return ''; } }
 function _lanzSoy(v){ try{ localStorage.setItem('lanzSoyNombre', v||''); }catch(e){} _lanzSoloMias = !!v; renderCelulasDir(); }
-function _lanzElegirMes(m){ _lanzMes = m; _lanzCentrar = true; _lanzListaAbierta = true; renderCelulasDir(); }
+// 13-nov-2026: clic en el mes que ya está abierto = cerrar la lista (como la flecha)
+let _lanzSelPintado = null;
+function _lanzElegirMes(m){
+  if(m===_lanzSelPintado && _lanzListaAbierta){ _lanzListaAbierta = false; renderCelulasDir(); return; }
+  _lanzMes = m; _lanzCentrar = true; _lanzListaAbierta = true; renderCelulasDir();
+}
 // ── Carrusel de meses (10-nov-2026, Juan Diego): una sola fila con flechas ‹ ›; al elegir un mes, la fila se mueve
 // para que quede a la vista. La posición se conserva cuando el dashboard se vuelve a dibujar (sincronización).
 let _lanzScroll = null, _lanzCentrar = true;
@@ -1299,6 +1315,7 @@ function lanzamientosHTML(todas){
   // Mes elegido: el que se clickeó (si sigue en la lista) o, por defecto, el primero con algo por entregar
   const porDefecto = mesesAbiertos.find(m=>m!=='sin' && meses[m].faltan>0) || mesesAbiertos[0];
   const sel = mesesAbiertos.includes(_lanzMes) ? _lanzMes : porDefecto;
+  _lanzSelPintado = sel;
   // Las que no tienen fecha de lanzamiento no van en un cuadro (casi todas son viejas y ya entregadas): solo un
   // enlace pequeño con las que faltan.
   let prono = {}; try{ prono = pronosticoMeses(conFecha, mesesAbiertos, hoy, recibir); }catch(e){ console.warn('[Pronóstico]', e); }
@@ -1442,6 +1459,11 @@ function renderCelulasDir(){
   </div>`;
 
   // Personas de diseño — estado y progreso (modelo por persona)
+  // Días en el Dashboard = el mismo "tiempo transcurrido" de la pestaña Tiempos (13-nov-2026, Juan Diego). Antes era
+  // diasAsig(): las horas de TODA la materia (diseño + video juntos), y por eso Juliana Zarate salía con 3.9 d en el
+  // Dashboard y 2.9 d en Tiempos (su diseño) — el resto eran las horas de video de Alejandra.
+  let _filasTD = [];
+  try{ _filasTD = calcularFilasTiempos().filter(f=>!f.esVideo && !f.completo); }catch(e){}
   const celulasHTML = UNIDADES_DISENO.map((id)=>{
     const cfg = CELULA_CFG[id];
     // Solo cuenta como "activa" si su DISEÑO aún no está completo (el video puede seguir pendiente sin bloquearla)
@@ -1456,11 +1478,15 @@ function renderCelulasDir(){
     const dHechos = asigActiva ? disenoHechosAsig(asigActiva) : 0;
     const pct = asigActiva ? Math.round(dHechos/12*100) : cierre ? avCierre.pct : 0;
     const asigBarra = asigActiva || cierre;
-    const dias = asigActiva ? diasAsig(asigActiva).toFixed(1) : cierre ? diasAsig(cierre).toFixed(1) : '0';
+    const _aDias = asigActiva || cierre || null;
+    const _filaD = _aDias ? _filasTD.find(f=>f.asigId===_aDias.id && _mismaPersonaAus(f.persona, cfg.label)) : null;
+    const _infD = _aDias ? infoFrente(_aDias, false, cfg.label) : null;
+    const dias = _filaD ? fmtTranscurrido(_filaD.diasTranscurridos) : (_infD && _infD.iniciado && _infD.diasTranscurridos!=null) ? _infD.diasTranscurridos+' d' : '—';
+    const diasVencida = !!(_filaD && _filaD.fechaVencida);
+    // Velocidad = promedio de SU producción de diseño (jornadas de 8 h) en las materias completadas, sin el video
     const completadasCelula = todas.filter(a=>a.celula===id && a.status==='Completada' && a.tipo==='celula');
-    const promCelula = completadasCelula.length>0
-      ? (completadasCelula.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasCelula.length).toFixed(1)
-      : null;
+    const _prodD = completadasCelula.map(a=>{ try{ return infoFrente(a,false,cfg.label).diasProduccion||0; }catch(e){ return 0; } }).filter(d=>d>0);
+    const promCelula = _prodD.length>0 ? (_prodD.reduce((s,d)=>s+d,0)/_prodD.length).toFixed(1) : null;
     const dfEst = asigActiva?.df||3;
     const velColor = !promCelula ? 'var(--muted)' : parseFloat(promCelula)<=dfEst ? '#16a34a' : '#d97706';
     const velLabel = !promCelula ? 'sin completadas' : parseFloat(promCelula)<=dfEst ? '✅ En plazo' : '⚠️ Sobre DF';
@@ -1502,7 +1528,7 @@ function renderCelulasDir(){
       </div>
       <div style="text-align:center;min-width:60px">
         <div style="font-size:11px;color:var(--muted)">Días</div>
-        <div style="font-size:14px;font-weight:700;color:var(--text)">${dias}d</div>
+        <div style="font-size:14px;font-weight:700;color:${diasVencida?'#dc2626':'var(--text)'}" title="Tiempo transcurrido de su diseño (igual que en la pestaña Tiempos)">${dias}</div>
       </div>
       <div style="text-align:center;min-width:70px">
         <div style="font-size:11px;color:var(--muted)">Velocidad</div>
@@ -1540,9 +1566,9 @@ function renderCelulasDir(){
     const enCierreV = todas.filter(a=>a.videoPersona===persona && frenteFaltaCierre(a,true)).sort((p,q)=>compararPorUrgencia(p,q));
     const esperandoDiseno = todas.filter(a=>a.videoPersona===persona && (a.status==='En producción' || a.status==='En espera') && videoCompletoAsig(a) && !disenoCompletoAsig(a) && !enCierreV.includes(a));
     const completadasV = todas.filter(a=>a.videoPersona===persona && a.status==='Completada' && a.tipo==='celula');
-    const promV = completadasV.length>0
-      ? (completadasV.map(a=>diasAsig(a)).filter(d=>d>0).reduce((s,d)=>s+d,0)/completadasV.length).toFixed(1)
-      : null;
+    // Solo su producción de video (antes mezclaba las horas de diseño de la materia)
+    const _prodV = completadasV.map(a=>{ try{ return infoFrente(a,true,persona).diasProduccion||0; }catch(e){ return 0; } }).filter(d=>d>0);
+    const promV = _prodV.length>0 ? (_prodV.reduce((s,d)=>s+d,0)/_prodV.length).toFixed(1) : null;
     // ¿En cuál está avanzando? 1) la que tiene el timer prendido; 2) la última que trabajó; 3) la siguiente por prioridad
     const cand = asigs.map((a,k)=>{ const inf=infoFrente(a,true,persona); return { a, k, vivo:timerVideoVivo(persona,a), pausa:timerVideoPausado(persona,a), iniciado:!!inf.iniciado, ultimo:inf.ultimoFin||0, inf }; });
     cand.sort((x,y)=> (y.vivo-x.vivo) || (y.pausa-x.pausa) || (y.iniciado-x.iniciado) || (y.ultimo-x.ultimo) || (x.k-y.k));
@@ -6113,11 +6139,11 @@ function renderAsignaturas(filtro){
     const ch=(v,txt,n)=>`<button class="chip ${_asigCelula===v?'active':''}" style="font-size:12px;padding:4px 11px" onclick="_asigElegirPersona('${v.replace(/'/g,"\\'")}')">${txt}${n!==undefined?` <span style="opacity:.65">· ${n}</span>`:''}</button>`;
     // 12-nov-2026: sin emojis; diseño y video separados por una etiqueta gris
     const corto=n=>_cEsc(n.split(' ')[0]+(n.split(' ')[1]?' '+n.split(' ')[1][0]+'.':''));
-    const lbl=t=>`<span style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin:0 2px 0 8px">${t}</span>`;
+    const lbl=t=>`<span style="font-size:12.5px;color:var(--text);font-weight:700;margin:0 4px 0 12px;white-space:nowrap">${t}</span>`;
     const tabs=_asigPersonasTabs();
     chipsEl.innerHTML = ch('all','Todas', _antesPersona.length) +
-      lbl('Diseño') + tabs.filter(p=>p.f==='🎨').map(p=>ch(p.v, corto(p.n), _antesPersona.filter(a=>_asigEsDe(a,p.v)).length)).join('') +
-      lbl('Video') + tabs.filter(p=>p.f==='🎬').map(p=>ch(p.v, corto(p.n), _antesPersona.filter(a=>_asigEsDe(a,p.v)).length)).join('');
+      lbl('🎨 Diseño') + tabs.filter(p=>p.f==='🎨').map(p=>ch(p.v, corto(p.n), _antesPersona.filter(a=>_asigEsDe(a,p.v)).length)).join('') +
+      lbl('🎬 Video') + tabs.filter(p=>p.f==='🎬').map(p=>ch(p.v, corto(p.n), _antesPersona.filter(a=>_asigEsDe(a,p.v)).length)).join('');
     chipsEl.style.alignItems='center';
   }
   const selP=document.getElementById('asig-celula-filter'); if(selP){ selP.value = _asigPersonasTabs().some(p=>p.v===_asigCelula) ? 'all' : _asigCelula; }
@@ -6203,7 +6229,8 @@ function renderAsignaturas(filtro){
       : `<span style="opacity:.6">${emoji} <b>${label}:</b> sin iniciar</span>`;
 
     const nomD = a.celula ? (CELULA_CFG[a.celula]?.label||a.celula) : '';
-    const quienesHTML = `<div class="asig-quien"><span>🎨 <span class="q-l">Diseño</span> ${nomD?_cEsc(nomD):'<span style="color:var(--muted)">sin asignar</span>'}</span><span>🎬 <span class="q-l">Video</span> ${a.videoPersona?_cEsc(a.videoPersona):'<span style="color:var(--muted)">sin asignar</span>'}</span></div>`;
+    const sinA='<span style="color:var(--muted);font-weight:400">sin asignar</span>';
+    const quienesHTML = `<div class="ac-col ac-quien"><div>🎨 <span class="ac-l">Diseño:</span> <b>${nomD?_cEsc(nomD):sinA}</b></div><div>🎬 <span class="ac-l">Video:</span> <b>${a.videoPersona?_cEsc(a.videoPersona):sinA}</b></div></div>`;
     const stDot = statusDisplay==='Completada'?'#16a34a':statusDisplay==='En producción'?'#d97706':statusDisplay==='Pausada'?'#9ca3af':'#6b7280';
     return `<div class="asig-card"> 
       <div class="asig-head" onclick="toggleAsigBody('${a.id}')">
@@ -6215,18 +6242,22 @@ function renderAsignaturas(filtro){
           </svg>
           <div class="ring-val" style="font-size:10px;color:${pct>=100?'var(--ok)':pct>50?'var(--warn)':'var(--disgrafico)'}">${pct}%</div>
         </div>
-        <div class="asig-info">
-          <div class="asig-name" title="${String(a.nombre).replace(/"/g,'&quot;')}">${a.nombre}</div>
-          ${a.prog?`<div class="asig-prog">${_cEsc(a.prog)}</div>`:''}
+        <div class="asig-info ac-grid">
+          <div class="ac-col">
+            <div class="asig-name" title="${String(a.nombre).replace(/"/g,'&quot;')}">${a.nombre}</div>
+            ${a.prog?`<div class="asig-prog" title="${_cEsc(a.prog)}">${_cEsc(a.prog)}</div>`:''}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+              ${a.link?`<a class="ac-carpeta" href="${a.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📁 Carpeta del curso</a>`:''}
+              ${timersA>0?`<span style="font-size:11px;color:#15803d;font-weight:600">● ${timersA} timer${timersA>1?'s':''} activo${timersA>1?'s':''}</span>`:''}
+            </div>
+          </div>
           ${quienesHTML}
-          <div class="asig-meta" style="align-items:center">
-            ${a.fechaLimite?`<span>Lanza <b style="color:var(--text)">${fmtFecha(a.fechaLimite)}</b> · tope ${fmtFecha(fechaTopeFabrica(a.fechaLimite))}</span>`:''}
-            ${timersA>0?`<span style="color:#15803d;font-weight:600">● ${timersA} timer${timersA>1?'s':''} activo${timersA>1?'s':''}</span>`:''}
-            ${a.link?`<a href="${a.link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:11px;color:#2563eb;text-decoration:none">📁 Carpeta del curso</a>`:''}
+          <div class="ac-col ac-fechas">
+            ${a.fechaLimite?`<div>🚀 Lanza <b>${fmtFecha(a.fechaLimite)}</b></div><div class="ac-l">Tope fábrica ${fmtFecha(fechaTopeFabrica(a.fechaLimite))}</div>`:'<div class="ac-l">Sin fecha de lanzamiento</div>'}
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-          <span style="font-size:11.5px;color:var(--text);display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:${stDot}"></span>${statusDisplay}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;min-width:150px">
+          <span class="ac-estado"><span style="width:7px;height:7px;border-radius:50%;background:${stDot}"></span>${statusDisplay}</span>
           ${alertaHTML}
           ${esVencida(a)?`<span title="Pasó el tope de fábrica: lanzamiento menos ${TOPE_HABILES} días hábiles (lo que necesita la carga en Canvas). Va primero en la cola." style="font-size:10px;font-weight:700;color:#b91c1c;background:rgba(239,68,68,.12);padding:2px 8px;border-radius:99px">VENCIDA · tope ${fmtFecha(fechaTopeFabrica(a.fechaLimite))}</span>`:''}
           ${[[false,'Diseño'],[true,'Video']].filter(([v])=>frenteFaltaCierre(a,v)).map(([v,lbl])=>`<span title="${lbl}: le falta ${faltaCierreFrente(a,v).join(' · ').replace(/"/g,'&quot;')}" style="font-size:11px;font-weight:600;color:#b45309">${lbl} listo · falta su cierre</span>`).join('')}
@@ -7655,7 +7686,9 @@ async function cargarCronograma(forzar){
   renderCronograma();
   if(document.getElementById('page-operacion') && document.getElementById('page-operacion').classList.contains('active')) renderOperacion();
 }
-function cronoSetMes(ym){ _cronoMes = ym; renderCronograma(); }
+function cronoSetMes(ym){ _cronoMes = ym; renderCronograma();
+  try{ const c=document.getElementById('crono-meses'); const b=c && [...c.querySelectorAll('button')].find(x=>(x.getAttribute('onclick')||'').includes("'"+ym+"'"));
+    if(b && c){ const cr=c.getBoundingClientRect(), r=b.getBoundingClientRect(); c.scrollLeft += (r.left-cr.left) - (cr.width-r.width)/2; } }catch(e){} }
 
 let _cronoEmpMem = { firma:'', filas:null, map:new Map() };
 function _cronoItems(hoy){
@@ -7696,11 +7729,28 @@ function _cPuntual(r){
     : `<span style="color:#15803d;font-weight:600">🟢 A tiempo</span>`;
   return `<span style="color:#c2410c;font-weight:600">🟠 Tarde ${r.diasPunt} d</span>`;
 }
+// 13-nov-2026 (Juan Diego): debajo del estado, cómo va CADA frente (diseño y video) con su persona:
+// listo / listo · falta cierre / en producción n/12 (n/6) / por iniciar / en cola.
+function _cFrenteTxt(a, esVideo){
+  const tot = esVideo?6:12, n = esVideo?videoHechosAsig(a):disenoHechosAsig(a);
+  const quien = esVideo ? (a.videoPersona||'') : (a.celula?(CELULA_CFG[a.celula]?.label||a.celula):'');
+  let t, col;
+  if(n>=tot){ const fc=frenteFaltaCierre(a,esVideo); t = fc?'listo · falta su cierre':'listo'; col = fc?'#b45309':'#15803d'; }
+  else if(infoFrente(a,esVideo).iniciado || n>0){ t='en producción '+n+'/'+tot; col='#b45309'; }
+  else if(quien && !esVideo && a.status==='En producción'){ t='por iniciar'; col='var(--muted)'; }
+  // En video la persona se asigna desde que entra la materia: si aún no arranca, está en su cola
+  else { t='en cola'; col='var(--muted)'; }
+  return `<div style="white-space:nowrap">${esVideo?'🎬':'🎨'} ${esVideo?'Video':'Diseño'}: <b style="color:${col};font-weight:600">${t}</b>${quien?` <span style="color:var(--muted)">· ${_cEsc(quien)}</span>`:''}</div>`;
+}
 function _cPersona(r){
   if(!r.m) return '';
-  const d = r.m.celula ? (CELULA_CFG[r.m.celula]?.label||r.m.celula) : '';
-  const v = r.m.videoPersona || '';
-  return [d?('🎨 '+_cEsc(d)):'', v?('🎬 '+_cEsc(v)):''].filter(Boolean).join(' · ');
+  const a=r.m;
+  if(r.estado==='entregada' || r.estado==='entregada_excel' || a.status==='Completada'){
+    const d = a.celula ? (CELULA_CFG[a.celula]?.label||a.celula) : '';
+    const v = a.videoPersona || '';
+    return [d?('🎨 '+_cEsc(d)):'', v?('🎬 '+_cEsc(v)):''].filter(Boolean).join(' · ');
+  }
+  try{ return `<div style="line-height:1.6;margin-top:2px">${_cFrenteTxt(a,false)}${_cFrenteTxt(a,true)}</div>`; }catch(e){ return ''; }
 }
 
 function renderCronograma(){
@@ -7787,9 +7837,19 @@ function renderCronograma(){
       <td>${_cEstadoBadge(r)}<div style="font-size:11px;color:var(--muted);margin-top:3px">${_cPersona(r)}</div></td></tr>`;
   };
 
+  // Flechas ‹ › (13-nov-2026, Juan Diego): mes anterior / siguiente, solo entre los meses que aún tienen trabajo
+  const _ci = meses.indexOf(_cronoMes), _cPrev = _ci>0 ? meses[_ci-1] : null, _cNext = _ci<meses.length-1 ? meses[_ci+1] : null;
+  const _cFl = (m, txt, lbl) => `<button class="crono-flecha" ${m?`onclick="cronoSetMes('${m}')" title="${lbl}: ${_cMesLabel(m)}"`:'disabled'} aria-label="${lbl}">${txt}</button>`;
   el.innerHTML = `
-    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px">${chips}
-      <button class="btn btn-sm" style="margin-left:auto" onclick="cargarCronograma(true)">↻ Recargar cronograma</button></div>
+    <style>.crono-flecha{flex-shrink:0;width:32px;height:32px;border-radius:50%;border:1px solid var(--border2,#d1d5db);background:#fff;font-size:20px;line-height:1;cursor:pointer;color:var(--text);display:inline-flex;align-items:center;justify-content:center;padding:0 0 2px}
+      .crono-flecha:hover:not([disabled]){background:#fdf2f8;color:#be185d}.crono-flecha[disabled]{opacity:.3;cursor:default}
+      #crono-meses{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;scroll-behavior:smooth;padding:2px}#crono-meses::-webkit-scrollbar{display:none}#crono-meses>button{flex-shrink:0}</style>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      ${_cFl(_cPrev,'‹','Mes anterior')}
+      <div id="crono-meses" style="flex:1;min-width:0">${chips}</div>
+      ${_cFl(_cNext,'›','Mes siguiente')}
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:18px"><button class="btn btn-sm" onclick="cargarCronograma(true)">↻ Recargar cronograma</button></div>
     ${alertaHTML}
     <div style="font-size:15px;font-weight:700;margin:0 0 10px">${_cMesLabel(_cronoMes)} <span style="font-weight:400;color:var(--muted);font-size:12px">· asignaturas que los estudiantes deben tener este mes${nAtras?` · <b style="color:#b91c1c">${nAtras} sin ingresar y atrasada${nAtras!==1?'s':''}</b>`:''}</span></div>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px">${tiles}</div>
@@ -8205,7 +8265,7 @@ function renderTiempos(){
     const PCOL={alta:'#ef4444',media:'#f59e0b',baja:'#22c55e'};
     return `<tr data-hp="${_cEsc(_pNom(f.persona))}">
       <td style="font-weight:600">${f.persona}</td>
-      <td>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div></td>
+      <td><div style="display:flex;gap:8px;align-items:flex-start">${(()=>{ const l=_linkCarpeta(f.asigId, f.asigNombre); return l ? `<a href="${_cEsc(l)}" target="_blank" rel="noopener" title="Abrir la carpeta de la materia en Drive" style="text-decoration:none;font-size:15px;line-height:1.2;flex-shrink:0">📁</a>` : '<span style="width:19px;flex-shrink:0"></span>'; })()}<div>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div></div></div></td>
       <td><span class="role-pill" style="background:${frenteCfg.color}18;color:${frenteCfg.color};font-size:11px;padding:3px 10px">${frenteCfg.icon} ${frenteCfg.label}</span></td>
       <td style="font-size:11px;font-weight:600;color:${PCOL[f.prioridad]||PCOL.media}">${PRIORIDAD_EMOJI[f.prioridad]||'🟡'} ${f.prioridad.charAt(0).toUpperCase()+f.prioridad.slice(1)}</td>
       <td style="font-size:12px">${fmtFechaHora(f.inicioMs)}${f.inicioAuto?`<div style="font-size:10px;color:var(--muted)" title="El plazo arrancó cuando la persona terminó su asignatura anterior (o cuando se le asignó), antes del primer timer">${f.sinArrancar?'sin timer aún':'antes del 1.er timer'}</div>`:''}</td>
