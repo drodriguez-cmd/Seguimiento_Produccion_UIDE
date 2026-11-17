@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111303;
+const DASHBOARD_VERSION = 2026111701;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1462,8 +1462,23 @@ function renderCelulasDir(){
   // Días en el Dashboard = el mismo "tiempo transcurrido" de la pestaña Tiempos (13-nov-2026, Juan Diego). Antes era
   // diasAsig(): las horas de TODA la materia (diseño + video juntos), y por eso Juliana Zarate salía con 3.9 d en el
   // Dashboard y 2.9 d en Tiempos (su diseño) — el resto eran las horas de video de Alejandra.
-  let _filasTD = [];
-  try{ _filasTD = calcularFilasTiempos().filter(f=>!f.esVideo && !f.completo); }catch(e){}
+  let _filasT = [];
+  try{ _filasT = calcularFilasTiempos(); }catch(e){}
+  const _filasTD = _filasT.filter(f=>!f.esVideo && !f.completo);
+  // "Promedio al entregar" (17-nov-2026, Juan Diego; reemplaza "Velocidad"): días hábiles transcurridos promedio de
+  // las materias que esa persona YA entregó en su frente, con la misma cuenta del historial de Tiempos.
+  const _promEntrega = (persona, esVideo) => {
+    const fs=_filasT.filter(f=>f.completo && !!f.esVideo===!!esVideo && _mismaPersonaAus(f.persona, persona) && f.diasTranscurridos>0);
+    if(!fs.length) return null;
+    return { prom: fs.reduce((s,f)=>s+f.diasTranscurridos,0)/fs.length, n: fs.length, obj: fs[0].objetivo || (esVideo?1:3) };
+  };
+  const _colDias = (txt, vencida, tip) => `<div style="text-align:center;min-width:78px">
+        <div style="font-size:10.5px;color:var(--muted);line-height:1.2">Días hábiles<br>transcurridos</div>
+        <div style="font-size:14px;font-weight:700;margin-top:2px;color:${vencida?'#dc2626':'var(--text)'}" title="${tip}">${txt}</div></div>`;
+  const _colProm = (pe) => `<div style="text-align:center;min-width:86px" title="${pe?'Promedio de días hábiles que tardó en entregar sus últimas '+pe.n+' materias (igual que el historial de Tiempos). Objetivo: '+pe.obj+' d':'Aún no tiene materias entregadas con registro en Tiempos'}">
+        <div style="font-size:10.5px;color:var(--muted);line-height:1.2">Promedio<br>al entregar</div>
+        <div style="font-size:14px;font-weight:700;margin-top:2px;color:${!pe?'var(--muted)':pe.prom<=pe.obj+1e-9?'#15803d':'#b45309'}">${pe?fmtTranscurrido(pe.prom):'—'}</div>
+        ${pe?`<div style="font-size:10px;color:var(--muted)">objetivo ${pe.obj} d</div>`:''}</div>`;
   const celulasHTML = UNIDADES_DISENO.map((id)=>{
     const cfg = CELULA_CFG[id];
     // Solo cuenta como "activa" si su DISEÑO aún no está completo (el video puede seguir pendiente sin bloquearla)
@@ -1526,15 +1541,8 @@ function renderCelulasDir(){
         <div style="font-size:11px;font-weight:600;color:${barColor};text-align:right">${cierre ? 'cierre '+avCierre.hechos+'/'+avCierre.total : asigActiva ? 'diseño '+dHechos+'/12' : '0%'}</div>
         ${asigBarra ? `<div style="font-size:10px;color:var(--muted);text-align:right" title="Avance de toda la materia: diseño y video juntos">total asignatura ${progAsigVista(asigBarra)}%</div>` : ''}
       </div>
-      <div style="text-align:center;min-width:60px">
-        <div style="font-size:11px;color:var(--muted)">Días</div>
-        <div style="font-size:14px;font-weight:700;color:${diasVencida?'#dc2626':'var(--text)'}" title="Tiempo transcurrido de su diseño (igual que en la pestaña Tiempos)">${dias}</div>
-      </div>
-      <div style="text-align:center;min-width:70px">
-        <div style="font-size:11px;color:var(--muted)">Velocidad</div>
-        <div style="font-size:12px;font-weight:600;color:${velColor}">${promCelula?promCelula+'d':'-'}</div>
-        <div style="font-size:10px;color:${velColor}">${velLabel}</div>
-      </div>
+      ${_colDias(dias, diasVencida, 'Tiempo transcurrido de su diseño en días hábiles (igual que en la pestaña Tiempos)')}
+      ${_colProm(_promEntrega(cfg.label, false))}
       <div style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor};flex-shrink:0">${statusLabel}</div>
     </div>`;
   }).join('');
@@ -1544,8 +1552,7 @@ function renderCelulasDir(){
   // En cierre / Libre / Pausado). Antes solo decía "N activas" y parecía que no estaban trabajando.
   const VIDEO_KEYS = ['video_intro','video_profesor','geniallys_rda','video_c1','video_c2','video_c3'];
   const videosHechos = a => VIDEO_KEYS.filter(k=>a?.assets?.global?.[k]).length;
-  let filasTiemposV = [];
-  try{ filasTiemposV = calcularFilasTiempos().filter(f=>f.esVideo && !f.completo); }catch(e){}
+  const filasTiemposV = _filasT.filter(f=>f.esVideo && !f.completo);
   // Timers de VIDEO de esa persona en esa materia. Ojo: hay primeros nombres repetidos entre frentes (Juliana Zarate en
   // diseño y Juliana Gutiérrez en video; Alejandra Gonzales y Alejandra Barco), por eso se exige que el timer sea de video.
   const esTimerVideo = t => String(t.rol||'').toLowerCase()==='video' || VIDEO_PERSONAS.includes(t.persona);
@@ -1580,8 +1587,9 @@ function renderCelulasDir(){
     const hechos = P ? videosHechos(P.a) : 0;
     const pct = P ? Math.round(hechos/VIDEO_KEYS.length*100) : cierreV ? avC.pct : 0;
     // Días: el mismo tiempo transcurrido que muestra Tiempos para esa materia
-    const filaT = P ? filasTiemposV.find(f=>f.asigId===P.a.id && mismaPersona(f.persona,persona)) : null;
-    const diasTxt = filaT ? fmtTranscurrido(filaT.diasTranscurridos) : (P && P.iniciado && P.inf.diasTranscurridos!=null) ? P.inf.diasTranscurridos+' d' : cierreV ? diasAsig(cierreV).toFixed(1)+'d' : '—';
+    const _aT = P ? P.a : cierreV;
+    const filaT = _aT ? filasTiemposV.find(f=>f.asigId===_aT.id && mismaPersona(f.persona,persona)) : null;
+    const diasTxt = filaT ? fmtTranscurrido(filaT.diasTranscurridos) : (P && P.iniciado && P.inf.diasTranscurridos!=null) ? P.inf.diasTranscurridos+' d' : '—';
     const vencida = !!(filaT && filaT.fechaVencida);
     const activaEnEquipoV = celulaActiva(persona);
     const arrancada = P && (P.vivo || P.pausa || P.iniciado);
@@ -1620,14 +1628,8 @@ function renderCelulasDir(){
         <div style="font-size:11px;font-weight:600;color:${barColor};text-align:right">${cierreV ? 'cierre '+avC.hechos+'/'+avC.total : P ? 'videos '+hechos+'/'+VIDEO_KEYS.length : '0%'}</div>
         ${(P||cierreV) ? `<div style="font-size:10px;color:var(--muted);text-align:right" title="Avance de toda la materia: diseño y video juntos">total asignatura ${progAsigVista(P?P.a:cierreV)}%</div>` : ''}
       </div>
-      <div style="text-align:center;min-width:60px">
-        <div style="font-size:11px;color:var(--muted)">Días</div>
-        <div style="font-size:14px;font-weight:700;color:${vencida?'#dc2626':'var(--text)'}" title="${filaT?'Tiempo transcurrido en días hábiles, igual que en Tiempos':''}">${diasTxt}</div>
-      </div>
-      <div style="text-align:center;min-width:70px">
-        <div style="font-size:11px;color:var(--muted)">Velocidad prom.</div>
-        <div style="font-size:14px;font-weight:700;color:${promV?'#16a34a':'var(--muted)'}">${promV?promV+'d':'—'}</div>
-      </div>
+      ${_colDias(diasTxt, vencida, 'Tiempo transcurrido de sus videos en días hábiles (igual que en la pestaña Tiempos)')}
+      ${_colProm(_promEntrega(persona, true))}
       <div style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;background:${stBg};color:${stCol};flex-shrink:0">${stLbl}</div>
     </div>`;
   }).join('');
