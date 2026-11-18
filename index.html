@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111901;
+const DASHBOARD_VERSION = 2026111902;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -2754,15 +2754,27 @@ function festivosDe(year, cal){
 // Pestaña "Ausencias" del Sheet: ID | Persona | Desde | Hasta | Motivo (fechas AAAA-MM-DD). Esos días no cuentan como
 // hábiles PARA ESA PERSONA en Tiempos (días transcurridos y fecha esperada) ni en su meta semanal.
 // No pausan el reparto: para eso sigue la hoja Equipo ("Disponible Desde").
+// 18-nov-2026: se guardan en el navegador para que estén desde el primer momento. Antes llegaban unos segundos después
+// de abrir y, si alguien ya estaba en Tiempos o en el Dashboard, esa página quedaba calculada SIN las ausencias (caso:
+// Valentina con 1,9 d porque no se le descontaba su cumpleaños del 17-nov). Además, al llegar, se redibuja la página.
 let AUSENCIAS = [];   // [{persona, desde, hasta, motivo}]
+try{ const g=JSON.parse(localStorage.getItem('ausenciasCache')||'[]'); if(Array.isArray(g)) AUSENCIAS=g; }catch(e){}
 async function cargarAusencias(){
   const r = await jsonp(API+'?hoja='+encodeURIComponent('Ausencias'));
   if(!r || r.ok===false || !Array.isArray(r.filas)) return false;   // si falla la lectura se conserva lo que había
   const fecha=v=>{ const t=String(v||'').trim(); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const d=new Date(t); return isNaN(d)?'':_ymdL(d); };
   AUSENCIAS = r.filas.slice(1).map(f=>({ persona:String(f[1]||'').trim(), desde:fecha(f[2]), hasta:fecha(f[3])||fecha(f[2]), motivo:String(f[4]||'') }))
     .filter(a=>a.persona && a.desde);
+  const nuevo = JSON.stringify(AUSENCIAS);
+  let antes=''; try{ antes=localStorage.getItem('ausenciasCache')||''; localStorage.setItem('ausenciasCache', nuevo); }catch(e){}
+  if(nuevo!==antes || !_ausenciasPintadas){
+    _ausenciasPintadas = true;
+    try{ const act=document.querySelector('.page.active'); const id=act ? act.id.replace(/^page-/,'') : '';
+      if(id==='tiempos') renderTiempos(); else if(id==='dashboard') renderDashboard(); }catch(e){}
+  }
   return true;
 }
+let _ausenciasPintadas = false;
 // ¿Es la misma persona? Primer nombre igual y, si los dos traen apellido, misma inicial del apellido
 // (así "Alejandra Gonzales" ≠ "Alejandra B[arco]" y "Juliana Zarate" ≠ "Juliana Gutiérrez").
 function _mismaPersonaAus(a, b){
