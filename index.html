@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111701;
+const DASHBOARD_VERSION = 2026111802;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -2730,11 +2730,12 @@ function obtenerDiasProdAsig(a){
 function _ymdL(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 // ── Calendario de cada persona (8-nov-2026, Juan Diego) ──
 // Sofía y Cristina viven en Islas Canarias (calendario de España); el resto del equipo, en Colombia.
-// Festivos de Canarias: nacionales + Comunidad Autónoma (sin los de isla ni los municipales).
-// Fuente: Gobierno de Canarias / RTVC. Añadir aquí cada año nuevo (y el de su isla, si aplica).
+// Festivos de Canarias: nacionales + Comunidad Autónoma + el insular de GRAN CANARIA (18-nov-2026, Juan Diego: las
+// dos viven en Gran Canaria): 8 de septiembre, Nuestra Señora del Pino. Sin los municipales (dependen del municipio).
+// Fuente: Gobierno de Canarias, decretos del calendario laboral 2026 y 2027. Añadir aquí cada año nuevo.
 const FESTIVOS_CANARIAS = {
-  2026:['2026-01-01','2026-01-06','2026-04-02','2026-04-03','2026-05-01','2026-05-30','2026-08-15','2026-10-12','2026-11-02','2026-12-08','2026-12-25'],
-  2027:['2027-01-01','2027-01-06','2027-03-25','2027-03-26','2027-05-01','2027-05-30','2027-08-16','2027-10-12','2027-11-01','2027-12-06','2027-12-08','2027-12-25']
+  2026:['2026-01-01','2026-01-06','2026-04-02','2026-04-03','2026-05-01','2026-05-30','2026-08-15','2026-09-08','2026-10-12','2026-11-02','2026-12-08','2026-12-25'],
+  2027:['2027-01-01','2027-01-06','2027-03-25','2027-03-26','2027-05-01','2027-05-30','2027-08-16','2027-09-08','2027-10-12','2027-11-01','2027-12-06','2027-12-08','2027-12-25']
 };
 const PERSONAS_CALENDARIO_ESPANA = ['sofia','cristina'];   // primer nombre, sin tildes
 function calendarioDe(persona){
@@ -6731,10 +6732,13 @@ function renderPersonas(){
 // ── Zonas horarias por persona (Bogotá por defecto; solo se listan las excepciones)
 const ZONA_DEFECTO = 'America/Bogota';
 const ZONAS_PERSONA = [
-  { match:'sofia', tz:'Atlantic/Canary', etiqueta:'🇮🇨 Canarias' }
+  { match:'sofia', tz:'Atlantic/Canary', etiqueta:'🇮🇨 Canarias' },
+  { match:'cristina', tz:'Atlantic/Canary', etiqueta:'🇮🇨 Canarias' }   // 18-nov-2026: Cristina también vive en Gran Canaria
 ];
 function zonaDePersona(persona){
-  const p = (persona||'').toLowerCase();
+  // 18-nov-2026: sin tildes. "Sofía Lugo" (con tilde, como sale en la lista de nombres desde el 11-nov) no coincidía con
+  // 'sofia' y sus horas se leían como hora Colombia: quedaban 5 h corridas (p. ej. su meta semanal contaba de menos).
+  const p = String(persona||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   return ZONAS_PERSONA.find(z=> p.includes(z.match)) || { tz: ZONA_DEFECTO, etiqueta:'' };
 }
 // Hora decimal (0–24) de un timestamp en una zona dada
@@ -9108,7 +9112,7 @@ const _PQ_RESPUESTAS = [
   // Festivos / ausencias
   [q=>/festivo|vacacion|ausencia|dia libre|cumpleanos|permiso/.test(q),
    ()=>({ titulo:'📅 Festivos y ausencias',
-     html:'Sofía y Cristina usan los festivos de Canarias; el resto del equipo, los de Colombia. Los días libres y vacaciones se anotan en la pestaña <b>Ausencias</b> del Sheet (persona, desde, hasta, motivo): esos días no cuentan en Tiempos ni en la meta semanal.'+
+     html:'Sofía y Cristina usan los festivos de Canarias (con el de Gran Canaria, 8 de septiembre); el resto del equipo, los de Colombia. Los días libres y vacaciones se anotan en la pestaña <b>Ausencias</b> del Sheet (persona, desde, hasta, motivo): esos días no cuentan en Tiempos ni en la meta semanal.'+
        (AUSENCIAS.filter(x=>x.hasta>=_ymdL(new Date())).length?'<div style="margin-top:6px"><b>Próximas ausencias:</b>'+'<ul class="pq-ul">'+AUSENCIAS.filter(x=>x.hasta>=_ymdL(new Date())).map(x=>'<li>'+_pqEsc(x.persona)+' · '+_pqEsc(x.motivo||'')+' · '+_pqF(x.desde)+(x.hasta!==x.desde?' a '+_pqF(x.hasta):'')+'</li>').join('')+'</ul></div>':'') })],
   // Timers
   [q=>/timer|cronometro|pausar|es mio|recargar|ctrl/.test(q),
