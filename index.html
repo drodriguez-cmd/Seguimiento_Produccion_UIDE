@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111903;
+const DASHBOARD_VERSION = 2026111904;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -3153,8 +3153,12 @@ function calcularFilasTiempos(){
     // Tiempo extra (capacitaciones, integraciones…) registrado para esta materia: corre la fecha dentro de su jornada
     const extras = extrasDeMateria(persona, a.id), horasExtra = extras.reduce((s,x)=>s+x.horas, 0);
     if(horasExtra > 0){
-      fechaEsperada = new Date(sumarHorasJornada(fechaEsperada.getTime(), horasExtra, persona));
-      diasTranscurridos = Math.max(0, diasTranscurridos - horasExtra/24);
+      const feOrig = fechaEsperada.getTime();
+      fechaEsperada = new Date(sumarHorasJornada(feOrig, horasExtra, persona));
+      // El transcurrido descuenta TODO lo que se corrió la fecha (en el mismo reloj de días hábiles de 24 h), no solo las
+      // horas: así llega al objetivo justo en la fecha esperada nueva y nunca pasa de 3 d (o 1 d) estando en plazo
+      // (19-nov-2026, Juan Diego). Ej.: 3 h que corren las 3:38 p. m. a las 9:00 a. m. del día siguiente descuentan 17,4 h.
+      diasTranscurridos = Math.max(0, diasTranscurridos - msHabilesEntre(feOrig, fechaEsperada.getTime(), cal, persona)/86400000);
     }
     const sobreObjetivo = (info.diasProduccion||0) > objetivo;
     // La fecha vencida es la señal MÁS fuerte: si ya pasó el calendario y no está completo, es atraso real.
