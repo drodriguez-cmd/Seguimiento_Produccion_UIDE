@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111904;
+const DASHBOARD_VERSION = 2026111905;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1506,9 +1506,15 @@ function renderCelulasDir(){
     const velColor = !promCelula ? 'var(--muted)' : parseFloat(promCelula)<=dfEst ? '#16a34a' : '#d97706';
     const velLabel = !promCelula ? 'sin completadas' : parseFloat(promCelula)<=dfEst ? '✅ En plazo' : '⚠️ Sobre DF';
     const activaEnEquipo = celulaActiva(id);
-    const statusLabel = !activaEnEquipo ? '⏸ Pausado' : asigActiva ? 'En producción' : cierre ? 'En cierre' : 'Libre';
-    const statusColor = !activaEnEquipo ? '#6b7280' : asigActiva ? '#d97706' : cierre ? '#b45309' : '#16a34a';
-    const statusBg = !activaEnEquipo ? 'rgba(107,114,128,.12)' : asigActiva ? 'rgba(217,119,6,.1)' : cierre ? 'rgba(234,179,8,.16)' : 'rgba(22,163,74,.1)';
+    // En pausa (p. ej. vacaciones) pero terminando la materia que ya tenía empezada (19-nov-2026, caso Gabriel): se ve
+    // como En producción / En cierre + "luego pausa, vuelve dd/mm". No recibe materias nuevas hasta que vuelva.
+    const terminandoAntesDePausa = !activaEnEquipo && !!(asigActiva || cierre);
+    const _vuelve = celulaDisponibleDesde(id);
+    const _vuelveTxt = _vuelve ? ' · vuelve '+String(_vuelve).slice(8,10)+'/'+String(_vuelve).slice(5,7) : '';
+    const statusLabel = terminandoAntesDePausa ? (asigActiva ? 'En producción' : 'En cierre')+' · luego pausa'+_vuelveTxt
+      : !activaEnEquipo ? '⏸ Pausado'+_vuelveTxt : asigActiva ? 'En producción' : cierre ? 'En cierre' : 'Libre';
+    const statusColor = terminandoAntesDePausa ? '#b45309' : !activaEnEquipo ? '#6b7280' : asigActiva ? '#d97706' : cierre ? '#b45309' : '#16a34a';
+    const statusBg = terminandoAntesDePausa ? 'rgba(234,179,8,.16)' : !activaEnEquipo ? 'rgba(107,114,128,.12)' : asigActiva ? 'rgba(217,119,6,.1)' : cierre ? 'rgba(234,179,8,.16)' : 'rgba(22,163,74,.1)';
     const barColor = cierre ? '#ca8a04' : pct>=60 ? '#16a34a' : pct>=30 ? '#d97706' : cfg.color;
     const otrosCierre = enCierre.filter(a=>a!==cierre);
     const cierreTxt = cierre
@@ -1524,7 +1530,7 @@ function renderCelulasDir(){
       ? `<div style="font-size:11px;color:#a855f7;margin-top:2px;font-weight:500">✅🎬 Diseño listo, esperando video: ${esperandoVideo.map(a=>a.nombre).join(' · ')}</div>`
       : '';
 
-    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);opacity:${activaEnEquipo?1:.55}">
+    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);opacity:${activaEnEquipo||terminandoAntesDePausa?1:.55}">
       <div style="width:12px;height:12px;border-radius:50%;background:${cfg.color};flex-shrink:0"></div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600">${cfg.label}</div>
