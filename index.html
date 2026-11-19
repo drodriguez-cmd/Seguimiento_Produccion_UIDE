@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111902;
+const DASHBOARD_VERSION = 2026111903;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -2143,11 +2143,15 @@ function metaSemanal(persona, frente, ahora){
   const hoy=ahora?new Date(ahora):new Date(), cal=calendarioDe(persona), L=inicioSemanaPersona(persona, hoy.getTime());
   const lun={ getTime:()=>L.ms };
   let habiles=0; for(let i=0;i<5;i++){ const d=new Date(L.y, L.m-1, L.d+i, 12); if(esDiaHabil(d, cal, persona)) habiles++; }
-  const metaMaterias=META_MATERIAS_SEMANA[frente]*habiles/5, porMat=ENTREGABLES_POR_MATERIA[frente];
+  // Tiempo extra de la semana (capacitaciones, integraciones…): 8 h = 1 día hábil menos (19-nov-2026)
+  const finSem=_ymdL(new Date(L.y, L.m-1, L.d+6, 12));
+  const horasExtra=TIEMPO_EXTRA.filter(x=>_mismaPersonaAus(x.persona, persona) && x.fecha>=L.ymd && x.fecha<=finSem).reduce((s,x)=>s+x.horas,0);
+  const diasEf=Math.max(0, habiles - horasExtra/8);
+  const metaMaterias=META_MATERIAS_SEMANA[frente]*diasEf/5, porMat=ENTREGABLES_POR_MATERIA[frente];
   const meta=Math.round(metaMaterias*porMat);
   const hechos=_creditosEntregables().filter(c=>c.frente===frente && c.fin>=lun.getTime() && c.fin<=hoy.getTime()
     && mismaPersona(c.persona, persona) && _esDelFrenteT(c.persona, c.rol, frente==='video')).length;
-  return { hechos, meta, habiles, metaMaterias, porMat, pct: meta?Math.round(hechos/meta*100):0, cumplida: meta>0 && hechos>=meta, lunes:L.ymd, desdeMs:L.ms };
+  return { hechos, meta, habiles, horasExtra, metaMaterias, porMat, pct: meta?Math.round(hechos/meta*100):0, cumplida: meta>0 && hechos>=meta, lunes:L.ymd, desdeMs:L.ms };
 }
 // "1 materia + 66 % de otra"
 function _textoMaterias(materias){
@@ -2158,7 +2162,8 @@ function _textoMaterias(materias){
 function metaSemanalHTML(persona, frente){
   const m=metaSemanal(persona, frente); if(!m.meta) return '';
   const pct=Math.min(100,m.pct), col=m.cumplida?'#16a34a':m.pct>=60?'#d97706':'#6366f1';
-  const nota=m.habiles<5 ? ` (semana de ${m.habiles} día${m.habiles===1?'':'s'} por festivo o ausencia)` : '';
+  const nota=(m.habiles<5 ? ` (semana de ${m.habiles} día${m.habiles===1?'':'s'} por festivo o ausencia)` : '')
+    + (m.horasExtra ? ` (menos ${String(m.horasExtra).replace('.',',')} h de tiempo extra del equipo)` : '');
   return `<div style="margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" title="Meta de la semana (lunes a domingo): ${_textoMaterias(m.metaMaterias)} = ${m.meta} entregables${nota}. Cuentan los entregables terminados en la semana, sin importar el día en que arrancó cada materia.">
     <span style="font-size:11px;font-weight:600;color:${col}">${m.cumplida?'🎉 ¡Meta semanal cumplida!':'🎯 Meta semanal'}</span>
     <span style="display:inline-block;width:70px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;vertical-align:middle"><span style="display:block;height:100%;width:${pct}%;background:${col}"></span></span>
@@ -2775,6 +2780,48 @@ async function cargarAusencias(){
   return true;
 }
 let _ausenciasPintadas = false;
+
+// ── Tiempo extra del equipo (19-nov-2026, Juan Diego): integraciones, capacitaciones… ──
+// Pestaña "Tiempo_Extra" del Sheet: ID | Persona | Fecha | Horas | Motivo | ID Asignatura | Asignatura.
+// Esas horas (1) corren la FECHA ESPERADA de la materia indicada en "ID Asignatura" (la que la persona tenía en curso
+// cuando se registró), dentro de su jornada de 6:00 a 15:00 en su hora local: si se pasa de las 15:00 sigue al otro día
+// hábil desde las 6:00; (2) se descuentan de su tiempo transcurrido, y (3) bajan su meta semanal de esa semana
+// (8 h = 1 día hábil). Es una pestaña aparte de Ausencias para que una versión vieja no las lea como días completos.
+let TIEMPO_EXTRA = [];   // [{persona, fecha, horas, motivo, asigId}]
+try{ const g=JSON.parse(localStorage.getItem('tiempoExtraCache')||'[]'); if(Array.isArray(g)) TIEMPO_EXTRA=g; }catch(e){}
+let _extraPintado = false;
+async function cargarTiempoExtra(){
+  const r = await jsonp(API+'?hoja='+encodeURIComponent('Tiempo_Extra'));
+  if(!r || r.ok===false || !Array.isArray(r.filas)) return false;
+  const fecha=v=>{ const t=String(v||'').trim(); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const d=new Date(t); return isNaN(d)?'':_ymdL(d); };
+  TIEMPO_EXTRA = r.filas.slice(1).map(f=>({ persona:String(f[1]||'').trim(), fecha:fecha(f[2]),
+      horas:parseFloat(String(f[3]||'').replace(',','.'))||0, motivo:String(f[4]||''), asigId:String(f[5]||'').trim() }))
+    .filter(x=>x.persona && x.horas>0);
+  const nuevo=JSON.stringify(TIEMPO_EXTRA); let antes='';
+  try{ antes=localStorage.getItem('tiempoExtraCache')||''; localStorage.setItem('tiempoExtraCache', nuevo); }catch(e){}
+  if(nuevo!==antes || !_extraPintado){
+    _extraPintado = true;
+    try{ const act=document.querySelector('.page.active'); const id=act ? act.id.replace(/^page-/,'') : '';
+      if(id==='tiempos') renderTiempos(); else if(id==='dashboard') renderDashboard(); }catch(e){}
+  }
+  return true;
+}
+// Horas extra de esa persona que corren el plazo de esa materia
+function extrasDeMateria(persona, asigId){ return TIEMPO_EXTRA.filter(x=>x.asigId && x.asigId===asigId && _mismaPersonaAus(x.persona, persona)); }
+// Suma horas de trabajo dentro de la jornada (6:00–15:00 en la hora de la persona, días hábiles para ella)
+const JORNADA_INI_H = 6, JORNADA_FIN_H = 15;
+function sumarHorasJornada(ms, horas, persona){
+  const tz = zonaDePersona(persona).tz, cal = calendarioDe(persona);
+  let t = ms, resto = horas*3600000, vueltas = 0;
+  while(resto > 0 && vueltas++ < 90){
+    const p = _partesEnZona(t, tz), y=+p.year, m=+p.month, d=+p.day;
+    const m0 = _medianocheEnZona(y, m, d, tz), ini = m0 + JORNADA_INI_H*3600000, fin = m0 + JORNADA_FIN_H*3600000;
+    if(!esDiaHabil(new Date(y, m-1, d, 12), cal, persona) || t >= fin){ t = _medianocheEnZona(y, m, d+1, tz) + JORNADA_INI_H*3600000; continue; }
+    if(t < ini) t = ini;
+    const usa = Math.min(resto, fin - t); t += usa; resto -= usa;
+  }
+  return t;
+}
 // ¿Es la misma persona? Primer nombre igual y, si los dos traen apellido, misma inicial del apellido
 // (así "Alejandra Gonzales" ≠ "Alejandra B[arco]" y "Juliana Zarate" ≠ "Juliana Gutiérrez").
 function _mismaPersonaAus(a, b){
@@ -3101,8 +3148,14 @@ function calcularFilasTiempos(){
     // festivos no cuentan. Antes se contaban las FECHAS tocadas (de 2:33 p. m. de un día a 6:33 a. m. del siguiente
     // salían "2 días" con solo 16 h). Así cuadra con la fecha esperada: pasa del objetivo justo cuando se atrasa.
     const cal = calendarioDe(persona);   // Sofía y Cristina: festivos de Canarias; el resto: Colombia
-    const diasTranscurridos = msHabilesEntre(inicioMs, finParaTranscurridos.getTime(), cal, persona) / 86400000;
-    const fechaEsperada = sumarDiasHabiles(inicioMs, objetivo, cal, persona);   // salta festivos y sus ausencias
+    let diasTranscurridos = msHabilesEntre(inicioMs, finParaTranscurridos.getTime(), cal, persona) / 86400000;
+    let fechaEsperada = sumarDiasHabiles(inicioMs, objetivo, cal, persona);   // salta festivos y sus ausencias
+    // Tiempo extra (capacitaciones, integraciones…) registrado para esta materia: corre la fecha dentro de su jornada
+    const extras = extrasDeMateria(persona, a.id), horasExtra = extras.reduce((s,x)=>s+x.horas, 0);
+    if(horasExtra > 0){
+      fechaEsperada = new Date(sumarHorasJornada(fechaEsperada.getTime(), horasExtra, persona));
+      diasTranscurridos = Math.max(0, diasTranscurridos - horasExtra/24);
+    }
     const sobreObjetivo = (info.diasProduccion||0) > objetivo;
     // La fecha vencida es la señal MÁS fuerte: si ya pasó el calendario y no está completo, es atraso real.
     const fechaVencida = !completo && ahora > fechaEsperada.getTime();
@@ -3112,6 +3165,7 @@ function calcularFilasTiempos(){
       inicioMs, inicioAuto, sinArrancar: !info.iniciado,
       diasTranscurridos, diasProduccion: info.diasProduccion||0,
       objetivo, fechaEsperada, completo, sobreObjetivo, fechaVencida,
+      horasExtra, extrasTxt: extras.map(x=>x.motivo+' '+String(x.horas).replace('.',',')+' h').join(' · '),
       prioridad: a.prioridad||'media', fechaLimite: a.fechaLimite||'',
       faltaCierre: !completo && frenteFaltaCierre(a, g.esVideo),
       faltaCierreTxt: !completo ? faltaCierreFrente(a, g.esVideo).join(' · ') : ''
@@ -8334,7 +8388,7 @@ function renderTiempos(){
       <td style="text-align:center" title="Tiempo real desde el Inicio, contando solo días hábiles (lun-vie, sin festivos; 1 día = 24 h) — no son horas trabajadas">${fmtTranscurrido(f.diasTranscurridos)}</td>
       <td style="text-align:center;font-weight:700" title="Horas de trabajo real acumuladas, convertidas a jornadas de 8h">${f.diasProduccion.toFixed(2)}d</td>
       <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
-      <td style="font-size:12px">${fmtFechaHora(f.fechaEsperada.getTime())}</td>
+      <td style="font-size:12px">${fmtFechaHora(f.fechaEsperada.getTime())}${f.horasExtra?`<div style="font-size:10px;color:#2563eb" title="Se corrió por tiempo extra del equipo: ${_cEsc(f.extrasTxt)}">+${String(f.horasExtra).replace('.',',')} h · ${_cEsc(f.extrasTxt.split(' · ').map(x=>x.replace(/ [\d,]+ h$/,'')).join(', '))}</div>`:''}</td>
       <td style="font-size:12px">${f.fechaLimite?fmtFecha(f.fechaLimite):'—'}</td>
       <td style="color:${f.faltaCierre&&!f.fechaVencida?'#b45309':estadoColor};font-weight:600;font-size:12px"${f.faltaCierre?` title="Le falta: ${String(f.faltaCierreTxt).replace(/"/g,'&quot;')}"`:''}>${estadoTxt}</td>
     </tr>`;
@@ -8799,6 +8853,7 @@ async function cargarDesdeSheets(){
     try{ await cargarRevisiones(); }catch(e){ console.log('[REVISIONES] error:', e); }
     try{ await cargarComentarios(); }catch(e){ console.log('[COMENTARIOS] error:', e); }
     try{ await cargarAusencias(); }catch(e){ console.log('[AUSENCIAS] error:', e); }
+    try{ await cargarTiempoExtra(); }catch(e){ console.log('[TIEMPO EXTRA] error:', e); }
     try{ if(await cargarCalidadEntrada()) calSanar(); calActualizarBadge(); }catch(e){ console.log('[CALIDAD] error:', e); }
     if(actualizado){
       // Check all asignaturas for auto-completion (catches ones completed before this feature)
