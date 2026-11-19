@@ -1463,7 +1463,8 @@ function seguimientos(a){const s=ST[a.id];if(!s||s.etapa==='fab'||!/^\d{4}-\d{2}
   else if(s.etapa==='doc'&&s.desde){const P=C?C.f:addD(inicioDoc(a,s),7);
     if(HOY>P){const d=diasCal(P,HOY);add('vencido','El profesor no ha devuelto sus ajustes: '+(C?'prometió':'vencía')+' el '+fmtc(P)+' (hace '+d+' día'+(d===1?'':'s')+'). Llámalo o escríbele hoy.',{oculto:pausa,esc:d>=3})}}
   else if(s.etapa==='coord'&&s.desde&&dh>=5)add('coord','El coordinador'+(a.coordinador?' ('+a.coordinador+')':'')+' lleva '+dh+' días hábiles sin responder. Escríbele hoy.',{oculto:pausa,esc:dh>=10});
-  else if(s.etapa==='rev'&&s.desde&&dh>2)add('mover','Lleva '+dh+' días hábiles en tu mano ('+etiquetaEtapa(a,s)+', meta 2). Muévela hoy.');
+  else if(s.etapa==='rev'&&a.flujo==='IA'&&!(s.rondas>0)){const pe=F.entregaDocente;if(pe&&HOY>pe)add('mover','Ya está escrita y no se le ha enviado al profesor: la fecha UIDE para enviársela era el '+fmtc(pe)+'. Envíala hoy.')}
+  else if(s.etapa==='rev'&&s.desde&&dh>2)add('mover','Lleva '+dh+' días hábiles en tu mano ('+etiquetaEtapa(a,s).split(' · ')[0]+', meta 2). Muévela hoy.');
   else if(s.etapa==='escr'&&a.flujo==='IA'&&s.desde&&dh>1)add('mover','La escritura con IA lleva '+dh+' días hábiles (meta 1). Termínala hoy.');
   else if(s.etapa==='sin'){
     if(a.flujo==='Autor'&&!s.encargo&&HOY>F.encargo)add('mover','El encargo al profesor no ha salido (tocaba el '+fmtc(F.encargo)+'). Revisa que tenga correo del profesor y carpeta, o envíalo.');
@@ -1605,7 +1606,7 @@ function preguntar(qq){const inp=document.getElementById('ay-q');const q=(qq||in
   try{COLA.push({accion:'guardar',hoja:'Preguntas',enc:JSON.stringify(['ID','Fecha','Pregunta','Respuesta mostrada','Encontrada']),fila:JSON.stringify(['pq'+Date.now(),new Date().toISOString(),q.slice(0,300),r.length?FAQ[r[0].i][0]:'',r.length?'Sí':'No'])});procesarCola()}catch(e){}}
 
 /* ── Versión del dashboard: súbela (AAAAMMDDnn) cada vez que se publica un contenidos.html nuevo ── */
-const DASHBOARD_VERSION = 2026111901;
+const DASHBOARD_VERSION = 2026111902;
 async function revisarVersionPublicada(){if(document.hidden||location.protocol==='file:')return;
   try{const r=await fetch(location.pathname+'?nv='+Date.now(),{cache:'no-store'});if(!r.ok)return;const m=/DASHBOARD_VERSION\s*=\s*(\d+)/.exec(await r.text());
     if(m&&+m[1]>DASHBOARD_VERSION)document.getElementById('ver-nueva').style.display='block'}catch(e){}}
