@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026112004;
+const DASHBOARD_VERSION = 2026112102;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1125,8 +1125,8 @@ async function sheetActualizar(hoja, encabezados, fila, soloCols){
       +(soloCols && soloCols.length ? '&cols='+encodeURIComponent(JSON.stringify(soloCols)) : '');
     const r = await jsonp(url);
     setSyncStatus(r.ok!==false ? 'ok' : 'err');
-    if(r.ok===false && !r.versionVieja && hoja==='Timers_Activos') _outboxAgregar('actualizar', hoja, encabezados, fila, soloCols);
-  }catch(e){ setSyncStatus('err'); if(hoja==='Timers_Activos') _outboxAgregar('actualizar', hoja, encabezados, fila, soloCols); }
+    if(r.ok===false && !r.versionVieja && (hoja==='Timers_Activos' || hoja==='Complejidad')) _outboxAgregar('actualizar', hoja, encabezados, fila, soloCols);
+  }catch(e){ setSyncStatus('err'); if(hoja==='Timers_Activos' || hoja==='Complejidad') _outboxAgregar('actualizar', hoja, encabezados, fila, soloCols); }
 }
 
 // Borra en una hoja las filas cuya columna 'columna' coincide EXACTO con 'valor'.
@@ -1862,13 +1862,15 @@ function cargarEstadoLocal(){
     if(s){
       const sesiones = JSON.parse(s);
       // MIGRACIÓN: si dias está inflado 1000x, recalcular desde mins (fuente de verdad)
-      STATE.sesiones = sesiones.map(ses=>{
+      const _vistos = new Set(); let _huboArreglo = false;
+      STATE.sesiones = sesiones.filter(ses=>{ if(!ses || !ses.id) return true; if(_vistos.has(ses.id)) return false; _vistos.add(ses.id); return true; }).map(ses=>{
         const diasCorrectos = parseFloat((ses.mins/480).toFixed(4));
         const estaInflado = ses.dias > diasCorrectos * 100; // umbral: 100x más grande = bug
+        if(estaInflado) _huboArreglo = true;
         return { ...ses, dias: estaInflado ? diasCorrectos : ses.dias };
       });
-      // Si hubo migración, guardar de inmediato
-      const habiaMigracion = sesiones.some((s,i)=>s.dias !== STATE.sesiones[i].dias);
+      // Si hubo migración (o se quitaron copias repetidas), guardar de inmediato
+      const habiaMigracion = _huboArreglo || STATE.sesiones.length !== sesiones.length;
       if(habiaMigracion){
         localStorage.setItem('fabrica_sesiones', JSON.stringify(STATE.sesiones));
         console.log('✅ Migración de días completada automáticamente');
@@ -2156,6 +2158,9 @@ let _felicitacion = null, _felicitado = {};
 // (5 × 6 videos = 30). Con festivo se reduce en proporción, según el calendario de cada persona (Colombia o Canarias).
 // Cuenta los entregables que la persona TERMINÓ esta semana (lunes a hoy): el primer timer que marcó cada entregable.
 const META_MATERIAS_SEMANA = { diseno: 1.66, video: 5 };
+// 20-nov-2026 (Juan Diego y Derly): la meta semanal se QUITA. En diseño no se puede medir bien (cada materia dura distinto,
+// según sus subtemas y anexos). El rendimiento se mide por materia completa (Tiempos). El cálculo se deja, apagado.
+var META_SEMANAL_ACTIVA = false;
 const ENTREGABLES_POR_MATERIA = { diseno: 12, video: 6 };
 function _lunesDe(d){ const x=new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; }
 let _metaMem = { firma:'', creditos:[] };
@@ -2211,6 +2216,7 @@ function _textoMaterias(materias){
   return full+' materia'+(full>1?'s':'')+(resto?' + '+resto+' % de otra':'');
 }
 function metaSemanalHTML(persona, frente){
+  if(!META_SEMANAL_ACTIVA) return '';
   const m=metaSemanal(persona, frente); if(!m.meta) return '';
   const pct=Math.min(100,m.pct), col=m.cumplida?'#16a34a':m.pct>=60?'#d97706':'#6366f1';
   const nota=(m.habiles<5 ? ` (semana de ${m.habiles} día${m.habiles===1?'':'s'} por festivo o ausencia)` : '')
@@ -2231,6 +2237,7 @@ function _mostrarMetaPendiente(){
 }
 function _trasCerrarVentana(){ if(_metaPendiente) setTimeout(_mostrarMetaPendiente, 500); }
 function celebrarMetaSiToca(persona, rol){
+  if(!META_SEMANAL_ACTIVA) return false;
   try{
     const frente=_esDelFrenteT(persona, rol, true)?'video':'diseno', m=metaSemanal(persona, frente);
     if(!m.cumplida) return;
@@ -2350,7 +2357,7 @@ function mostrarAvanceTimer(sesion, a, marcoNuevo, hayOtraVentana){
     const yo = _soyYo(persona);
     const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const pct = Math.round(hechos/total*100);
-    let meta=''; try{ const m=metaSemanal(persona, esVideo?'video':'diseno'); if(m && m.meta>0) meta='<div style="font-size:12px;color:var(--muted);margin-top:8px">🎯 Meta semanal: <b>'+m.hechos+' de '+m.meta+'</b> entregables</div>'; }catch(e){}
+    let meta=''; if(META_SEMANAL_ACTIVA) try{ const m=metaSemanal(persona, esVideo?'video':'diseno'); if(m && m.meta>0) meta='<div style="font-size:12px;color:var(--muted);margin-top:8px">🎯 Meta semanal: <b>'+m.hechos+' de '+m.meta+'</b> entregables</div>'; }catch(e){}
     document.getElementById('modal-avance-tit').textContent = yo ? '¡Bien hecho'+(pila?', '+pila:'')+'! 🙌' : '¡'+(pila||'Se')+' completó un entregable! 🙌';
     document.getElementById('modal-avance-txt').innerHTML =
       (yo?'Completaste':'Completó')+' <b>'+esc(_avNombre(map.unitKey, map.assetKey))+'</b> de <b>'+esc(a.nombre)+'</b>.'+
@@ -2831,6 +2838,74 @@ async function cargarAusencias(){
   return true;
 }
 let _ausenciasPintadas = false;
+
+// ── Subtemas y anexos por clase (20-nov-2026, Juan Diego y Derly) ──
+// Cada diseñador anota, al abrir cada clase en Asignaturas, cuántos subtemas y anexos tiene. Con eso se sabe qué materias
+// son más pesadas y cuánto tardan de verdad (luego se podrá ajustar el plazo a su tamaño). Pestaña "Complejidad" del Sheet:
+// ID (= ID asignatura|clase) | ID Asignatura | Asignatura | Clase | Subtemas | Anexos | Persona | Fecha.
+const ENC_COMPLEJIDAD = ['ID','ID Asignatura','Asignatura','Clase','Subtemas','Anexos','Persona','Fecha'];
+let COMPLEJIDAD = {};   // { asigId: { u1:{s, a}, u2:{…}, u3:{…} } }
+try{ const g=JSON.parse(localStorage.getItem('complejidadCache')||'{}'); if(g && typeof g==='object') COMPLEJIDAD=g; }catch(e){}
+let _complejidadPintada = false;
+async function cargarComplejidad(){
+  const r = await jsonp(API+'?hoja='+encodeURIComponent('Complejidad'));
+  if(!r || r.ok===false || !Array.isArray(r.filas)) return false;
+  const num=v=>{ const t=String(v??'').trim(); if(t==='') return ''; const n=parseInt(t,10); return isNaN(n)?'':n; };
+  const nuevo={};
+  r.filas.slice(1).forEach(f=>{
+    const id=String(f[1]||'').trim(), cl=String(f[3]||'').trim().toUpperCase().replace('C','u');
+    if(!id || !/^u[123]$/.test(cl)) return;
+    (nuevo[id]=nuevo[id]||{})[cl]={ s:num(f[4]), a:num(f[5]) };
+  });
+  // Lo escrito en este navegador y aún no confirmado por el Sheet no se pierde
+  Object.entries(COMPLEJIDAD).forEach(([id,c])=>Object.entries(c||{}).forEach(([cl,x])=>{ if(x && x.pend){ (nuevo[id]=nuevo[id]||{})[cl]=x; } }));
+  const antes=JSON.stringify(COMPLEJIDAD); COMPLEJIDAD=nuevo;
+  try{ localStorage.setItem('complejidadCache', JSON.stringify(COMPLEJIDAD)); }catch(e){}
+  if(JSON.stringify(COMPLEJIDAD)!==antes || !_complejidadPintada){
+    _complejidadPintada = true;
+    try{ const act=document.querySelector('.page.active'); if(act && act.id==='page-tiempos') renderTiempos(); }catch(e){}
+  }
+  return true;
+}
+function complejidadDe(asigId){ return COMPLEJIDAD[asigId] || {}; }
+async function guardarComplejidad(asigId, clase, campo, valor, el){
+  const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
+  const t=String(valor??'').trim(), v = t==='' ? '' : Math.max(0, Math.min(999, parseInt(t,10)||0));
+  if(el && t!=='' ) el.value=v;
+  const c=(COMPLEJIDAD[asigId]=COMPLEJIDAD[asigId]||{}), x=(c[clase]=c[clase]||{s:'',a:''});
+  if(x[campo]===v) return;
+  x[campo]=v; x.pend=true;
+  try{ localStorage.setItem('complejidadCache', JSON.stringify(COMPLEJIDAD)); }catch(e){}
+  const quien = _yoNombre() || (CELULA_CFG[a.celula]?.label || a.celula || '');
+  await sheetActualizar('Complejidad', ENC_COMPLEJIDAD,
+    [asigId+'|'+clase, asigId, a.nombre, clase.replace('u','C'), x.s, x.a, quien, new Date().toLocaleString('es-CO')]);
+  delete x.pend;
+  try{ localStorage.setItem('complejidadCache', JSON.stringify(COMPLEJIDAD)); }catch(e){}
+  const ok=document.getElementById('cx-ok-'+asigId+'-'+clase); if(ok){ ok.textContent='✓ Guardado'; setTimeout(()=>{ if(ok) ok.textContent=''; }, 2500); }
+}
+// Bloque de cada clase en Asignaturas: dos casillas de número
+function complejidadClaseHTML(a, clase){
+  const x=complejidadDe(a.id)[clase]||{s:'',a:''}, falta = x.s==='' || x.a==='';
+  const inp=(campo,lbl)=>`<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text)">${lbl}
+      <input type="number" min="0" max="999" inputmode="numeric" value="${x[campo]===''?'':x[campo]}" placeholder="#"
+        onclick="event.stopPropagation()" onchange="guardarComplejidad('${a.id}','${clase}','${campo}',this.value,this)"
+        style="width:64px;padding:6px 8px;border:1px solid var(--border2);border-radius:8px;font-size:13px;text-align:center;background:var(--bg2);color:var(--text)"></label>`;
+  return `<div class="cx-row" onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border-radius:10px;background:${falta?'rgba(234,179,8,.10)':'var(--bg3)'};border:1px solid ${falta?'rgba(234,179,8,.35)':'var(--border)'}">
+      ${inp('s','Subtemas')}${inp('a','Anexos')}
+      <span id="cx-ok-${a.id}-${clase}" style="font-size:11px;color:var(--ok);font-weight:600"></span>
+      ${falta?'<span style="font-size:11px;color:#a16207">Escribe cuántos tiene esta clase</span>':''}
+    </div>`;
+}
+// Texto de Tiempos debajo del nombre: "13 subtemas · 9 anexos"
+function complejidadTxt(asigId, mostrarSiFalta){
+  const c=complejidadDe(asigId), cls=['u1','u2','u3'];
+  const con=cls.filter(k=>c[k] && (c[k].s!=='' || c[k].a!==''));
+  if(!con.length) return mostrarSiFalta ? '<div style="font-size:11px;color:var(--muted);font-style:italic">Subtemas y anexos sin registrar</div>' : '';
+  const sum=campo=>con.reduce((t,k)=>t+(c[k][campo]===''?0:Number(c[k][campo])),0);
+  const det=cls.map(k=>'Clase '+k.slice(1)+': '+(c[k]&&c[k].s!==''?c[k].s:'?')+' subtemas, '+(c[k]&&c[k].a!==''?c[k].a:'?')+' anexos').join(' · ');
+  const faltan=cls.filter(k=>!(c[k] && c[k].s!=='' && c[k].a!=='')).map(k=>'C'+k.slice(1));
+  return `<div style="font-size:11px;color:var(--text);margin-top:2px;white-space:nowrap" title="${det}">${sum('s')} subtemas · ${sum('a')} anexos${faltan.length?` <span style="color:#a16207">(falta ${faltan.join(', ')})</span>`:''}</div>`;
+}
 
 // ── Tiempo extra del equipo (19-nov-2026, Juan Diego): integraciones, capacitaciones… ──
 // Pestaña "Tiempo_Extra" del Sheet: ID | Persona | Fecha | Horas | Motivo | ID Asignatura | Asignatura.
@@ -6460,14 +6535,17 @@ function renderAsignaturas(filtro){
         ${a.tipo==='celula' ? renderCelulaBodyInlineSafe(a) : ''}
         <div id="unit-${a.id}-u1"  class="form-section" ${a.tipo==='celula'?'style="display:none"':''}>
           <div class="ind-title" style="margin-bottom:8px">Entregables Clase 1</div>
+          ${a.tipo==='celula' ? complejidadClaseHTML(a,'u1') : ''}
           <div class="assets-grid">${mkAssets('u1','u1')}</div>
         </div>
         <div id="unit-${a.id}-u2" class="form-section" style="display:none">
           <div class="ind-title" style="margin-bottom:8px">Entregables Clase 2</div>
+          ${a.tipo==='celula' ? complejidadClaseHTML(a,'u2') : ''}
           <div class="assets-grid">${mkAssets('u2','u2')}</div>
         </div>
         <div id="unit-${a.id}-u3" class="form-section" style="display:none">
           <div class="ind-title" style="margin-bottom:8px">Entregables Clase 3</div>
+          ${a.tipo==='celula' ? complejidadClaseHTML(a,'u3') : ''}
           <div class="assets-grid">${mkAssets('u3','u3')}</div>
         </div>
         <div id="unit-${a.id}-cierre" class="form-section" style="display:none">
@@ -8430,7 +8508,7 @@ function renderTiempos(){
       const porQue = `Está esperando a que ${_cEsc(f.persona.split(' ')[0])} termine «${_cEsc(f.esperaPorNombre)}», que se atrasó. Su plazo todavía no corre: arranca cuando termine esa materia.`;
       return `<tr data-hp="${_cEsc(_pNom(f.persona))}" class="t-espera" style="background:#f8fafc">
       <td style="font-weight:600;color:var(--muted)">${f.persona}</td>
-      <td><div style="display:flex;gap:8px;align-items:flex-start">${(()=>{ const l=_linkCarpeta(f.asigId, f.asigNombre); return l ? `<a href="${_cEsc(l)}" target="_blank" rel="noopener" title="Abrir la carpeta de la materia en Drive" style="text-decoration:none;font-size:15px;line-height:1.2;flex-shrink:0">📁</a>` : '<span style="width:19px;flex-shrink:0"></span>'; })()}<div>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div></div></div></td>
+      <td><div style="display:flex;gap:8px;align-items:flex-start">${(()=>{ const l=_linkCarpeta(f.asigId, f.asigNombre); return l ? `<a href="${_cEsc(l)}" target="_blank" rel="noopener" title="Abrir la carpeta de la materia en Drive" style="text-decoration:none;font-size:15px;line-height:1.2;flex-shrink:0">📁</a>` : '<span style="width:19px;flex-shrink:0"></span>'; })()}<div>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div>${complejidadTxt(f.asigId, !f.completo)}</div></div></td>
       <td><span class="role-pill" style="background:${frenteCfg.color}18;color:${frenteCfg.color};font-size:11px;padding:3px 10px">${frenteCfg.icon} ${frenteCfg.label}</span></td>
       <td style="font-size:11px;font-weight:600;color:${PCOL[f.prioridad]||PCOL.media}">${PRIORIDAD_EMOJI[f.prioridad]||'🟡'} ${f.prioridad.charAt(0).toUpperCase()+f.prioridad.slice(1)}</td>
       <td style="font-size:12px;color:var(--muted)" title="${porQue}">—<div style="font-size:10px">arranca al terminar la atrasada</div></td>
@@ -8444,7 +8522,7 @@ function renderTiempos(){
     }
     return `<tr data-hp="${_cEsc(_pNom(f.persona))}">
       <td style="font-weight:600">${f.persona}</td>
-      <td><div style="display:flex;gap:8px;align-items:flex-start">${(()=>{ const l=_linkCarpeta(f.asigId, f.asigNombre); return l ? `<a href="${_cEsc(l)}" target="_blank" rel="noopener" title="Abrir la carpeta de la materia en Drive" style="text-decoration:none;font-size:15px;line-height:1.2;flex-shrink:0">📁</a>` : '<span style="width:19px;flex-shrink:0"></span>'; })()}<div>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div></div></div></td>
+      <td><div style="display:flex;gap:8px;align-items:flex-start">${(()=>{ const l=_linkCarpeta(f.asigId, f.asigNombre); return l ? `<a href="${_cEsc(l)}" target="_blank" rel="noopener" title="Abrir la carpeta de la materia en Drive" style="text-decoration:none;font-size:15px;line-height:1.2;flex-shrink:0">📁</a>` : '<span style="width:19px;flex-shrink:0"></span>'; })()}<div>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div>${complejidadTxt(f.asigId, !f.completo)}</div></div></td>
       <td><span class="role-pill" style="background:${frenteCfg.color}18;color:${frenteCfg.color};font-size:11px;padding:3px 10px">${frenteCfg.icon} ${frenteCfg.label}</span></td>
       <td style="font-size:11px;font-weight:600;color:${PCOL[f.prioridad]||PCOL.media}">${PRIORIDAD_EMOJI[f.prioridad]||'🟡'} ${f.prioridad.charAt(0).toUpperCase()+f.prioridad.slice(1)}</td>
       <td style="font-size:12px">${fmtFechaHora(f.inicioMs)}${f.inicioAuto?`<div style="font-size:10px;color:var(--muted)" title="El plazo arrancó cuando la persona terminó su asignatura anterior (o cuando se le asignó), antes del primer timer">${f.sinArrancar?'sin timer aún':'antes del 1.er timer'}</div>`:''}</td>
@@ -8775,7 +8853,11 @@ async function cargarDesdeSheets(){
         };
       }).filter(s=>s.asigNombre && s.asigNombre !== 'undefined' && s.asigNombre !== '');
       STATE.sesiones = [];
+      // 20-nov-2026: el Sheet tiene 391 filas COPIADAS de sesiones viejas (mismo ID, de antes del 2-oct, cuando "guardar"
+      // aún no frenaba duplicados). Se lee cada ID una sola vez para no contar esas horas dos o tres veces. El Sheet no se toca.
+      const _idsVistos = new Set();
       deSheets.forEach(ss=>{
+        if(ss.id){ if(_idsVistos.has(ss.id)) return; _idsVistos.add(ss.id); }
         // Preferir el ID guardado directamente (no se rompe si renombran la asignatura).
         // Si no hay ID (sesiones viejas, previas a este fix), usar el nombre como respaldo.
         if(ss.asigId && !STATE.asignaturas.find(a=>a.id===ss.asigId)) ss.asigId=''; // ID guardado ya no existe
@@ -8917,6 +8999,7 @@ async function cargarDesdeSheets(){
     try{ await cargarComentarios(); }catch(e){ console.log('[COMENTARIOS] error:', e); }
     try{ await cargarAusencias(); }catch(e){ console.log('[AUSENCIAS] error:', e); }
     try{ await cargarTiempoExtra(); }catch(e){ console.log('[TIEMPO EXTRA] error:', e); }
+    try{ await cargarComplejidad(); }catch(e){ console.log('[COMPLEJIDAD] error:', e); }
     try{ if(await cargarCalidadEntrada()) calSanar(); calActualizarBadge(); }catch(e){ console.log('[CALIDAD] error:', e); }
     if(actualizado){
       // Check all asignaturas for auto-completion (catches ones completed before this feature)
@@ -9257,7 +9340,7 @@ const _PQ_RESPUESTAS = [
        html:(!activa?'<div style="color:#b45309"><b>⏸ En pausa</b>'+(celulaDisponibleDesde(p.id)?' · vuelve el '+_pqF(celulaDisponibleDesde(p.id)):'')+'</div>':'')+
          (aus.length?'<div class="pq-mut">Ausencias: '+aus.map(x=>_pqEsc(x.motivo||'ausencia')+' '+_pqF(x.desde)+(x.hasta!==x.desde?' a '+_pqF(x.hasta):'')).join(' · ')+'</div>':'')+
          (mias.length?'<b>Sus materias:</b>'+_pqLista(mias,a=>_pqEstadoTxt(a)+' · lanza '+_pqF(a.fechaLimite)):'<div>No tiene materias abiertas.</div>')+
-         (m.meta?'<div style="margin-top:6px"><b>🎯 Meta semanal:</b> '+m.hechos+'/'+m.meta+' ('+m.pct+' %)'+(m.cumplida?' 🎉':'')+'</div>':'') };
+         (META_SEMANAL_ACTIVA && m.meta?'<div style="margin-top:6px"><b>🎯 Meta semanal:</b> '+m.hechos+'/'+m.meta+' ('+m.pct+' %)'+(m.cumplida?' 🎉':'')+'</div>':'') };
    }],
   // Entregables de diseño
   [q=>/entregable/.test(q) && /(disen|disenador|disenadora)/.test(q),
@@ -9282,11 +9365,11 @@ const _PQ_RESPUESTAS = [
   // Meta semanal
   [q=>/meta|objetivo semanal|incentivo/.test(q),
    ()=>({ titulo:'🎯 Meta semanal',
-     html:'En una semana de 5 días hábiles: <b>diseño</b> = 1 materia + 66 % de otra (20 entregables); <b>video</b> = 5 materias (30 videos). Con festivos o ausencias baja en proporción. Se ve en la fila de cada persona en el Dashboard y se reinicia cada lunes. Al cumplirla sale un aviso con el recordatorio de revisar la calidad.' })],
+     html:'La meta semanal se quitó (20-nov-2026): en diseño cada materia dura distinto según sus subtemas y anexos, así que no se medía bien. Ahora el rendimiento se mide por <b>materia completa</b> en la pestaña <b>Tiempos</b>, y cada diseñador anota los <b>subtemas y anexos</b> de cada clase en la pestaña Asignaturas.' })],
   // Festivos / ausencias
   [q=>/festivo|vacacion|ausencia|dia libre|cumpleanos|permiso/.test(q),
    ()=>({ titulo:'📅 Festivos y ausencias',
-     html:'Sofía y Cristina usan los festivos de Canarias (con el de Gran Canaria, 8 de septiembre); el resto del equipo, los de Colombia. Los días libres y vacaciones se anotan en la pestaña <b>Ausencias</b> del Sheet (persona, desde, hasta, motivo): esos días no cuentan en Tiempos ni en la meta semanal.'+
+     html:'Sofía y Cristina usan los festivos de Canarias (con el de Gran Canaria, 8 de septiembre); el resto del equipo, los de Colombia. Los días libres y vacaciones se anotan en la pestaña <b>Ausencias</b> del Sheet (persona, desde, hasta, motivo): esos días no cuentan en Tiempos.'+
        (AUSENCIAS.filter(x=>x.hasta>=_ymdL(new Date())).length?'<div style="margin-top:6px"><b>Próximas ausencias:</b>'+'<ul class="pq-ul">'+AUSENCIAS.filter(x=>x.hasta>=_ymdL(new Date())).map(x=>'<li>'+_pqEsc(x.persona)+' · '+_pqEsc(x.motivo||'')+' · '+_pqF(x.desde)+(x.hasta!==x.desde?' a '+_pqF(x.hasta):'')+'</li>').join('')+'</ul></div>':'') })],
   // Timers
   [q=>/timer|cronometro|pausar|es mio|recargar|ctrl/.test(q),
@@ -9301,7 +9384,7 @@ const _PQ_RESPUESTAS = [
   [q=>/operacion|capacidad/.test(q),
    ()=>({ titulo:'⚙️ Pestaña Operación', html:'La capacidad del equipo frente a lo que viene: cuántas materias llegan por semana o mes y si alcanza la gente para entregarlas a tiempo.' })],
   [q=>/dashboard|inicio|panel|lanzamiento/.test(q),
-   ()=>({ titulo:'🏠 Pestaña Dashboard', html:'Arriba, los números de la Fábrica. A la izquierda, cada persona de diseño y de video: en qué materia está, su avance y su meta semanal. A la derecha, tres botones: 🚀 <b>Por lanzamiento</b> (lo que falta por entregar, por fecha y con la meta de cada mes), <b>Cola</b> y ⏱ <b>Timers</b>.' })],
+   ()=>({ titulo:'🏠 Pestaña Dashboard', html:'Arriba, los números de la Fábrica. A la izquierda, cada persona de diseño y de video: en qué materia está y su avance. A la derecha, tres botones: 🚀 <b>Por lanzamiento</b> (lo que falta por entregar, por fecha y con la meta de cada mes), <b>Cola</b> y ⏱ <b>Timers</b>.' })],
   [q=>/asignaturas|pestana/.test(q),
    ()=>({ titulo:'📚 Pestaña Asignaturas', html:'Todas las materias con su avance. Al abrir una: sus clases y entregables, Videos globales, Cierre Diseño, Cierre Video, el equipo, las sesiones y los comentarios. Se puede filtrar por estado, persona y fechas, y buscar por nombre.' })]
 ];
@@ -9377,7 +9460,7 @@ function _pqCatalogo(){
   for(let i=0;i<4;i++){ const m=_PQ_MESES[(hoy.getMonth()+i)%12];
     out.push('¿Cuántas materias de '+m+' faltan por entregar?', '¿Cuáles materias de '+m+' se han entregado?', '¿Cuántas de '+m+' faltan por recibir de instruccional?'); }
   (STATE.asignaturas||[]).filter(a=>a.status!=='Completada').slice(0,300).forEach(a=>out.push('¿Cómo va '+a.nombre+'?'));
-  out.push('¿Cuál es mi meta semanal?', '¿Qué festivos vienen?', '¿Cómo pauso un timer?', '¿Qué revisa el cierre de diseño?', '¿Qué es la calidad de entrada?');
+  out.push('¿Qué festivos vienen?', '¿Cómo pauso un timer?', '¿Qué revisa el cierre de diseño?', '¿Qué es la calidad de entrada?');
   return [...new Set(out)];
 }
 // Puntaje: cuántas palabras escritas aparecen (o casi) en la pregunta del catálogo; la última palabra cuenta como inicio.
