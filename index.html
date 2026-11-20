@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026111905;
+const DASHBOARD_VERSION = 2026112003;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -989,9 +989,9 @@ function avisarVersionVieja(motivo){
   }
   // Texto cercano (6-nov-2026, Juan Diego): primero pausar el timer, luego recargar.
   b.innerHTML = '✨ '+(motivo||'Este dashboard está desactualizado.')+' Para verla: '+
-    '<b>1️⃣ ⏸ pausa tu timer</b> si tienes uno corriendo · '+
-    '<b>2️⃣ 🔄 recarga con Ctrl+Shift+R</b> (en Mac, Cmd+Shift+R) · '+
-    '<b>3️⃣ ▶ reanúdalo</b> y sigue tranquila/o 🙌'+
+    '<b>1. Pausa tu timer</b> si tienes uno corriendo · '+
+    '<b>2. Recarga con Ctrl+Shift+R</b> (en Mac, Cmd+Shift+R) · '+
+    '<b>3. Reanúdalo</b> y sigue tranquila/o'+
     '<div style="font-size:12px;font-weight:500;opacity:.9">Mientras no recargues, esta pestaña no puede cambiar asignaturas.</div>';
 }
 // Revisa cada 10 min si se publicó una versión nueva (lee el index.html publicado). No recarga sola: recargar
@@ -1004,7 +1004,7 @@ function setVersionStatus(estado){
   el.innerHTML = estado==='ok'
     ? `<span class="sb-st bien" style="color:var(--muted)">Última versión · ${v}</span>`
     : estado==='vieja'
-    ? `<span class="sb-st" style="color:#b91c1c;background:#fee2e2;cursor:pointer" onclick="location.reload()">🔄 Hay una versión nueva<small>Tienes la ${v}. Pausa tu timer y recarga (Ctrl+Shift+R).</small></span>`
+    ? `<span class="sb-st" style="color:#b91c1c;background:#fee2e2;cursor:pointer" onclick="location.reload()">Hay una versión nueva<small>Tienes la ${v}. Pausa tu timer y recarga (Ctrl+Shift+R).</small></span>`
     : `<span class="sb-st bien" style="color:var(--muted)">Versión ${v}</span>`;
 }
 async function revisarVersionPublicada(){
@@ -8398,7 +8398,7 @@ function renderTiempos(){
       <td style="text-align:center" title="Tiempo real desde el Inicio, contando solo días hábiles (lun-vie, sin festivos; 1 día = 24 h) — no son horas trabajadas">${fmtTranscurrido(f.diasTranscurridos)}</td>
       <td style="text-align:center;font-weight:700" title="Horas de trabajo real acumuladas, convertidas a jornadas de 8h">${f.diasProduccion.toFixed(2)}d</td>
       <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
-      <td style="font-size:12px">${fmtFechaHora(f.fechaEsperada.getTime())}${f.horasExtra?`<div style="font-size:10px;color:#2563eb" title="Se corrió por tiempo extra del equipo: ${_cEsc(f.extrasTxt)}">+${String(f.horasExtra).replace('.',',')} h · ${_cEsc(f.extrasTxt.split(' · ').map(x=>x.replace(/ [\d,]+ h$/,'')).join(', '))}</div>`:''}</td>
+      <td style="font-size:12px">${fmtFechaHora(f.fechaEsperada.getTime())}</td>
       <td style="font-size:12px">${f.fechaLimite?fmtFecha(f.fechaLimite):'—'}</td>
       <td style="color:${f.faltaCierre&&!f.fechaVencida?'#b45309':estadoColor};font-weight:600;font-size:12px"${f.faltaCierre?` title="Le falta: ${String(f.faltaCierreTxt).replace(/"/g,'&quot;')}"`:''}>${estadoTxt}</td>
     </tr>`;
