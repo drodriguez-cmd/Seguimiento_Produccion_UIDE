@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026112003;
+const DASHBOARD_VERSION = 2026112004;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1039,15 +1039,59 @@ function jsonp(url){
   });
 }
 
+// ── Bandeja de salida (20-nov-2026, caso Alejandra Gonzales: su HTML C3 del 19-nov a las 9 p. m. se terminó con el
+// dashboard "Sin conexión" y nunca llegó al Sheet). Si una escritura NO se confirma (sin internet, Apps Script ocupado,
+// tiempo agotado), se guarda en este navegador y se reintenta sola: al volver la conexión, cada 2 minutos y al abrir.
+// Es seguro reintentar: "guardar" no duplica (el Apps Script compara el ID de la fila) y "actualizar" solo se guarda
+// para Timers_Activos (cerrar un timer), donde reescribir la misma fila no pisa nada de nadie.
+const OUTBOX_KEY = 'sheetPendientes';
+function _outboxLeer(){ try{ const v=JSON.parse(localStorage.getItem(OUTBOX_KEY)||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } }
+function _outboxGuardar(l){ try{ localStorage.setItem(OUTBOX_KEY, JSON.stringify(l)); }catch(e){} }
+function _outboxAgregar(accion, hoja, encabezados, fila, soloCols){
+  const l=_outboxLeer(), k=accion+'|'+hoja+'|'+String(fila&&fila[0]);
+  const i=l.findIndex(x=>x.k===k), item={ k, accion, hoja, enc:encabezados, fila, cols:soloCols||null, ms:Date.now() };
+  if(i>=0) l[i]=item; else l.push(item);
+  _outboxGuardar(l);
+}
+let _outboxCorriendo=false;
+async function reintentarPendientes(){
+  if(_outboxCorriendo) return;
+  let l=_outboxLeer(); if(!l.length) return;
+  _outboxCorriendo=true;
+  try{
+    const limite=Date.now()-21*86400000;
+    l=l.filter(x=>x.ms>limite);
+    const quedan=[];
+    for(const x of l){
+      const url=API+'?accion='+x.accion+'&hoja='+encodeURIComponent(x.hoja)
+        +'&enc='+encodeURIComponent(JSON.stringify(x.enc))+'&fila='+encodeURIComponent(JSON.stringify(x.fila))
+        +(x.cols && x.cols.length ? '&cols='+encodeURIComponent(JSON.stringify(x.cols)) : '');
+      let r=null; try{ r=await jsonp(url); }catch(e){}
+      if(!(r && r.ok!==false && !r.versionVieja)) quedan.push(x);
+    }
+    // lo que se agregó mientras reintentábamos también se conserva
+    const ahora=_outboxLeer().filter(x=>!l.some(y=>y.k===x.k));
+    _outboxGuardar([...quedan, ...ahora]);
+    if(l.length && !quedan.length){ setSyncStatus('ok'); console.log('[PENDIENTES] '+l.length+' guardado(s) que no habían llegado al Sheet ya se enviaron'); }
+  }finally{ _outboxCorriendo=false; }
+}
+setInterval(()=>{ try{ reintentarPendientes(); }catch(e){} }, 120000);
+window.addEventListener('online', ()=>{ setTimeout(()=>{ try{ reintentarPendientes(); }catch(e){} }, 3000); });
+setTimeout(()=>{ try{ reintentarPendientes(); }catch(e){} }, 8000);
+
 async function sheetGuardar(hoja, encabezados, fila){
+  let ok=false;
   try{
     setSyncStatus('sync');
     const url = API+'?accion=guardar&hoja='+encodeURIComponent(hoja)
       +'&enc='+encodeURIComponent(JSON.stringify(encabezados))
       +'&fila='+encodeURIComponent(JSON.stringify(fila));
     const r = await jsonp(url);
-    setSyncStatus(r.ok!==false ? 'ok' : 'err');
-  }catch(e){ setSyncStatus('err'); }
+    ok = !!(r && r.ok!==false);
+    setSyncStatus(ok ? 'ok' : 'err');
+    if(!ok && !(r && r.versionVieja)) _outboxAgregar('guardar', hoja, encabezados, fila);
+  }catch(e){ setSyncStatus('err'); _outboxAgregar('guardar', hoja, encabezados, fila); }
+  return ok;
 }
 
 async function sheetTimerActivo(accion, timer){
@@ -1081,7 +1125,8 @@ async function sheetActualizar(hoja, encabezados, fila, soloCols){
       +(soloCols && soloCols.length ? '&cols='+encodeURIComponent(JSON.stringify(soloCols)) : '');
     const r = await jsonp(url);
     setSyncStatus(r.ok!==false ? 'ok' : 'err');
-  }catch(e){ setSyncStatus('err'); }
+    if(r.ok===false && !r.versionVieja && hoja==='Timers_Activos') _outboxAgregar('actualizar', hoja, encabezados, fila, soloCols);
+  }catch(e){ setSyncStatus('err'); if(hoja==='Timers_Activos') _outboxAgregar('actualizar', hoja, encabezados, fila, soloCols); }
 }
 
 // Borra en una hoja las filas cuya columna 'columna' coincide EXACTO con 'valor'.
@@ -5685,7 +5730,15 @@ function completarTimer(id,nota='',minsManual=null){
   // varias veces en el Sheet — mismo contenido, mismas horas, filas de más.
   const yaCompletadosGuard = JSON.parse(localStorage.getItem('timersCompletadosGuard') || '{}');
   if(yaCompletadosGuard[id]){
-    toast('Este timer ya se había completado — no se vuelve a registrar');
+    // 20-nov-2026 (caso Valentina, Video C1 de Seguridad Blockchain): el timer ya se había completado pero seguía en la
+    // lista (una copia vieja de otra pestaña lo volvió a poner) y "Completar" no hacía nada. Ahora se quita de la lista.
+    const fant = STATE.timers[id] || (STATE.timersSheets||[]).find(x=>x.id===id);
+    if(fant){ try{ sheetTimerActivo('completar', { ...fant, elapsed: fant.elapsed!=null ? fant.elapsed : (fant.minutosAcumulados||0)*60000 }); }catch(e){} }
+    clearInterval(STATE.intervals[id]);
+    delete STATE.timers[id]; delete STATE.intervals[id];
+    if(STATE.timersSheets) STATE.timersSheets=STATE.timersSheets.filter(x=>x.id!==id);
+    guardarEstadoLocal(); renderTimers(); try{ renderDashboardTimers(); }catch(e){}
+    toast('Este timer ya se había completado y su tiempo ya está guardado: lo quité de la lista');
     return;
   }
   let t=STATE.timers[id];
