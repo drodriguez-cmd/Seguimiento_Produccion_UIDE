@@ -976,7 +976,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026112102;
+const DASHBOARD_VERSION = 2026112401;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1524,7 +1524,7 @@ function renderCelulasDir(){
         <div style="font-size:10.5px;color:var(--muted);line-height:1.2">Promedio<br>al entregar</div>
         <div style="font-size:14px;font-weight:700;margin-top:2px;color:${!pe?'var(--muted)':pe.prom<=pe.obj+1e-9?'#15803d':'#b45309'}">${pe?fmtTranscurrido(pe.prom):'—'}</div>
         ${pe?`<div style="font-size:10px;color:var(--muted)">objetivo ${pe.obj} d</div>`:''}</div>`;
-  const celulasHTML = UNIDADES_DISENO.map((id)=>{
+  const celulasHTML = [...UNIDADES_DISENO, ..._apoyoDisenoConMateria()].map((id)=>{
     const cfg = CELULA_CFG[id];
     // Solo cuenta como "activa" si su DISEÑO aún no está completo (el video puede seguir pendiente sin bloquearla)
     const asigActiva = todas.find(a=>a.celula===id && a.status==='En producción' && !disenoCompletoAsig(a));
@@ -1606,7 +1606,7 @@ function renderCelulasDir(){
   const filasTiemposV = _filasT.filter(f=>f.esVideo && !f.completo);
   // Timers de VIDEO de esa persona en esa materia. Ojo: hay primeros nombres repetidos entre frentes (Juliana Zarate en
   // diseño y Juliana Gutiérrez en video; Alejandra Gonzales y Alejandra Barco), por eso se exige que el timer sea de video.
-  const esTimerVideo = t => String(t.rol||'').toLowerCase()==='video' || VIDEO_PERSONAS.includes(t.persona);
+  const esTimerVideo = t => String(t.rol||'').toLowerCase()==='video' || (VIDEO_PERSONAS.includes(t.persona) && !['disenador','diseno'].includes(String(t.rol||'').toLowerCase()));
   const timersVideoDe = (persona, a) => {
     const locales = Object.values(STATE.timers||{}), ids = Object.keys(STATE.timers||{});
     return [...locales, ...(STATE.timersSheets||[]).filter(t=>!ids.includes(t.id))]
@@ -3095,8 +3095,9 @@ function infoFrente(a, esVideo, soloPersona){
     const rolMin = String(rol||'').toLowerCase();
     // Quienes salieron de video siguen contando como video en lo que ya registraron, salvo que una sesión
     // se registre expresamente como diseño.
-    const esV = VIDEO_PERSONAS.includes(persona) || rolMin==='video' ||
-      (VIDEO_EXEDITORES.includes(persona) && !['disenador','diseno','lider','coord','calidad'].includes(rolMin));
+    // 24-nov-2026: alguien de video que registra un timer como DISEÑO (Valentina apoyando en diseño) cuenta en diseño.
+    const esV = rolMin==='video' ||
+      ((VIDEO_PERSONAS.includes(persona) || VIDEO_EXEDITORES.includes(persona)) && !['disenador','diseno','lider','coord','calidad'].includes(rolMin));
     return esVideo ? esV : !esV;
   };
   const intervalos = [];
@@ -3170,8 +3171,8 @@ let _cacheTiempos = {};
 function _ultimaAsignacionMs(log, asigId, persona){ const arr=(log||{})[asigId]||[]; for(let i=arr.length-1;i>=0;i--) if(arr[i].persona===persona) return arr[i].ms; return null; }
 function _esDelFrenteT(persona, rol, esVideo){
   const rolMin = String(rol||'').toLowerCase();
-  const esV = VIDEO_PERSONAS.includes(persona) || rolMin==='video' ||
-    (VIDEO_EXEDITORES.includes(persona) && !['disenador','diseno','lider','coord','calidad'].includes(rolMin));
+  const esV = rolMin==='video' ||
+    ((VIDEO_PERSONAS.includes(persona) || VIDEO_EXEDITORES.includes(persona)) && !['disenador','diseno','lider','coord','calidad'].includes(rolMin));
   return esVideo ? esV : !esV;
 }
 // ¿Hay un timer abierto (corriendo o en pausa) de ese frente en esta asignatura?
@@ -4351,6 +4352,9 @@ const CELULA_CFG = {
   GabrielV:  { label: 'Gabriel Villarejo', color: '#0d9488', icon: '🟢', lider: 'Gabriel Villarejo', disenador: 'Gabriel Villarejo', disponibleDesde: '2026-07-27' },
   FabianP:   { label: 'Fabián Patiño',   color: '#ca8a04', icon: '🟡', lider: 'Fabián Patiño',   disenador: 'Fabián Patiño' },
   Alejandra: { label: 'Alejandra Gonzales', color: '#f43f5e', icon: '🌸', lider: 'Alejandra Gonzales', disenador: 'Alejandra Gonzales' },
+  // Apoyo en diseño (24-nov-2026): Valentina, de video, diseña materias puntuales asignadas a mano. No entra al reparto
+  // automático ni a la pre-asignación (no está en UNIDADES_DISENO); sale en el Dashboard solo mientras tenga una en diseño.
+  ValentinaR: { label: 'Valentina Rodríguez', color: '#9333ea', icon: '🟣', lider: 'Valentina Rodríguez', disenador: 'Valentina Rodríguez' },
   JuanDiego: { label: 'Célula Video',    color: '#2563eb', icon: '🎬', lider: 'Valentina Rodríguez', disenador: 'Cristina Alisente' },
   // Legacy — solo para MOSTRAR asignaturas que ya venían en células y siguen en producción
   Gabriel:   { label: 'Célula Gabriel',  color: '#0891b2', icon: '🔵', lider: 'Gabriel Villarejo', disenador: 'Leidy Gonzales' },
@@ -4360,6 +4364,9 @@ const CELULA_CFG = {
 // Unidades de diseño ACTIVAS para asignar (modelo por persona). El video va aparte (JuanDiego).
 // Las legacy (Gabriel/Fabian/Melisa) NO se asignan; solo existen para mostrar lo que ya está en producción.
 const UNIDADES_DISENO = ['Sofia','David','Juliana','Melissa','GabrielV','FabianP','Alejandra'];
+// Personas de otro frente que apoyan en diseño con materias asignadas a mano (ver CELULA_CFG.ValentinaR)
+const APOYO_DISENO = ['ValentinaR'];
+function _apoyoDisenoConMateria(){ return APOYO_DISENO.filter(id=>STATE.asignaturas.some(a=>a.celula===id && a.tipo==='celula' && a.status!=='Completada' && a.status!=='Pausada')); }
 
 // ════════════════════════════════════════════
 // LÍDERES DE CÉLULA — emails para notificaciones
@@ -4437,7 +4444,7 @@ const PRE_ASIGN_ENTREGABLES = 7;
 // Sheet, se usa el respaldo escrito en CELULA_CFG.
 // Si en la hoja Equipo el ID de alguien no es su nombre completo (p. ej. "AlejandraB"), aquí se indica
 // qué ID usa en el Sheet. Así pausar o dar fecha de inicio en esa fila sí le llega al dashboard.
-const EQUIPO_ID_ALIAS = { 'Alejandra Barco': 'AlejandraB' };
+const EQUIPO_ID_ALIAS = { 'Alejandra Barco': 'AlejandraB', 'ValentinaR': 'Valentina Rodríguez' };
 function _filaEquipo(id){ return STATE.equipoEstado[id] || STATE.equipoEstado[EQUIPO_ID_ALIAS[id]]; }
 function celulaActiva(id){
   const enSheet = _filaEquipo(id);
@@ -6313,7 +6320,7 @@ function _asigFrenteHTML(a, esVideo, inf){
 // abre sola la pestaña de quien usa el navegador (nombre elegido en Timers en vivo o en "Soy:").
 let _asigAutoPersona = false;
 function _asigPersonasTabs(){
-  return [...UNIDADES_DISENO.map(id=>({v:id, n:CELULA_CFG[id]?.label||id, f:'🎨'})), ...VIDEO_PERSONAS.map(n=>({v:n, n, f:'🎬'}))];
+  return [...UNIDADES_DISENO.map(id=>({v:id, n:CELULA_CFG[id]?.label||id, f:'🎨'})), ..._apoyoDisenoConMateria().map(id=>({v:id, n:CELULA_CFG[id]?.label||id, f:'🎨'})), ...VIDEO_PERSONAS.map(n=>({v:n, n, f:'🎬'}))];
 }
 function _asigEsDe(a, v){
   const esVideo = VIDEO_PERSONAS.includes(v) || VIDEO_EXEDITORES.includes(v);
