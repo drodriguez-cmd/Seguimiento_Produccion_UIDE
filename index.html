@@ -990,7 +990,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026112403;
+const DASHBOARD_VERSION = 2026112404;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -1658,7 +1658,9 @@ function renderCelulasDir(){
     const vencida = !!(filaT && filaT.fechaVencida);
     const activaEnEquipoV = celulaActiva(persona);
     const arrancada = P && (P.vivo || P.pausa || P.iniciado);
+    const _apoyoD = STATE.asignaturas.find(a=>a.tipo==='celula' && APOYO_DISENO.includes(a.celula) && _mismaPersonaAus(CELULA_CFG[a.celula]?.label||'', persona) && a.status!=='Pausada' && a.status!=='Completada' && finFrenteTiempos(a,false)===null);
     const [stLbl, stCol, stBg] = !activaEnEquipoV ? ['⏸ Pausado','#6b7280','rgba(107,114,128,.12)']
+      : (_apoyoD && !(P && arrancada)) ? ['🎨 Apoyando en diseño','#9333ea','rgba(147,51,234,.1)']
       : P ? (arrancada ? ['En producción','#d97706','rgba(217,119,6,.1)'] : ['Por arrancar','#6366f1','rgba(99,102,241,.12)'])
       : cierreV ? ['En cierre','#b45309','rgba(234,179,8,.16)'] : ['Libre','#16a34a','rgba(22,163,74,.1)'];
     const barColor = cierreV ? '#ca8a04' : pct>=60 ? '#16a34a' : pct>=30 ? '#d97706' : '#2563eb';
@@ -3355,17 +3357,27 @@ function calcularFilasTiempos(){
     const finAntes = (t, salvo) => { let m=0; terminados.forEach(it=>{ if(it.a.id!==salvo && it.fin<=t && it.fin>m) m=it.fin; }); return m; };
     // ¿Tenía otra empezada y sin terminar en ese momento? (trabajó en paralelo o adelantó una reserva)
     const ocupadaEn = (t, salvo) => iniciadas.some(it=>it.a.id!==salvo && it.info.fechaMs<t && !(it.fin && it.fin<=t));
+    let _finApoyo = 0, _apoyoAbierta = false;
+    if(g.esVideo){
+      const apoyo = STATE.asignaturas.filter(a=>a.tipo==='celula' && APOYO_DISENO.includes(a.celula) && _mismaPersonaAus(CELULA_CFG[a.celula]?.label||'', g.P));
+      _apoyoAbierta = apoyo.some(a=>a.status!=='Pausada' && a.status!=='Completada' && finFrenteTiempos(a, false)===null);
+      apoyo.forEach(a=>{ const f=finFrenteTiempos(a, false); if(f && f>_finApoyo) _finApoyo=f; });
+    }
     // 2. Las que ya tienen timer
     iniciadas.forEach(it=>{
       const t0 = it.info.fechaMs;
       let inicio = t0, auto = false;
       if(t0 >= TIEMPOS_RELOJ_MINIMO && it.a.status!==ST_REVISION && !ocupadaEn(t0, it.a.id)){
-        const ancla = anclaPlazo(g, it.a, finAntes(t0, it.a.id));
+        const ancla = Math.max(anclaPlazo(g, it.a, finAntes(t0, it.a.id))||0, (_finApoyo && _finApoyo<=t0) ? _finApoyo : 0);
         if(ancla){ const c = Math.max(ancla, TIEMPOS_RELOJ_MINIMO); if(c < t0){ inicio = c; auto = true; } }
       }
       empuja(g, it, inicio, auto);
     });
     // 3. La siguiente sin timer: una sola, y solo si no tiene nada en curso
+    // 24-nov-2026 (caso Valentina): alguien de video que apoya en diseño no tiene reloj de video mientras tenga su
+    // materia de diseño abierta; al terminarla, su siguiente video cuenta desde que terminó el diseño (no desde que se le
+    // asignó el video), para no salir atrasada por el tiempo que estuvo apoyando.
+    if(g.esVideo && _apoyoAbierta && !iniciadas.some(it=>!it.completo)) return;
     // "En espera por atraso" (18-nov-2026, Juan Diego y Derly, opción mixta): si lo que tiene en curso YA venció su plazo,
     // la siguiente materia aparece desde que venció (para que se vea que está esperando), pero SU reloj no corre: arranca
     // cuando la persona termine la atrasada, como siempre. Así el atraso no se cobra dos veces. Lo ve todo el equipo.
@@ -3397,7 +3409,7 @@ function calcularFilasTiempos(){
       });
       return;
     }
-    const ancla = anclaPlazo(g, sig.a, finAntes(ahora, sig.a.id));
+    const ancla = Math.max(anclaPlazo(g, sig.a, finAntes(ahora, sig.a.id))||0, _finApoyo||0);
     if(!ancla) return; // sin término previo ni hora de asignación: no se inventa un inicio
     const inicio = Math.max(ancla, TIEMPOS_RELOJ_MINIMO);
     if(inicio > ahora) return;
