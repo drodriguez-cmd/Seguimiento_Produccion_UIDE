@@ -264,6 +264,20 @@ textarea{resize:vertical;min-height:70px}
 @media (max-width:1000px){ .ac-grid{grid-template-columns:minmax(0,1fr);gap:6px} .ac-quien,.ac-fechas{line-height:1.5} }
 .q-l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-right:4px}
 .asig-resumen-body{padding:12px 20px 4px;border-bottom:1px solid var(--border)}
+.asig-general{padding:14px 20px 8px}
+.cx-box{margin:0 0 14px}
+.cx-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:900px){.cx-grid{grid-template-columns:1fr}}
+.cx-col{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--bg2)}
+.cx-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cx-tit{font-size:13px;font-weight:600;color:var(--text);min-width:72px}
+.cx-num{width:64px!important;padding:6px 8px;border:1px solid var(--border2);border-radius:8px;font-size:13px;text-align:center;background:white;color:var(--text)}
+.cx-hint{font-size:11px;color:#a16207}
+.cx-lista{margin:10px 0 2px;padding-left:22px;display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
+.cx-lista li{font-size:11px;color:var(--muted)}
+.cx-lista input{width:100%;padding:6px 9px;border:1px solid var(--border2);border-radius:8px;font-size:12.5px;background:white;color:var(--text);box-sizing:border-box}
+.cx-lista input:focus,.cx-num:focus{outline:2px solid rgba(37,99,235,.25);border-color:#2563eb}
+.cx-pie{font-size:11px;min-height:14px;margin-top:4px}
 .asig-gestion{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 6px}
 .asig-gestion > div{margin-top:0!important}
 .asig-gestion select{width:auto!important;max-width:220px}
@@ -976,7 +990,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026112401;
+const DASHBOARD_VERSION = 2026112403;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -2843,7 +2857,7 @@ let _ausenciasPintadas = false;
 // Cada diseñador anota, al abrir cada clase en Asignaturas, cuántos subtemas y anexos tiene. Con eso se sabe qué materias
 // son más pesadas y cuánto tardan de verdad (luego se podrá ajustar el plazo a su tamaño). Pestaña "Complejidad" del Sheet:
 // ID (= ID asignatura|clase) | ID Asignatura | Asignatura | Clase | Subtemas | Anexos | Persona | Fecha.
-const ENC_COMPLEJIDAD = ['ID','ID Asignatura','Asignatura','Clase','Subtemas','Anexos','Persona','Fecha'];
+const ENC_COMPLEJIDAD = ['ID','ID Asignatura','Asignatura','Clase','Subtemas','Anexos','Persona','Fecha','Nombres subtemas','Nombres anexos'];
 let COMPLEJIDAD = {};   // { asigId: { u1:{s, a}, u2:{…}, u3:{…} } }
 try{ const g=JSON.parse(localStorage.getItem('complejidadCache')||'{}'); if(g && typeof g==='object') COMPLEJIDAD=g; }catch(e){}
 let _complejidadPintada = false;
@@ -2855,7 +2869,8 @@ async function cargarComplejidad(){
   r.filas.slice(1).forEach(f=>{
     const id=String(f[1]||'').trim(), cl=String(f[3]||'').trim().toUpperCase().replace('C','u');
     if(!id || !/^u[123]$/.test(cl)) return;
-    (nuevo[id]=nuevo[id]||{})[cl]={ s:num(f[4]), a:num(f[5]) };
+    const lista=v=>String(v??'').split('\n').map(x=>x.trim());
+    (nuevo[id]=nuevo[id]||{})[cl]={ s:num(f[4]), a:num(f[5]), ns:lista(f[8]), na:lista(f[9]) };
   });
   // Lo escrito en este navegador y aún no confirmado por el Sheet no se pierde
   Object.entries(COMPLEJIDAD).forEach(([id,c])=>Object.entries(c||{}).forEach(([cl,x])=>{ if(x && x.pend){ (nuevo[id]=nuevo[id]||{})[cl]=x; } }));
@@ -2868,32 +2883,62 @@ async function cargarComplejidad(){
   return true;
 }
 function complejidadDe(asigId){ return COMPLEJIDAD[asigId] || {}; }
-async function guardarComplejidad(asigId, clase, campo, valor, el){
+const _cxNombres=(x,k,n)=>{ const l=(x&&Array.isArray(x[k])?x[k]:[]).slice(0,Math.max(0,Number(n)||0)); while(l.length<(Number(n)||0)) l.push(''); return l; };
+async function _cxEscribir(asigId, clase){
   const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
-  const t=String(valor??'').trim(), v = t==='' ? '' : Math.max(0, Math.min(999, parseInt(t,10)||0));
-  if(el && t!=='' ) el.value=v;
-  const c=(COMPLEJIDAD[asigId]=COMPLEJIDAD[asigId]||{}), x=(c[clase]=c[clase]||{s:'',a:''});
-  if(x[campo]===v) return;
-  x[campo]=v; x.pend=true;
-  try{ localStorage.setItem('complejidadCache', JSON.stringify(COMPLEJIDAD)); }catch(e){}
+  const x=COMPLEJIDAD[asigId]?.[clase]; if(!x) return;
+  x.pend=true; try{ localStorage.setItem('complejidadCache', JSON.stringify(COMPLEJIDAD)); }catch(e){}
   const quien = _yoNombre() || (CELULA_CFG[a.celula]?.label || a.celula || '');
+  const limpio=l=>l.map(t=>String(t||'').replace(/\s*\n\s*/g,' ').trim()).join('\n');
   await sheetActualizar('Complejidad', ENC_COMPLEJIDAD,
-    [asigId+'|'+clase, asigId, a.nombre, clase.replace('u','C'), x.s, x.a, quien, new Date().toLocaleString('es-CO')]);
+    [asigId+'|'+clase, asigId, a.nombre, clase.replace('u','C'), x.s, x.a, quien, new Date().toLocaleString('es-CO'),
+     limpio(_cxNombres(x,'ns',x.s)), limpio(_cxNombres(x,'na',x.a))]);
   delete x.pend;
   try{ localStorage.setItem('complejidadCache', JSON.stringify(COMPLEJIDAD)); }catch(e){}
-  const ok=document.getElementById('cx-ok-'+asigId+'-'+clase); if(ok){ ok.textContent='✓ Guardado'; setTimeout(()=>{ if(ok) ok.textContent=''; }, 2500); }
+  const ok=document.getElementById('cx-ok-'+asigId+'-'+clase); if(ok){ ok.textContent='✓ Guardado'; clearTimeout(ok._t); ok._t=setTimeout(()=>{ ok.textContent=''; }, 2500); }
 }
-// Bloque de cada clase en Asignaturas: dos casillas de número
+// Número de subtemas o anexos: guarda y abre (o cierra) las casillas para escribir sus nombres
+async function guardarComplejidad(asigId, clase, campo, valor, el){
+  const a=STATE.asignaturas.find(x=>x.id===asigId); if(!a) return;
+  const t=String(valor??'').trim(), v = t==='' ? '' : Math.max(0, Math.min(40, parseInt(t,10)||0));
+  if(el && t!=='') el.value=v;
+  const c=(COMPLEJIDAD[asigId]=COMPLEJIDAD[asigId]||{}), x=(c[clase]=c[clase]||{s:'',a:''});
+  if(x[campo]===v) return;
+  x[campo]=v;
+  const box=document.getElementById('cx-'+asigId+'-'+clase);
+  if(box){ box.outerHTML=complejidadClaseHTML(a, clase);
+    const sig=document.querySelector('#cx-'+asigId+'-'+clase+' [data-cx-l="'+(campo==='s'?'ns':'na')+'"] input'); if(sig && v) sig.focus(); }
+  await _cxEscribir(asigId, clase);
+}
+// Nombre de un subtema o anexo: se guarda solo mientras escribe (a los 0,8 s) y al salir de la casilla
+const _cxTimers={};
+function guardarNombreCx(asigId, clase, k, i, valor, inmediato){
+  const c=(COMPLEJIDAD[asigId]=COMPLEJIDAD[asigId]||{}), x=(c[clase]=c[clase]||{s:'',a:''});
+  const l=Array.isArray(x[k])?x[k]:(x[k]=[]); while(l.length<=i) l.push('');
+  const v=String(valor||'').replace(/\s+/g,' ').trim(); if(l[i]===v && !inmediato) return;
+  l[i]=v; x.pend=true; try{ localStorage.setItem('complejidadCache', JSON.stringify(COMPLEJIDAD)); }catch(e){}
+  const key=asigId+'|'+clase; clearTimeout(_cxTimers[key]);
+  if(inmediato) return _cxEscribir(asigId, clase);
+  _cxTimers[key]=setTimeout(()=>_cxEscribir(asigId, clase), 800);
+}
+// Bloque de cada clase en Asignaturas: Subtemas y Anexos lado a lado; al poner el número aparecen las casillas de nombres
 function complejidadClaseHTML(a, clase){
-  const x=complejidadDe(a.id)[clase]||{s:'',a:''}, falta = x.s==='' || x.a==='';
-  const inp=(campo,lbl)=>`<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text)">${lbl}
-      <input type="number" min="0" max="999" inputmode="numeric" value="${x[campo]===''?'':x[campo]}" placeholder="#"
-        onclick="event.stopPropagation()" onchange="guardarComplejidad('${a.id}','${clase}','${campo}',this.value,this)"
-        style="width:64px;padding:6px 8px;border:1px solid var(--border2);border-radius:8px;font-size:13px;text-align:center;background:var(--bg2);color:var(--text)"></label>`;
-  return `<div class="cx-row" onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border-radius:10px;background:${falta?'rgba(234,179,8,.10)':'var(--bg3)'};border:1px solid ${falta?'rgba(234,179,8,.35)':'var(--border)'}">
-      ${inp('s','Subtemas')}${inp('a','Anexos')}
-      <span id="cx-ok-${a.id}-${clase}" style="font-size:11px;color:var(--ok);font-weight:600"></span>
-      ${falta?'<span style="font-size:11px;color:#a16207">Escribe cuántos tiene esta clase</span>':''}
+  const x=complejidadDe(a.id)[clase]||{s:'',a:''};
+  const col=(campo,k,titulo,ej)=>{
+    const n=x[campo]===''?0:Number(x[campo]), nombres=_cxNombres(x,k,n), faltan=nombres.filter(t=>!t).length;
+    return `<div class="cx-col">
+      <div class="cx-head"><span class="cx-tit">${titulo}</span>
+        <input type="number" min="0" max="40" inputmode="numeric" value="${x[campo]===''?'':x[campo]}" placeholder="#" aria-label="Cuántos ${titulo.toLowerCase()}"
+          onclick="event.stopPropagation()" onchange="guardarComplejidad('${a.id}','${clase}','${campo}',this.value,this)" class="cx-num">
+        ${x[campo]===''?'<span class="cx-hint">¿Cuántos tiene esta clase?</span>':n===0?'<span class="cx-hint" style="color:var(--muted)">Ninguno</span>':faltan?`<span class="cx-hint">Falta${faltan===1?'':'n'} ${faltan} nombre${faltan===1?'':'s'}</span>`:'<span class="cx-hint" style="color:var(--ok)">✓ Completo</span>'}
+      </div>
+      ${n?`<ol class="cx-lista" data-cx-l="${k}">${nombres.map((t,i)=>`<li><input type="text" value="${_cEsc(t)}" placeholder="${ej} ${i+1}" maxlength="160"
+          onclick="event.stopPropagation()" oninput="guardarNombreCx('${a.id}','${clase}','${k}',${i},this.value)" onchange="guardarNombreCx('${a.id}','${clase}','${k}',${i},this.value,true)"></li>`).join('')}</ol>`:''}
+    </div>`;
+  };
+  return `<div class="cx-box" id="cx-${a.id}-${clase}" onclick="event.stopPropagation()">
+      <div class="cx-grid">${col('s','ns','Subtemas','Nombre del subtema')}${col('a','na','Anexos','Nombre del anexo')}</div>
+      <div class="cx-pie"><span id="cx-ok-${a.id}-${clase}" style="color:var(--ok);font-weight:600"></span></div>
     </div>`;
 }
 // Texto de Tiempos debajo del nombre: "13 subtemas · 9 anexos"
@@ -6409,6 +6454,14 @@ function renderAsignaturas(filtro){
   if(resEl){ const quien=_asigCelula==='all'?'':(_asigPersonasTabs().find(p=>p.v===_asigCelula)?.n||_asigCelula);
     resEl.innerHTML = `${list.length} asignatura${list.length===1?'':'s'}${quien?' de <b>'+_cEsc(quien)+'</b>':''}${_asigStatus!=='all'?' · '+_cEsc(_asigStatus):''}`; }
   if(!list.length){ el.innerHTML='<div class="card"><div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-txt">Sin resultados</div></div></div>'; return; }
+  // 24-nov-2026: si alguien está escribiendo subtemas/anexos, no se redibuja debajo de su cursor (se hace al salir)
+  const _foco=document.activeElement;
+  if(_foco && el.contains(_foco) && _foco.closest && _foco.closest('.cx-box')){
+    if(!_asigRenderPend){ _asigRenderPend=true; _foco.addEventListener('blur', ()=>{ setTimeout(()=>{ _asigRenderPend=false; renderAsignaturas(); }, 300); }, {once:true}); }
+    return;
+  }
+  // Las tarjetas abiertas y su pestaña se conservan al volver a dibujar
+  const _abiertas=[...el.querySelectorAll('.asig-body.open')].map(b=>b.id.slice(5));
   el.innerHTML=list.map(a=>{
     // Ensure célula data is initialized
     if(a.tipo==='celula'){
@@ -6504,7 +6557,19 @@ function renderAsignaturas(filtro){
         <div class="asig-expand" id="arr-${a.id}">▾</div>
       </div>
       <div class="asig-body" id="body-${a.id}">
-      <div class="asig-resumen-body">
+        <div class="unit-tabs">
+          <button class="utab active" onclick="showUnit('${a.id}','general',this)">General</button>
+          <button class="utab" onclick="showUnit('${a.id}','u1',this)">Clase 1</button>
+            <button class="utab" onclick="showUnit('${a.id}','u2',this)">Clase 2</button>
+            <button class="utab" onclick="showUnit('${a.id}','u3',this)">Clase 3</button>
+            <button class="utab" onclick="showUnit('${a.id}','global',this)">Videos globales</button>
+            <button class="utab" onclick="showUnit('${a.id}','cierre',this)">Cierre Diseño</button>
+            <button class="utab" onclick="showUnit('${a.id}','cierrev',this)">Cierre Video</button>
+
+            <button class="utab" onclick="showUnit('${a.id}','sesiones',this)">Sesiones</button>
+            <button class="utab" onclick="showUnit('${a.id}','comentarios',this)">Comentarios<span id="com-cnt-${a.id}">${_comConteoTxt(a)}</span></button>
+        </div>
+        <div id="unit-${a.id}-general" class="asig-general">
         <div class="af-wrap">${_asigFrenteHTML(a,false,infDis)}${_asigFrenteHTML(a,true,infVid)}</div>
         <div class="asig-meta" style="align-items:center;margin-top:2px">
           ${a.fechaDeberiaEntrar?`<span title="Fecha en que debía entrar de instruccional">Debía entrar ${fmtFecha(a.fechaDeberiaEntrar)}</span>`:''}
@@ -6518,41 +6583,37 @@ function renderAsignaturas(filtro){
           </select>
           ${a.fechaLimite?`<span style="font-size:9px;color:var(--muted)" title="${a.prioridadManual?'La cambiaste a mano — ya no se recalcula sola':'Se recalcula sola según la fecha de lanzamiento'}">${a.prioridadManual?'Manual':'Auto'}</span>`:''}
           ${(a.status==='En espera'||a.status==='En producción'||a.status==='Pausada')?`
-          <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-top:6px">
+          <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-left:12px">
+            <span class="q-l">Diseño</span>
             <select id="asigncel-${a.id}" onclick="event.stopPropagation()" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:white;max-width:150px">
               ${UNIDADES_DISENO.map(id=>{const c=CELULA_CFG[id];return `<option value="${id}" ${a.celula===id?'selected':''}>${c.label}</option>`;}).join('')}
               ${(a.celula && !UNIDADES_DISENO.includes(a.celula) && a.celula!=='JuanDiego' && CELULA_CFG[a.celula]) ? `<option value="${a.celula}" selected>${CELULA_CFG[a.celula].label}</option>` : ''}
             </select>
             <button class="btn btn-sm" onclick="event.stopPropagation();asignarCelulaManual('${a.id}',document.getElementById('asigncel-${a.id}').value)" style="background:var(--ok);color:white;border:none;white-space:nowrap">${a.status==='En espera'?'Asignar':'Mover'}</button>
           </div>`:''}
+          <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-left:12px">
+            <span class="q-l">Estado</span>
+            <select onclick="event.stopPropagation()" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:white;max-width:170px" id="st-${a.id}">
+              ${a.status===ST_REVISION?`<option value="${ST_REVISION}" selected>En revisión de calidad</option><option value="En espera">Pasar a la cola sin revisión</option>`:''}
+              <option value="En producción" ${a.status==='En producción'?'selected':''}>En producción</option>
+              <option value="Completada" ${a.status==='Completada'?'selected':''}>Completada</option>
+              <option value="Pausada" ${a.status==='Pausada'?'selected':''}>Pausada</option>
+            </select>
+            <button class="btn btn-sm" onclick="event.stopPropagation();cambiarStatus('${a.id}')" style="white-space:nowrap">Actualizar</button>
+          </div>
         </div>
-      </div>
-        <div class="unit-tabs">
-          <button class="utab active" onclick="showUnit('${a.id}','u1',this)">Clase 1</button>
-            <button class="utab" onclick="showUnit('${a.id}','u2',this)">Clase 2</button>
-            <button class="utab" onclick="showUnit('${a.id}','u3',this)">Clase 3</button>
-            <button class="utab" onclick="showUnit('${a.id}','global',this)">Videos globales</button>
-            <button class="utab" onclick="showUnit('${a.id}','cierre',this)">Cierre Diseño</button>
-            <button class="utab" onclick="showUnit('${a.id}','cierrev',this)">Cierre Video</button>
-            <button class="utab" onclick="showUnit('${a.id}','equipo',this)">Equipo</button>
-
-            <button class="utab" onclick="showUnit('${a.id}','sesiones',this)">Sesiones</button>
-            <button class="utab" onclick="showUnit('${a.id}','comentarios',this)">Comentarios<span id="com-cnt-${a.id}">${_comConteoTxt(a)}</span></button>
         </div>
         ${a.tipo==='celula' ? renderCelulaBodyInlineSafe(a) : ''}
-        <div id="unit-${a.id}-u1"  class="form-section" ${a.tipo==='celula'?'style="display:none"':''}>
-          <div class="ind-title" style="margin-bottom:8px">Entregables Clase 1</div>
-          ${a.tipo==='celula' ? complejidadClaseHTML(a,'u1') : ''}
+        <div id="unit-${a.id}-u1" class="form-section" style="display:none">
+          ${a.tipo==='celula' ? '<div class="ind-title" style="margin-bottom:8px">Subtemas y anexos de la clase 1</div>'+complejidadClaseHTML(a,'u1') : '<div class="ind-title" style="margin-bottom:8px">Entregables Clase 1</div>'}
           <div class="assets-grid">${mkAssets('u1','u1')}</div>
         </div>
         <div id="unit-${a.id}-u2" class="form-section" style="display:none">
-          <div class="ind-title" style="margin-bottom:8px">Entregables Clase 2</div>
-          ${a.tipo==='celula' ? complejidadClaseHTML(a,'u2') : ''}
+          ${a.tipo==='celula' ? '<div class="ind-title" style="margin-bottom:8px">Subtemas y anexos de la clase 2</div>'+complejidadClaseHTML(a,'u2') : '<div class="ind-title" style="margin-bottom:8px">Entregables Clase 2</div>'}
           <div class="assets-grid">${mkAssets('u2','u2')}</div>
         </div>
         <div id="unit-${a.id}-u3" class="form-section" style="display:none">
-          <div class="ind-title" style="margin-bottom:8px">Entregables Clase 3</div>
-          ${a.tipo==='celula' ? complejidadClaseHTML(a,'u3') : ''}
+          ${a.tipo==='celula' ? '<div class="ind-title" style="margin-bottom:8px">Subtemas y anexos de la clase 3</div>'+complejidadClaseHTML(a,'u3') : '<div class="ind-title" style="margin-bottom:8px">Entregables Clase 3</div>'}
           <div class="assets-grid">${mkAssets('u3','u3')}</div>
         </div>
         <div id="unit-${a.id}-cierre" class="form-section" style="display:none">
@@ -6592,36 +6653,6 @@ function renderAsignaturas(filtro){
             }).join('')}
           </div>
         </div>
-        <div id="unit-${a.id}-equipo" class="form-section" style="display:none">
-          <div style="display:flex;flex-wrap:wrap;gap:10px">
-            ${a.tipo==='celula' ? (()=>{
-              const cc = CELULA_CFG[a.celula]||{};
-              return [
-                ['👑 Líder','#023373', cc.lider||'—'],
-                ['🎨 Diseñador','#D98E04', cc.disenador||'—'],
-                ['🎬 Video','#3b82f6', a.videoPersona||'—']
-              ].map(([lbl,color,name])=>`
-              <div class="ind-block" style="flex:1;min-width:150px;border-left:3px solid ${color}">
-                <div class="ind-title" style="color:${color}">${lbl}</div>
-                <div style="font-size:14px;font-weight:600;color:var(--text)">${name}</div>
-              </div>`).join('');
-            })() : [['🟢 Calidad','calidad',a.equipo.calidad],['🟠 Diseñador 1','disenador',a.equipo.dis1],['🟠 Diseñador 2','disenador',a.equipo.dis2],['🔵 Editor video','video',a.equipo.video],['🟣 Coordinación','coord',a.equipo.coord]].filter(e=>e[2]).map(([lbl,rol,name])=>`
-            <div class="ind-block" style="flex:1;min-width:150px">
-              <div class="ind-title">${lbl}</div>
-              <div style="font-size:14px;font-weight:600;color:var(--text)">${name}</div>
-              <div style="margin-top:8px"><span class="role-pill ${ROL_CFG[rol]?.rp||''}" style="font-size:10px;padding:2px 8px">${rolLabel(rol)}</span></div>
-            </div>`).join('')}
-          </div>
-          <div style="margin-top:14px;display:flex;gap:8px">
-            <select style="max-width:200px" onchange="" id="st-${a.id}">
-              ${a.status===ST_REVISION?`<option value="${ST_REVISION}" selected>En revisión de calidad</option><option value="En espera">Pasar a la cola sin revisión</option>`:''}
-              <option value="En producción" ${a.status==='En producción'?'selected':''}>En producción</option>
-              <option value="Completada" ${a.status==='Completada'?'selected':''}>Completada</option>
-              <option value="Pausada" ${a.status==='Pausada'?'selected':''}>Pausada</option>
-            </select>
-            <button class="btn btn-sm btn-ok" onclick="cambiarStatus('${a.id}')">Actualizar status</button>
-          </div>
-        </div>
         ${a.tipo==='celula' ? renderCelulaBodyInlineSafe(a) : ''}
         <div id="unit-${a.id}-sesiones" class="card-body" style="display:none">
           ${sesA.length?`<table><thead><tr><th>Persona</th><th>Rol</th><th>Tarea</th><th>Clase</th><th>Inicio</th><th>Fin</th><th>Tiempo</th></tr></thead><tbody>`+
@@ -6637,7 +6668,13 @@ function renderAsignaturas(filtro){
       </div>
     </div>`;
   }).join('');
+  _abiertas.forEach(id=>{
+    const b=document.getElementById('body-'+id); if(!b) return;
+    b.classList.add('open'); const ar=document.getElementById('arr-'+id); if(ar) ar.textContent='▴';
+    const u=_asigTab[id]; if(u && u!=='general'){ const tab=[...b.querySelectorAll('.utab')].find(t=>(t.getAttribute('onclick')||'').includes("'"+u+"'")); if(tab) showUnit(id,u,tab); }
+  });
 }
+let _asigRenderPend=false;
 
 function toggleAsigBody(id){
   const b=document.getElementById('body-'+id);
@@ -6646,8 +6683,11 @@ function toggleAsigBody(id){
   a.textContent=b.classList.contains('open')?'▴':'▾';
 }
 
+// Pestaña abierta de cada asignatura: se conserva cuando la lista se vuelve a dibujar (sincronización)
+const _asigTab = {};
 function showUnit(asigId, unit, el){
-  ['u1','u2','u3','global','cierre','cierrev','equipo','sesiones','comentarios','celula-flujo','celula-lider','celula-diseno','celula-video'].forEach(u=>{
+  _asigTab[asigId]=unit;
+  ['general','u1','u2','u3','global','cierre','cierrev','sesiones','comentarios','celula-flujo','celula-lider','celula-diseno','celula-video'].forEach(u=>{
     const d=document.getElementById(`unit-${asigId}-${u}`);
     if(d) d.style.display=u===unit?'block':'none';
   });
