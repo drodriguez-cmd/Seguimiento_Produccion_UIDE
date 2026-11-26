@@ -990,7 +990,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026112404;
+const DASHBOARD_VERSION = 2026112602;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -3265,9 +3265,13 @@ function msHabilesEntre(iniMs, finMs, cal, persona){
   return total;
 }
 function fmtTranscurrido(d){ const h=d*24; return h<24 ? Math.round(h)+' h' : d.toFixed(1).replace('.',',')+' d'; }
+// Desde cuándo el atraso de una materia se arrastra a la siguiente (fecha en que nació "En espera por atraso")
+const ESPERA_ENCADENA_DESDE = new Date('2026-11-19T00:00:00-05:00').getTime();
+// Tolerancia (26-nov-2026, Juan Diego): un atraso de hasta 1 hora no se arrastra a la siguiente
+const ESPERA_TOLERANCIA_MS = 60*60*1000;
 function calcularFilasTiempos(){
   _cacheTiempos = {};
-  const ahora = Date.now(), filas = [], grupos = {};
+  const ahora = Date.now(), filas = [], grupos = {}, _feDe = {};
   // 1. Agrupar por persona y frente
   STATE.asignaturas.forEach(a=>{
     if(a.tipo!=='celula') return;
@@ -3296,10 +3300,10 @@ function calcularFilasTiempos(){
   // ¿La persona ya tenía otra materia de ese frente esperándola en el momento t? (asignada a ella según el registro
   // y sin terminar). Si sí, su plazo siguiente arranca al terminar la anterior aunque después le cambien CUÁL es esa
   // materia (p. ej. una redistribución de videos el domingo no le reinicia el reloj) — 9-nov-2026, Juan Diego.
-  const teniaPendienteEn = (g, t, salvoId) => {
+  const teniaPendienteEn = (g, t, salvoId, salvoId2) => {
     const log = g.esVideo ? _asignacionesVideoLog : _asignacionesLog;
     return Object.keys(log||{}).some(id=>{
-      if(id===salvoId) return false;
+      if(id===salvoId || (salvoId2 && id===salvoId2)) return false;
       const arr=log[id]; let ult=null; for(const x of arr){ if(x.ms<=t) ult=x; else break; }
       if(!ult || ult.persona!==g.P) return false;
       const a2=STATE.asignaturas.find(x=>x.id===id); if(!a2) return false;
@@ -3307,9 +3311,10 @@ function calcularFilasTiempos(){
       return !(f2 && f2<=t);
     });
   };
-  const anclaPlazo = (g, a, finPrev) => {
+  // prevId: la materia que terminó (o venció) en finPrev; no cuenta como "otra pendiente" en ese momento.
+  const anclaPlazo = (g, a, finPrev, prevId) => {
     const asig = asignacionMs(g, a)||0;
-    if(finPrev && asig>finPrev && teniaPendienteEn(g, finPrev, a.id)) return finPrev;
+    if(finPrev && asig>finPrev && teniaPendienteEn(g, finPrev, a.id, prevId)) return finPrev;
     return Math.max(finPrev||0, asig);
   };
   const empuja = (g, it, inicioMs, inicioAuto) => {
@@ -3337,6 +3342,7 @@ function calcularFilasTiempos(){
     const sobreObjetivo = (info.diasProduccion||0) > objetivo;
     // La fecha vencida es la señal MÁS fuerte: si ya pasó el calendario y no está completo, es atraso real.
     const fechaVencida = !completo && ahora > fechaEsperada.getTime();
+    _feDe[g.key+'|'+g.P+'|'+a.id] = fechaEsperada.getTime();
     filas.push({
       asigId: a.id, asigNombre: a.nombre, prog: a.prog,
       persona, frente: g.key, esVideo: g.esVideo,
@@ -3352,9 +3358,18 @@ function calcularFilasTiempos(){
   Object.values(grupos).forEach(g=>{
     const idx0 = filas.length;   // desde aquí van las filas de esta persona y frente
     const terminados = g.items.filter(it=>it.completo && it.fin);
-    const iniciadas = g.items.filter(it=>it.info.iniciado);
-    // Último término de esta persona hasta un momento dado (sin contar la misma asignatura)
-    const finAntes = (t, salvo) => { let m=0; terminados.forEach(it=>{ if(it.a.id!==salvo && it.fin<=t && it.fin>m) m=it.fin; }); return m; };
+    // En orden de inicio: así, al calcular una, ya se conoce la fecha esperada de las que terminaron antes
+    const iniciadas = g.items.filter(it=>it.info.iniciado).sort((x,y)=>(x.info.fechaMs||0)-(y.info.fechaMs||0));
+    // Último término de esta persona hasta un momento dado (sin contar la misma asignatura).
+    // 26-nov-2026 (Juan Diego y Derly, caso Alejandra Barco): si la anterior se entregó DESPUÉS de su fecha esperada, la
+    // siguiente cuenta desde que la anterior venció (la hora en que quedó "En espera por atraso"), no desde que la terminó:
+    // el atraso se arrastra y Tiempos muestra la realidad. Rige para plazos vencidos desde ESPERA_ENCADENA_DESDE.
+    let _prevId = null;
+    const finAntes = (t, salvo) => { let m=0; _prevId=null; terminados.forEach(it=>{
+      if(it.a.id===salvo || !(it.fin<=t)) return;
+      const fe = _feDe[g.key+'|'+g.P+'|'+it.a.id];
+      const ef = (fe && it.fin - fe > ESPERA_TOLERANCIA_MS && fe >= ESPERA_ENCADENA_DESDE) ? fe : it.fin;
+      if(ef>m){ m=ef; _prevId=it.a.id; } }); return m; };
     // ¿Tenía otra empezada y sin terminar en ese momento? (trabajó en paralelo o adelantó una reserva)
     const ocupadaEn = (t, salvo) => iniciadas.some(it=>it.a.id!==salvo && it.info.fechaMs<t && !(it.fin && it.fin<=t));
     let _finApoyo = 0, _apoyoAbierta = false;
@@ -3368,8 +3383,19 @@ function calcularFilasTiempos(){
       const t0 = it.info.fechaMs;
       let inicio = t0, auto = false;
       if(t0 >= TIEMPOS_RELOJ_MINIMO && it.a.status!==ST_REVISION && !ocupadaEn(t0, it.a.id)){
-        const ancla = Math.max(anclaPlazo(g, it.a, finAntes(t0, it.a.id))||0, (_finApoyo && _finApoyo<=t0) ? _finApoyo : 0);
+        const fa = finAntes(t0, it.a.id);
+        const ancla = Math.max(anclaPlazo(g, it.a, fa, _prevId)||0, (_finApoyo && _finApoyo<=t0) ? _finApoyo : 0);
         if(ancla){ const c = Math.max(ancla, TIEMPOS_RELOJ_MINIMO); if(c < t0){ inicio = c; auto = true; } }
+      } else if(t0 >= TIEMPOS_RELOJ_MINIMO && it.a.status!==ST_REVISION){
+        // 26-nov-2026: la empezó sin haber terminado la atrasada (la tenía "En espera por atraso"): igual cuenta desde que
+        // la atrasada venció, para que empezar en paralelo no sea una forma de saltarse el arrastre.
+        const abiertas = iniciadas.filter(o=>o!==it && o.info.fechaMs<t0 && !(o.fin && o.fin<=t0));
+        const fes = abiertas.map(o=>({id:o.a.id, fe:_feDe[g.key+'|'+g.P+'|'+o.a.id]}));
+        if(fes.length && fes.every(x=>x.fe && t0 - x.fe > ESPERA_TOLERANCIA_MS && x.fe>=ESPERA_ENCADENA_DESDE)){
+          const b0 = fes.slice().sort((x,y)=>x.fe-y.fe)[0];
+          const c = Math.max(anclaPlazo(g, it.a, b0.fe, b0.id)||0, TIEMPOS_RELOJ_MINIMO);
+          if(c < t0){ inicio = c; auto = true; }
+        }
       }
       empuja(g, it, inicio, auto);
     });
@@ -3379,8 +3405,8 @@ function calcularFilasTiempos(){
     // asignó el video), para no salir atrasada por el tiempo que estuvo apoyando.
     if(g.esVideo && _apoyoAbierta && !iniciadas.some(it=>!it.completo)) return;
     // "En espera por atraso" (18-nov-2026, Juan Diego y Derly, opción mixta): si lo que tiene en curso YA venció su plazo,
-    // la siguiente materia aparece desde que venció (para que se vea que está esperando), pero SU reloj no corre: arranca
-    // cuando la persona termine la atrasada, como siempre. Así el atraso no se cobra dos veces. Lo ve todo el equipo.
+    // la siguiente materia aparece desde que venció (para que se vea que está esperando). Su reloj se ve cuando la persona
+    // termine la atrasada, pero contado DESDE ESE VENCIMIENTO (26-nov-2026: el atraso se arrastra; ver finAntes).
     let bloq = null;
     if(iniciadas.some(it=>!it.completo)){
       const enCursoF = filas.slice(idx0).filter(f=>!f.completo);
@@ -3395,7 +3421,7 @@ function calcularFilasTiempos(){
     else sig = pend.find(it=>it.a.status==='En producción') || pend.find(it=>it.a.status==='En espera');
     if(!sig) return;
     if(bloq){
-      const desde = Math.max(anclaPlazo(g, sig.a, bloq.fechaEsperada.getTime())||0, TIEMPOS_RELOJ_MINIMO);
+      const desde = Math.max(anclaPlazo(g, sig.a, bloq.fechaEsperada.getTime(), bloq.asigId)||0, TIEMPOS_RELOJ_MINIMO);
       if(!desde || desde > ahora) return;
       const persona = g.esVideo ? g.P : (CELULA_CFG[g.P]?.label || g.P);
       filas.push({
@@ -3403,13 +3429,16 @@ function calcularFilasTiempos(){
         inicioMs: desde, inicioAuto: false, sinArrancar: true,
         espera: true, esperaPorId: bloq.asigId, esperaPorNombre: bloq.asigNombre,
         diasEspera: msHabilesEntre(desde, ahora, calendarioDe(persona), persona) / 86400000,
+        // Su plazo ya cuenta desde «desde» (26-nov-2026): se muestra la fecha esperada para que se vea que corre
+        feEspera: (desde>=ESPERA_ENCADENA_DESDE) ? sumarDiasHabiles(desde, OBJETIVO_DIAS_FRENTE[g.key], calendarioDe(persona), persona).getTime() : null,
         diasTranscurridos: 0, diasProduccion: 0, objetivo: OBJETIVO_DIAS_FRENTE[g.key], fechaEsperada: null,
         completo: false, sobreObjetivo: false, fechaVencida: false,
         prioridad: sig.a.prioridad||'media', fechaLimite: sig.a.fechaLimite||'', faltaCierre: false, faltaCierreTxt: ''
       });
       return;
     }
-    const ancla = Math.max(anclaPlazo(g, sig.a, finAntes(ahora, sig.a.id))||0, _finApoyo||0);
+    const faS = finAntes(ahora, sig.a.id);
+    const ancla = Math.max(anclaPlazo(g, sig.a, faS, _prevId)||0, _finApoyo||0);
     if(!ancla) return; // sin término previo ni hora de asignación: no se inventa un inicio
     const inicio = Math.max(ancla, TIEMPOS_RELOJ_MINIMO);
     if(inicio > ahora) return;
@@ -8564,17 +8593,19 @@ function renderTiempos(){
     const estadoColor = (f.fechaVencida || f.sobreObjetivo) ? 'var(--danger)' : 'var(--ok)';
     const PCOL={alta:'#ef4444',media:'#f59e0b',baja:'#22c55e'};
     if(f.espera){
-      const porQue = `Está esperando a que ${_cEsc(f.persona.split(' ')[0])} termine «${_cEsc(f.esperaPorNombre)}», que se atrasó. Su plazo todavía no corre: arranca cuando termine esa materia.`;
+      const porQue = f.feEspera
+        ? `Está esperando a que ${_cEsc(f.persona.split(' ')[0])} termine «${_cEsc(f.esperaPorNombre)}», que se atrasó. Su plazo cuenta desde que esa materia venció.`
+        : `Está esperando a que ${_cEsc(f.persona.split(' ')[0])} termine «${_cEsc(f.esperaPorNombre)}», que se atrasó. Su plazo todavía no corre: arranca cuando termine esa materia.`;
       return `<tr data-hp="${_cEsc(_pNom(f.persona))}" class="t-espera" style="background:#f8fafc">
       <td style="font-weight:600;color:var(--muted)">${f.persona}</td>
       <td><div style="display:flex;gap:8px;align-items:flex-start">${(()=>{ const l=_linkCarpeta(f.asigId, f.asigNombre); return l ? `<a href="${_cEsc(l)}" target="_blank" rel="noopener" title="Abrir la carpeta de la materia en Drive" style="text-decoration:none;font-size:15px;line-height:1.2;flex-shrink:0">📁</a>` : '<span style="width:19px;flex-shrink:0"></span>'; })()}<div>${f.asigNombre}<div style="font-size:11px;color:var(--muted)">${f.prog}</div>${complejidadTxt(f.asigId, !f.completo)}</div></div></td>
       <td><span class="role-pill" style="background:${frenteCfg.color}18;color:${frenteCfg.color};font-size:11px;padding:3px 10px">${frenteCfg.icon} ${frenteCfg.label}</span></td>
       <td style="font-size:11px;font-weight:600;color:${PCOL[f.prioridad]||PCOL.media}">${PRIORIDAD_EMOJI[f.prioridad]||'🟡'} ${f.prioridad.charAt(0).toUpperCase()+f.prioridad.slice(1)}</td>
-      <td style="font-size:12px;color:var(--muted)" title="${porQue}">—<div style="font-size:10px">arranca al terminar la atrasada</div></td>
+      <td style="font-size:12px;color:var(--muted)" title="${porQue}">${f.feEspera ? fmtFechaHora(f.inicioMs)+'<div style="font-size:10px">desde que venció la atrasada</div>' : '—<div style="font-size:10px">arranca al terminar la atrasada</div>'}</td>
       <td style="text-align:center;color:var(--muted)" title="Su plazo todavía no corre">—</td>
       <td style="text-align:center;color:var(--muted)">—</td>
       <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
-      <td style="font-size:12px;color:var(--muted)">—</td>
+      <td style="font-size:12px;color:var(--muted)">${f.feEspera ? fmtFechaHora(f.feEspera) : '—'}</td>
       <td style="font-size:12px">${f.fechaLimite?fmtFecha(f.fechaLimite):'—'}</td>
       <td style="color:#64748b;font-weight:600;font-size:12px" title="${porQue}">⏸ En espera por atraso<div style="font-size:11px;font-weight:400">desde ${fmtFechaHora(f.inicioMs)} · ${fmtTranscurrido(f.diasEspera)} esperando</div></td>
     </tr>`;
