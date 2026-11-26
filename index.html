@@ -990,7 +990,7 @@ const API = 'https://script.google.com/macros/s/AKfycby9AS8M2My3A-wo888A0-wUJ-v9
 // que vengan de una versión más vieja que su VERSION_MINIMA: así una pestaña vieja que alguien dejó abierta ya no
 // puede deshacer un reparto ni cambiar asignaciones. Timers y sesiones se guardan desde cualquier versión.
 // AL CAMBIAR EL EQUIPO O LAS REGLAS DE REPARTO: subir este número Y la VERSION_MINIMA del Apps Script al mismo valor.
-const DASHBOARD_VERSION = 2026112602;
+const DASHBOARD_VERSION = 2026112701;
 let _versionVieja = false;
 function avisarVersionVieja(motivo){
   _versionVieja = true;
@@ -2301,27 +2301,38 @@ function _recordatoriosPlazoDe(yo){
   const esVideo = VIDEO_PERSONAS.some(p=>_mismaPersonaAus(p, yo));
   const esDiseno = UNIDADES_DISENO.some(id=>_mismaPersonaAus(CELULA_CFG[id]?.label||id, yo));
   if(!esVideo && !esDiseno) return [];          // coordinación / apoyo: nada
-  let filas=[]; try{ filas=calcularFilasTiempos().filter(f=>!f.espera); }catch(e){ return []; }
-  return filas.filter(f=>f.fechaVencida && !f.completo && !!f.esVideo===esVideo && _mismaPersonaAus(f.persona, yo));
+  let filas=[]; try{ filas=calcularFilasTiempos(); }catch(e){ return []; }
+  const mias = filas.filter(f=>!f.completo && !!f.esVideo===esVideo && _mismaPersonaAus(f.persona, yo));
+  // 27-nov-2026: también las que siguen en espera y ya se les venció su propio plazo (atraso acumulado)
+  const vencidas = mias.filter(f=> f.espera ? f.esperaVencida : f.fechaVencida);
+  // y las que están por vencer (últimas 2 horas), como el "Por vencer" de Tiempos
+  _recPorVencer = mias.filter(f=>f.porVencer);
+  return vencidas;
 }
+let _recPorVencer = [];
+function _porVencerDe(yo){ _recordatoriosPlazoDe(yo); return _recPorVencer; }
 function renderRecordatorioPlazo(forzar){
   const el=document.getElementById('nav-recordatorio'); if(!el) return;
   const yo=_yoNombre(), ahora=Date.now();
   if(!forzar && _recPlazoMem.yo===yo && _recPlazoMem.html!==null && ahora-_recPlazoMem.t<60000){ el.innerHTML=_recPlazoMem.html; return; }
-  const filas=_recordatoriosPlazoDe(yo);
+  const filas=_recordatoriosPlazoDe(yo), porV=_recPorVencer.slice();
   let oculto=''; try{ oculto=sessionStorage.getItem('recPlazoOculto')||''; }catch(e){}
-  const firma=filas.map(f=>f.asigId).join(',');
+  const firma=filas.map(f=>f.asigId).join(',')+'|'+porV.map(f=>f.asigId).join(',');
   let html='';
-  if(filas.length && oculto!==firma){
+  if((filas.length || porV.length) && oculto!==firma){
     const pila=String(yo).trim().split(/\s+/)[0];
     const dia=d=>{ const x=new Date(d); return ['dom','lun','mar','mié','jue','vie','sáb'][x.getDay()]+' '+x.getDate()+'/'+(x.getMonth()+1); };
-    const items=filas.slice(0,3).map(f=>{
+    const item=(f,extra)=>{
       const a=STATE.asignaturas.find(z=>z.id===f.asigId);
       const av = a ? (f.esVideo ? videoHechosAsig(a)+'/6 videos' : disenoHechosAsig(a)+'/12 entregables') : '';
-      return '<div style="margin-top:6px">• <b>'+_cEsc(f.asigNombre)+'</b><br><span style="opacity:.85">Plazo: '+dia(f.fechaEsperada)+(av?' · llevas '+av:'')+(f.faltaCierre?' · solo falta tu cierre':'')+'</span></div>';
-    }).join('');
+      return '<div style="margin-top:6px">• <b>'+_cEsc(f.asigNombre)+'</b><br><span style="opacity:.85">'+(extra||('Plazo: '+dia(f.fechaEsperada||f.feEspera)))+(av?' · llevas '+av:'')+(f.faltaCierre?' · solo falta tu cierre':'')+'</span></div>';
+    };
+    const items=filas.slice(0,3).map(f=>item(f)).join('');
+    const itemsPV=porV.slice(0,3).map(f=>item(f,'Te quedan '+quedaTxt(new Date(f.fechaEsperada||f.feEspera).getTime()-Date.now()))).join('');
     html='<div class="nav-rec"><span class="x" title="Ocultar por ahora" onclick="try{sessionStorage.setItem(\'recPlazoOculto\',\''+firma+'\')}catch(e){};renderRecordatorioPlazo(true)">×</span>'+
-      '🌱 <b>Un recordatorio para ti'+(pila?', '+_cEsc(pila):'')+'</b><br>'+(filas.length===1?'Ya pasó el plazo de esta materia:':'Ya pasó el plazo de estas materias:')+items+
+      '🌱 <b>Un recordatorio para ti'+(pila?', '+_cEsc(pila):'')+'</b>'+
+      (porV.length ? '<br>⏰ '+(porV.length===1?'Esta materia está por vencer:':'Estas materias están por vencer:')+itemsPV : '')+
+      (filas.length ? '<br>'+(filas.length===1?'Ya pasó el plazo de esta materia:':'Ya pasó el plazo de estas materias:')+items : '')+
       '<div style="margin-top:7px;opacity:.85">Sin presión: es solo para que lo tengas presente. Si algo te frena, cuéntale a coordinación 💛</div></div>';
   }
   _recPlazoMem={ t:ahora, html, yo };
@@ -3269,6 +3280,9 @@ function fmtTranscurrido(d){ const h=d*24; return h<24 ? Math.round(h)+' h' : d.
 const ESPERA_ENCADENA_DESDE = new Date('2026-11-19T00:00:00-05:00').getTime();
 // Tolerancia (26-nov-2026, Juan Diego): un atraso de hasta 1 hora no se arrastra a la siguiente
 const ESPERA_TOLERANCIA_MS = 60*60*1000;
+// Aviso "Por vencer" (27-nov-2026): 2 horas antes de la fecha esperada (Tiempos y recordatorio privado)
+const POR_VENCER_MS = 2*60*60*1000;
+function quedaTxt(ms){ const m=Math.max(0, Math.round(ms/60000)); const h=Math.floor(m/60), r=m%60; return h ? (h+' h'+(r?' '+r+' min':'')) : (r+' min'); }
 function calcularFilasTiempos(){
   _cacheTiempos = {};
   const ahora = Date.now(), filas = [], grupos = {}, _feDe = {};
@@ -3342,13 +3356,15 @@ function calcularFilasTiempos(){
     const sobreObjetivo = (info.diasProduccion||0) > objetivo;
     // La fecha vencida es la señal MÁS fuerte: si ya pasó el calendario y no está completo, es atraso real.
     const fechaVencida = !completo && ahora > fechaEsperada.getTime();
+    // Por vencer (27-nov-2026): en las últimas 2 horas antes de la fecha esperada, aviso en amarillo
+    const porVencer = !completo && !fechaVencida && (fechaEsperada.getTime() - ahora) <= POR_VENCER_MS;
     _feDe[g.key+'|'+g.P+'|'+a.id] = fechaEsperada.getTime();
     filas.push({
       asigId: a.id, asigNombre: a.nombre, prog: a.prog,
       persona, frente: g.key, esVideo: g.esVideo,
       inicioMs, inicioAuto, sinArrancar: !info.iniciado,
       diasTranscurridos, diasProduccion: info.diasProduccion||0,
-      objetivo, fechaEsperada, completo, sobreObjetivo, fechaVencida,
+      objetivo, fechaEsperada, completo, sobreObjetivo, fechaVencida, porVencer,
       horasExtra, extrasTxt: extras.map(x=>x.motivo+' '+String(x.horas).replace('.',',')+' h').join(' · '),
       prioridad: a.prioridad||'media', fechaLimite: a.fechaLimite||'',
       faltaCierre: !completo && frenteFaltaCierre(a, g.esVideo),
@@ -3416,33 +3432,57 @@ function calcularFilasTiempos(){
     if(!celulaActiva(g.P)) return;
     const pend = g.items.filter(it=>!it.info.iniciado && !it.completo && it.a.status!==ST_REVISION && it.a.status!=='Completada');
     if(!pend.length) return;
-    let sig;
-    if(g.esVideo) sig = pend.slice().sort((p,q)=>compararVideo(p.a,q.a))[0];
-    else sig = pend.find(it=>it.a.status==='En producción') || pend.find(it=>it.a.status==='En espera');
-    if(!sig) return;
-    if(bloq){
-      const desde = Math.max(anclaPlazo(g, sig.a, bloq.fechaEsperada.getTime(), bloq.asigId)||0, TIEMPOS_RELOJ_MINIMO);
-      if(!desde || desde > ahora) return;
-      const persona = g.esVideo ? g.P : (CELULA_CFG[g.P]?.label || g.P);
-      filas.push({
-        asigId: sig.a.id, asigNombre: sig.a.nombre, prog: sig.a.prog, persona, frente: g.key, esVideo: g.esVideo,
+    // Cola de esta persona en orden (video: compararVideo; diseño: la que está en producción y luego sus reservas)
+    const cola = g.esVideo ? pend.slice().sort((p,q)=>compararVideo(p.a,q.a))
+      : [...pend.filter(it=>it.a.status==='En producción'), ...pend.filter(it=>it.a.status==='En espera')];
+    if(!cola.length) return;
+    const persona = g.esVideo ? g.P : (CELULA_CFG[g.P]?.label || g.P);
+    const cal = calendarioDe(persona), obj = OBJETIVO_DIAS_FRENTE[g.key];
+    // "En espera por atraso" en cadena (27-nov-2026, Juan Diego): cada materia de la cola arranca cuando vence la anterior,
+    // una tras otra, mientras esa hora ya haya pasado. Si a una en espera también se le venció su plazo, sale como atrasada:
+    // así se ve cuántas debe la persona. Para no inflar la tabla, máximo 10 por persona y frente.
+    const pushEspera = (it, desde, porId, porNombre) => {
+      const feE = (desde>=ESPERA_ENCADENA_DESDE) ? sumarDiasHabiles(desde, obj, cal, persona).getTime() : null;
+      const fila = {
+        asigId: it.a.id, asigNombre: it.a.nombre, prog: it.a.prog, persona, frente: g.key, esVideo: g.esVideo,
         inicioMs: desde, inicioAuto: false, sinArrancar: true,
-        espera: true, esperaPorId: bloq.asigId, esperaPorNombre: bloq.asigNombre,
-        diasEspera: msHabilesEntre(desde, ahora, calendarioDe(persona), persona) / 86400000,
-        // Su plazo ya cuenta desde «desde» (26-nov-2026): se muestra la fecha esperada para que se vea que corre
-        feEspera: (desde>=ESPERA_ENCADENA_DESDE) ? sumarDiasHabiles(desde, OBJETIVO_DIAS_FRENTE[g.key], calendarioDe(persona), persona).getTime() : null,
-        diasTranscurridos: 0, diasProduccion: 0, objetivo: OBJETIVO_DIAS_FRENTE[g.key], fechaEsperada: null,
+        espera: true, esperaPorId: porId, esperaPorNombre: porNombre,
+        diasEspera: msHabilesEntre(desde, ahora, cal, persona) / 86400000,
+        feEspera: feE, esperaVencida: !!(feE && ahora > feE),
+        porVencer: !!(feE && ahora <= feE && feE - ahora <= POR_VENCER_MS),
+        diasTranscurridos: 0, diasProduccion: 0, objetivo: obj, fechaEsperada: null,
         completo: false, sobreObjetivo: false, fechaVencida: false,
-        prioridad: sig.a.prioridad||'media', fechaLimite: sig.a.fechaLimite||'', faltaCierre: false, faltaCierreTxt: ''
-      });
+        prioridad: it.a.prioridad||'media', fechaLimite: it.a.fechaLimite||'', faltaCierre: false, faltaCierreTxt: ''
+      };
+      filas.push(fila); return fila;
+    };
+    const encadenar = (ultId, ultNombre, ultFe, desdeIdx) => {
+      for(let k=desdeIdx, n=0; k<cola.length && n<10; k++, n++){
+        if(!ultFe || ultFe > ahora || ultFe < ESPERA_ENCADENA_DESDE) return;
+        const it = cola[k];
+        const desde = Math.max(anclaPlazo(g, it.a, ultFe, ultId)||0, TIEMPOS_RELOJ_MINIMO);
+        if(!desde || desde > ahora) return;
+        const f = pushEspera(it, desde, ultId, ultNombre);
+        ultId = it.a.id; ultNombre = it.a.nombre; ultFe = f.feEspera;
+      }
+    };
+    if(bloq){
+      const it = cola[0];
+      const desde = Math.max(anclaPlazo(g, it.a, bloq.fechaEsperada.getTime(), bloq.asigId)||0, TIEMPOS_RELOJ_MINIMO);
+      if(!desde || desde > ahora) return;
+      const f = pushEspera(it, desde, bloq.asigId, bloq.asigNombre);
+      encadenar(it.a.id, it.a.nombre, f.feEspera, 1);
       return;
     }
+    const sig = cola[0];
     const faS = finAntes(ahora, sig.a.id);
     const ancla = Math.max(anclaPlazo(g, sig.a, faS, _prevId)||0, _finApoyo||0);
     if(!ancla) return; // sin término previo ni hora de asignación: no se inventa un inicio
     const inicio = Math.max(ancla, TIEMPOS_RELOJ_MINIMO);
     if(inicio > ahora) return;
     empuja(g, sig, inicio, true);
+    const fS = filas[filas.length-1];
+    if(fS && fS.fechaVencida) encadenar(sig.a.id, sig.a.nombre, fS.fechaEsperada.getTime(), 1);
   });
   return filas;
 }
@@ -8565,7 +8605,9 @@ function renderTiempos(){
   const activas0 = filas.filter(f=>!f.completo && !f.espera).sort((a,b)=> (b.fechaVencida-a.fechaVencida) || (b.sobreObjetivo-a.sobreObjetivo) || (b.diasProduccion-a.diasProduccion));
   // Cada fila "en espera por atraso" va justo debajo de la materia atrasada que la frena (misma persona y frente)
   const enEspera = filas.filter(f=>f.espera), activas = [];
-  activas0.forEach(f=>{ activas.push(f); enEspera.filter(w=>w.esperaPorId===f.asigId && w.persona===f.persona && w.esVideo===f.esVideo).forEach(w=>activas.push(w)); });
+  // En cadena (27-nov-2026): cada espera va debajo de la que la frena, y así sucesivamente
+  const _colgar = f => { enEspera.filter(w=>w.esperaPorId===f.asigId && w.persona===f.persona && w.esVideo===f.esVideo && !activas.includes(w)).forEach(w=>{ activas.push(w); _colgar(w); }); };
+  activas0.forEach(f=>{ activas.push(f); _colgar(f); });
   enEspera.forEach(w=>{ if(!activas.includes(w)) activas.push(w); });
   const completadas = filas.filter(f=>f.completo).sort((a,b)=> b.inicioMs-a.inicioMs);
 
@@ -8586,11 +8628,12 @@ function renderTiempos(){
     const frenteCfg = f.esVideo ? {icon:'🎬', label:'Video', color:'#2563eb'} : {icon:'🎨', label:'Diseño', color:'#ea6c1a'};
     const estadoTxt = f.completo
       ? (f.sobreObjetivo ? `⚠️ Terminó sobre el objetivo (+${(f.diasProduccion-f.objetivo).toFixed(1)}d)` : '✅ Terminó en plazo')
+      : f.porVencer ? ('🟡 Por vencer · quedan '+quedaTxt(new Date(f.fechaEsperada).getTime()-Date.now())+(f.faltaCierre?' · falta su cierre':f.sinArrancar?' · sin arrancar':''))
       : f.faltaCierre ? (f.fechaVencida ? '🔴 Atrasada · entregables listos, falta su cierre' : '🟡 Entregables listos · falta su cierre')
       : f.sinArrancar ? (f.fechaVencida ? '🔴 Atrasada · sin arrancar' : '⏳ Asignada, sin arrancar')
-      : (f.fechaVencida ? '🔴 Atrasada (venció la fecha esperada)'
-         : f.sobreObjetivo ? '🟠 Sobre las horas objetivo' : '🟢 En plazo');
-    const estadoColor = (f.fechaVencida || f.sobreObjetivo) ? 'var(--danger)' : 'var(--ok)';
+      : (f.fechaVencida ? '🔴 Atrasada (venció la fecha esperada)' : '🟢 En plazo');
+    // "Sobre las horas objetivo" se quitó (27-nov-2026): confundía, no es atraso. La alarma es la fecha.
+    const estadoColor = f.fechaVencida ? 'var(--danger)' : f.porVencer ? '#b45309' : 'var(--ok)';
     const PCOL={alta:'#ef4444',media:'#f59e0b',baja:'#22c55e'};
     if(f.espera){
       const porQue = f.feEspera
@@ -8607,7 +8650,7 @@ function renderTiempos(){
       <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
       <td style="font-size:12px;color:var(--muted)">${f.feEspera ? fmtFechaHora(f.feEspera) : '—'}</td>
       <td style="font-size:12px">${f.fechaLimite?fmtFecha(f.fechaLimite):'—'}</td>
-      <td style="color:#64748b;font-weight:600;font-size:12px" title="${porQue}">⏸ En espera por atraso<div style="font-size:11px;font-weight:400">desde ${fmtFechaHora(f.inicioMs)} · ${fmtTranscurrido(f.diasEspera)} esperando</div></td>
+      <td style="color:${f.esperaVencida?'var(--danger)':f.porVencer?'#b45309':'#64748b'};font-weight:600;font-size:12px" title="${porQue}">${f.esperaVencida ? '🔴 Atrasada · sin arrancar' : f.porVencer ? '🟡 Por vencer · quedan '+quedaTxt(f.feEspera-Date.now())+' · en espera' : '⏸ En espera por atraso'}<div style="font-size:11px;font-weight:400;color:#64748b">en espera desde ${fmtFechaHora(f.inicioMs)} · ${fmtTranscurrido(f.diasEspera)} esperando</div></td>
     </tr>`;
     }
     return `<tr data-hp="${_cEsc(_pNom(f.persona))}">
@@ -8621,7 +8664,7 @@ function renderTiempos(){
       <td style="text-align:center;color:var(--muted)">${f.objetivo}d</td>
       <td style="font-size:12px">${fmtFechaHora(f.fechaEsperada.getTime())}</td>
       <td style="font-size:12px">${f.fechaLimite?fmtFecha(f.fechaLimite):'—'}</td>
-      <td style="color:${f.faltaCierre&&!f.fechaVencida?'#b45309':estadoColor};font-weight:600;font-size:12px"${f.faltaCierre?` title="Le falta: ${String(f.faltaCierreTxt).replace(/"/g,'&quot;')}"`:''}>${estadoTxt}</td>
+      <td style="color:${(f.faltaCierre||f.porVencer)&&!f.fechaVencida?'#b45309':estadoColor};font-weight:600;font-size:12px"${f.faltaCierre?` title="Le falta: ${String(f.faltaCierreTxt).replace(/"/g,'&quot;')}"`:''}>${estadoTxt}</td>
     </tr>`;
   };
 
@@ -8661,7 +8704,7 @@ function renderTiempos(){
     </div>`;
 
   el.innerHTML =
-    `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6"><b>Inicio</b> = la hora en que la persona terminó su asignatura anterior (entregables completos, su parte de la revisión de cierre marcada y sin timers abiertos), aunque prenda el timer después. Si se la asignaron más tarde, cuenta desde la asignación; si arrancó antes, cuenta el timer. Diseño y video se miden por separado. Sin timer, solo aparece la siguiente de cada persona. Si a alguien se le venció el plazo de lo que está haciendo, su siguiente materia aparece como <b>⏸ En espera por atraso</b> desde ese momento: su plazo todavía no corre y arranca cuando termine la atrasada. La <b>producción real</b> sigue saliendo solo de los timers.</div>` +
+    `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6"><b>Inicio</b> = la hora en que la persona terminó su asignatura anterior (entregables completos, su parte de la revisión de cierre marcada y sin timers abiertos), aunque prenda el timer después. Si se la asignaron más tarde, cuenta desde la asignación; si arrancó antes, cuenta el timer. Diseño y video se miden por separado. Sin timer, solo aparece la siguiente de cada persona. Si a alguien se le venció el plazo de lo que está haciendo (con más de 1 hora de atraso), su siguiente materia aparece como <b>⏸ En espera por atraso</b> y su plazo cuenta desde ese momento; si esa también se vence, sigue la otra, y así se ven todas las que debe. <b>🟡 Por vencer</b> sale en las últimas 2 horas antes de la fecha esperada. La <b>producción real</b> sigue saliendo solo de los timers.</div>` +
     tabla('Frentes activos ahora mismo', '🔴', activas, 'Nada activo en este momento') +
     historial;
   _tHistAplicar();
